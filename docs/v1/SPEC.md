@@ -1,330 +1,268 @@
-# songbird — Design Spec (v0)
+# songbird — Design Spec (v1)
 
-**songbird** is a personal, self-hosted app for **annotating Scripture**: highlight a verse,
-attach a rich note behind it, find it again later by tag or by meaning. It is built **on
-Concord** — Concord serves the text (and search, and geography); songbird is what you write
-in the margins of it.
+**songbird** is a personal, self-hosted app for **annotating Scripture**: read a translation,
+highlight a verse, attach a rich note behind it, find it again later by tag or by meaning.
 
-This is the founding spec. Unlike the Concord specs, it has two registers on purpose: the
-**domain model and architecture are written as settled decisions** (we worked them out
-deliberately and they're locked); the **UX/interaction design is written as options with
-recommendations** (§8) — taste calls for the product owner to make when ready, not decrees.
+**songbird is built on top of Concord.** Concord runs on the network and exposes its REST
+endpoints; **songbird is a separate app that consumes those endpoints** to read Scripture,
+search, and look up geography. Concord is the foundation and the data/API provider; songbird
+is the annotation app that sits on top of it and delivers the experience to the end user.
+songbird depends on Concord; Concord knows nothing about songbird.
 
-A note on intent, because it shapes every decision below: songbird is **built to last.**
-soap-journal was the learning exercise — a complete, working app that taught the lessons.
-Concord was the foundation extracted from those lessons. songbird is the payoff: the app
-intended to grow. "Built to last" does **not** mean "built big on day one" — it means
-**clean bones, named boundaries, spec-first, smallest-slice-first**, so the small thing can
-become the large thing without a rewrite. The ambition lives in the roadmap; the discipline
-lives in the slices.
+This is the founding spec. The **domain model and architecture are settled decisions**
+(§1–§7); the **UX/interaction design is presented as options with recommendations** (§8) —
+taste calls for the product owner to make when ready.
+
+**Built to last, built small.** soap-journal was the learning exercise; Concord is the
+foundation; songbird is the app meant to grow. "Built to last" means clean bones, named
+boundaries, spec-first, smallest-slice-first — not big on day one. Ambition lives in the
+roadmap; discipline lives in the slices.
 
 ---
 
 ## 1. What songbird is (and is not)
 
-**Is:** a reading + annotation app. You read Scripture in a chosen translation; you mark
-whole verses; you attach rich-text notes (Markdown/WYSIWYG — links, formatting, image
-links) anchored to those verses; notes carry a date, an author, and semantic tags; you find
-notes later by tag and (eventually) by meaning. Self-hosted, offline-first, single
-deployable unit.
+**Is:** a reading + annotation app. You read Scripture in a chosen translation (text served
+by Concord); you mark whole verses; you attach rich-text notes (Markdown/WYSIWYG — links,
+formatting, image links) anchored to those verses; notes carry a date, an author, and
+semantic tags; you find notes later by tag and (eventually) by meaning. Self-hosted, runs on
+the same network as Concord.
 
-**Is not (for now):** a SOAP-style journal (that's soap-journal, complete and unchanged — a
-future songbird *could* offer a SOAP template, but the core model here is annotation, not
-the SOAP entry); a multi-tenant cloud service; a mobile app (Concord is LAN/in-process, the
-mobile constraint is real — deferred).
+**Is not (for now):** a SOAP-style journal (that's soap-journal, complete and unchanged); a
+multi-tenant cloud service; a mobile app.
 
-**The core object is the annotation**, not the journal entry. soap-journal is entry-centric
-(you write a dated entry that references a passage). songbird is **text-centric**: Scripture
-is the spine, and notes are anchored annotations hanging off specific verses — closer to
-marking up a study Bible than to keeping a journal.
+**The core object is the annotation**, not a journal entry. soap-journal is entry-centric;
+songbird is **text-centric** — Scripture is the spine, and notes are anchored annotations
+hanging off specific verses, like marking up a study Bible.
 
 ## 2. The settled domain model (locked)
 
 An **annotation** is:
 
 - **Anchor** — a whole-verse span of Scripture, addressed by **canonical coordinates**: USFM
-  book code + chapter + verse, as a range (a single verse is start == end). Whole-verse
-  granularity is a deliberate choice (§4) — it sidesteps cross-translation wording/offset
-  problems entirely.
-- **Note** — rich text authored in a WYSIWYG editor, stored as **Markdown** (§6): supports
-  hyperlinks, basic formatting, image links.
-- **Translation scope** — which translations the annotation applies to / displays on. Three
-  tiers, per the product owner: **all translations** (default), **the current translation
-  only**, or **a chosen subset** (a checklist). The scope is independent of the anchor —
-  the anchor is *which verse*, the scope is *in which translations the note shows*.
-- **Metadata** — created date, updated date, and **author** (the schema is multi-user-ready
-  from line one, even though there is one user today — §3).
-- **Tags** — free-form semantic tags for later retrieval; the on-ramp to semantic search
-  (§7).
-- **Color** — an optional highlight color (a single default color is fine for v1;
-  multi-color is a trivial later enhancement).
+  book code + chapter + verse, as a range (single verse → start == end). Whole-verse
+  granularity is deliberate (§4) and sidesteps cross-translation wording problems entirely.
+- **Note** — rich text authored in a WYSIWYG editor, stored as **Markdown** (§6): hyperlinks,
+  basic formatting, image links.
+- **Translation scope** — which translations the note applies to / displays on. Three tiers:
+  **all translations** (default), **the current translation only**, or **a chosen subset**
+  (a checklist). Scope is independent of the anchor — the anchor is *which verse*, the scope
+  is *in which translations the note shows*.
+- **Metadata** — created date, updated date, and **author** (schema multi-user-ready from
+  line one, though there is one user today).
+- **Tags** — free-form semantic tags for retrieval; the on-ramp to semantic search (§7).
+- **Color** — an optional highlight color (one default color is fine for v1).
 
-That is the whole model. Everything songbird does is reading Scripture and creating,
-displaying, editing, and finding annotations.
+Everything songbird does is reading Scripture (via Concord) and creating, displaying,
+editing, and finding annotations (its own data).
 
 ## 3. Architecture
 
-**Stack: reuse the soap-journal shape**, deliberately — because songbird is built to last,
-*not* despite it. Familiarity is velocity, and the velocity belongs in getting the
-*architecture* clean, not in relearning tooling. The future-proofing that matters is
-boundary discipline (§4), which is stack-agnostic.
+songbird is its **own** full-stack app that **consumes Concord's HTTP API** over the network.
+Concord runs somewhere reachable on the LAN — the same host or another machine (§ connection
+config below) — and songbird is its client.
 
 - **Backend:** Python 3.12, FastAPI, SQLAlchemy (async) + aiosqlite, Alembic (migrations),
-  Pydantic v2 + pydantic-settings, Argon2 for auth (when auth lands). Mirrors soap-journal's
+  Pydantic v2 + pydantic-settings, Argon2 for auth (when it lands). Mirrors soap-journal's
   proven backend.
-- **Frontend:** React 18 + TypeScript (strict), Vite, Tailwind, React Router, TanStack
-  Query, Zod. Mirrors soap-journal's proven frontend.
-- **Editor:** **TipTap** (ProseMirror-based) for the WYSIWYG note editor — mature, React-
-  native, extensible, serializes cleanly. (Rationale: it's the strongest React rich-text
-  option, handles links/formatting/images out of the box, and round-trips to Markdown via a
-  well-supported extension. Lexical was the alternative; TipTap's ecosystem and Markdown
-  story win for our needs.)
+- **Frontend:** React 18 + TypeScript (strict), Vite, Tailwind, React Router, TanStack Query,
+  Zod. Mirrors soap-journal's proven frontend.
+- **Editor:** **TipTap** (ProseMirror-based) for the WYSIWYG note editor — mature,
+  React-native, links/formatting/images out of the box, round-trips to Markdown.
 - **Packaging:** single deployable unit — a multi-stage Dockerfile builds the Vite bundle,
-  then one uvicorn process serves both the static SPA and the API. Offline-first, **zero
-  outbound calls at runtime.** Same model as soap-journal and Concord.
+  then one uvicorn process serves the static SPA + songbird's API.
 
-**Concord embeds in-process** (this is the heart of the architecture):
+**How songbird uses Concord — over HTTP:**
 
-- songbird's backend depends on Concord's **`bible-core`** (pure Python, stdlib sqlite3) and
-  calls it **in-process** to read Bible text, cross-references, and geography. No HTTP to a
-  Concord server, no second service, no extra startup step for the user — which is exactly
-  the "zero extra steps / transparent" bar the product owner set. `bible-core` was built
-  web-free and embeddable for precisely this.
-- Later, songbird's backend depends on Concord's **`bible-semantic`** (the ML layer) for
-  semantic search — also in-process (§7).
-- songbird exposes its **own** thin REST API to its **own** React frontend (e.g.
-  `GET /api/v1/read/{translation}/{book}/{chapter}`), and *internally* those handlers call
-  `bible-core`. The frontend never talks to Concord directly; it talks to songbird, which
-  embeds Concord. This is the in-process pattern: Concord is a **library** songbird calls,
-  not a service songbird depends on.
+- songbird's backend calls **Concord's REST endpoints** over the network to read Scripture
+  text (`/v1/verses`, `/v1/chapters/...`, `/v1/translations`), to search
+  (`/v1/search`, later `/v1/semantic-search`), and to look up geography
+  (`/v1/places...`, `/v1/verses/{ref}/places`) and cross-references
+  (`/v1/cross-references/...`). Concord is the data/API provider; songbird is the client.
+- songbird's **own backend** exposes its **own** REST API to its **own** React frontend
+  (annotations, tags, and thin pass-throughs/proxies for reading where useful). The frontend
+  talks to songbird; songbird talks to Concord. (Whether the frontend reads Scripture via
+  songbird's backend proxy or — same network — calls Concord directly is a slice-1 detail;
+  default lean is **through songbird's backend**, so songbird owns one coherent API surface
+  and can attach annotation data to reading responses.)
 
-**The async/sync boundary — a known, named design point** (surfaced by the soap-journal
-recon): songbird is async (SQLAlchemy async + aiosqlite); `bible-core` is **sync** (stdlib
-sqlite3). songbird's handlers call `bible-core` through a **threadpool**
-(`asyncio.to_thread` / FastAPI's `run_in_threadpool`) so the sync DB calls don't block the
-event loop. Not a blocker; just an explicit boundary to honor wherever `bible-core` is
-called.
+**Concord connection config:** a single base URL (`CONCORD_BASE_URL`). songbird makes **no
+assumption about where Concord lives** — it calls whatever URL it's given. Concord may be on
+the **same host** or **any other machine on the LAN**, on any port; the location is purely
+config. The default *value* is a sensible localhost address (so the common same-host case
+works with zero config), but that's only a default — set `CONCORD_BASE_URL` to a LAN address
+(e.g. `http://192.168.1.62:8000`) and songbird talks to Concord there instead. One config
+value; no service discovery; no hardcoded "same server."
 
-**Two databases, one data dir** (like soap-journal's `DATA_DIR` convention):
-- songbird's **own** SQLite database holds annotations, tags, users — owned by songbird's
-  SQLAlchemy models, migrated by Alembic.
-- Concord's baked artifacts (`bible.db` now; `embeddings.db` + the int8 model when semantic
-  lands) live in the same data dir, read by `bible-core` / `bible-semantic`. **songbird
-  never writes to Concord's data** — it's read-only reference data.
+**When Concord is unreachable: error.** The real requirement is that Concord is **reachable**
+at `CONCORD_BASE_URL` over HTTP — not that it's co-located. If a Concord call fails (server
+down, network gone, wrong URL), songbird **surfaces a clear error** — it does **not** attempt
+offline fallback, a bundled copy of the text, or graceful degradation. This is a deliberate
+simplicity decision: Concord is a hard runtime dependency reached over HTTP, and its absence
+is an error state, not a mode to design around. (Same-host is the maintainer's own
+deployment and the zero-config default — a convenience, not an architectural constraint.)
 
-**How songbird obtains Concord's baked data** (an architecture decision worth stating, with
-its alternative): the lean is that songbird's **build** produces `bible.db` via `bible-core`'s
-loaders from Concord's committed source data (the translation JSONs, cross-references, and
-geocoding data) — the same way Concord's own Docker build bakes `bible.db` — so the artifact
-is reproducible rather than a vendored blob. The alternative is to **vendor** Concord's
-pre-built `bible.db` as a build input (simpler build, but a stale-blob risk and a coupling to
-Concord's build output). Either keeps the runtime fully offline with the data baked in. *This
-is the one architecture question I'd resolve explicitly during slice 1.*
+**songbird owns only its annotation data.** songbird's **own** SQLite database (under a
+configurable `DATA_DIR`, like soap-journal) holds annotations, tags, and users, via
+songbird's SQLAlchemy models, Alembic-migrated. songbird stores **no** Bible text — that
+always comes from Concord at request time. (Caching Concord responses for performance is a
+possible later optimization, not a data-ownership change.)
 
 ## 4. The canonical-coordinate bridge — the named hard invariant
 
-This is songbird's load-bearing invariant, the analogue of `bible-core`'s web-free rule, and
-it exists to **not inherit soap-journal's limitation.** The soap-journal recon found that it
-links journal entries to verses by **per-translation `verse.id`** — so an entry made against
-NKJV won't match a BSB lookup of the same verse, because they're different rows. songbird
-must not repeat this.
+This is songbird's load-bearing invariant, and it exists to **not inherit soap-journal's
+limitation** (its recon found it links entries by per-translation `verse.id`, so an NKJV
+entry won't match a BSB lookup).
 
 **The invariant: annotation anchors are ALWAYS canonical (USFM book + chapter + verse),
-never a translation-specific row id.** An annotation is anchored to *John 3:16* — an
-address, not a row in some translation's table. When songbird displays annotations while you
-read a given translation, it **resolves the canonical anchor to that translation's verse via
-`bible-core`** (which itself keys on canonical coordinates). Notes are translation-
-independent addresses; rendering resolves per-translation.
+never a translation-specific id.** An annotation is pinned to an *address* — `JHN 3:16` —
+not to a verse in some translation's rendering. This is **clean over HTTP**, because
+**Concord's endpoints already speak canonical coordinates**: songbird reads a chapter from
+Concord (which returns verses keyed by book/chapter/verse), overlays its annotations by
+matching on those same coordinates, and the note shows correctly in *every* translation it's
+scoped to — because it's pinned to the verse *address*, not the *text*.
 
 Consequences this guarantees:
-- A note shows up correctly in *every* translation it's scoped to, because it's pinned to
-  the verse *address*, not the verse *text*.
+- A note displays correctly across every translation it's scoped to.
 - Concord's semantic-search hits and geography place→verse links — both canonical — line up
-  with annotations for free. "Verses about anxiety" can light up "and you have 2 notes
-  here."
-- A future journeys/routes capability, or any other Concord feature, references the same
-  coordinate system. songbird and Concord speak one address language.
+  with songbird's annotations for free ("verses about anxiety" → "you have 2 notes here").
+- One shared coordinate language between songbird and Concord, now and for any future Concord
+  capability.
 
 This invariant gets a **test** in slice 1 (an annotation created while reading one
-translation displays correctly when the reader switches to another), the way Concord's
-foundation requirements were tested.
+translation displays correctly when the reader switches to another).
 
 ## 5. Data model (songbird's own database)
 
 SQLAlchemy async models, Alembic-migrated. Sketch (refine in slice 1):
 
 **`annotations`** — `id`, `book_usfm`, `start_chapter`, `start_verse`, `end_chapter`,
-`end_verse` (the canonical anchor; single verse → start == end), `note_markdown` (the note
-body), `color` (nullable; default highlight color), `scope_type`
-(`all` / `current` / `subset`), `author_id`, `created_at`, `updated_at`.
+`end_verse` (canonical anchor; single verse → start == end), `note_markdown`, `color`
+(nullable), `scope_type` (`all` / `current` / `subset`), `author_id`, `created_at`,
+`updated_at`.
 
-**`annotation_translations`** — `annotation_id`, `translation_code` — the explicit subset
-when `scope_type = subset` (empty for `all`; the single current code for `current`, or model
-`current` as resolved-at-creation into a subset of one — decide in slice).
+**`annotation_translations`** — `annotation_id`, `translation_code` — the subset when
+`scope_type = subset`.
 
-**`tags`** — `id`, `name` (unique). **`annotation_tags`** — `annotation_id`, `tag_id`
-(many-to-many).
+**`tags`** — `id`, `name` (unique). **`annotation_tags`** — `annotation_id`, `tag_id`.
 
-**`users`** — `id`, `name`, plus auth fields (Argon2 hash, sessions) **when auth lands**.
-Multi-user-ready from the start (every annotation has `author_id`); a single default user
-until auth is built (§ slice plan).
+**`users`** — `id`, `name`, plus Argon2 auth fields **when auth lands**. Multi-user-ready
+from the start (every annotation has `author_id`); a single default user until auth is built.
 
-Indexes supporting the hot path: annotations by anchor (to fetch "all notes for this
-chapter" fast), and by author.
+Indexes for the hot path: annotations by anchor (fetch "all notes for this chapter" fast) and
+by author. Translation codes match Concord's translation codes.
 
 ## 6. Note storage format — Markdown, for durability
 
-Notes are stored as **Markdown**, not as TipTap/ProseMirror JSON or raw HTML. Reason: songbird
-is built to last, and Markdown is the **durable, portable, editor-agnostic** format — if the
-editor is ever swapped, the notes survive as readable text. TipTap is configured to read/write
-Markdown (via its Markdown support); the small wiring cost is worth the longevity. Markdown
-covers everything the product owner asked for: hyperlinks, basic formatting, image links.
-(HTML was the alternative — also portable, but Markdown is more durable and human-readable as
-stored text. TipTap-native JSON was rejected: it's editor-locked.)
+Notes are stored as **Markdown**, not editor-native JSON or raw HTML — the durable, portable,
+editor-agnostic format. If the editor is swapped later, the notes survive as readable text.
+TipTap is configured to read/write Markdown. Markdown covers links + image links + the
+formatting set the product owner asked for.
 
-## 7. How Concord weaves in (over time, not all at once)
+## 7. How Concord weaves in (over HTTP, over time)
 
-songbird consumes Concord's three capabilities, in increasing order of cost — and that order
-drives the slice plan:
+songbird consumes Concord's capabilities in increasing order of cost — which drives the slice
+plan:
 
-- **Bible text (now, slice 1):** `bible-core` read in-process — translations, books,
-  chapters, verses. The reader is backed by Concord, not by a songbird-owned corpus. Small,
-  pure, no ML.
-- **Cross-references (cheap, mid):** `bible-core` already serves cross-references; songbird
-  surfaces them for the passage you're reading. Pure data, no new dependency.
-- **Geography (cheap, mid):** `bible-core` serves places + place↔verse links; songbird can
-  show "places mentioned here" for a passage (and eventually a map). Pure data, no ML. (The
-  honesty model carries through — unknown places show as unknown.)
-- **Semantic search (heavy, late):** `bible-semantic` embedded in-process — find Scripture,
-  and your own annotations, by **meaning**, not just keyword/tag. This is the one that drags
-  in the int8 model (~313 MB) + ONNX runtime + vectors, and a one-time first-run model fetch
-  + a startup warm-up. It goes **late**, on rails the cheaper slices already proved. (The
-  product owner's "show a random verse during warm-up" idea — Concord's `random` capability
-  — turns the one user-visible seam into a feature.)
+- **Bible text (now, slice 1):** songbird reads translations/chapters/verses from Concord's
+  endpoints. The reader is backed by Concord's API.
+- **Cross-references (mid):** songbird calls Concord's `/v1/cross-references/...` to surface
+  cross-refs for the passage.
+- **Geography (mid):** songbird calls Concord's `/v1/places...` and `/v1/verses/{ref}/places`
+  to show places for a passage (and, per UX taste, a map). Concord's honesty model carries
+  through (unknown places show as unknown).
+- **Semantic search (late):** songbird calls Concord's `/v1/semantic-search` to find
+  Scripture by meaning, and combines it with songbird's own annotation search to find *notes*
+  by meaning. No heavy ML inside songbird — Concord does the embedding; songbird makes an
+  HTTP call. (This is a real advantage of the HTTP model: the 313 MB model and ONNX runtime
+  stay in Concord, and songbird stays lean.)
 
-The tags users write by hand (§2) are the bridge: tags are manual semantic retrieval;
-`bible-semantic` is automatic semantic retrieval over the same notes.
+Tags (§2) are the bridge: manual semantic retrieval now; Concord-powered semantic retrieval
+over the same notes later.
 
 ## 8. The UX design space — options, not decrees
 
-This is the half that's the product owner's taste, and where the app lives or dies. For each
-decision: the options, the tradeoffs, and my recommendation. These are **for you to react to
-when ready** — nothing here blocks writing the backend, and the recommendations are starting
-points, not settled choices.
+The product owner's taste, where the app lives or dies. Options + tradeoffs + my
+recommendation, for you to react to when ready. None of this blocks the backend.
 
-**8.1 — How do you invoke a highlight?**
-- *(a) Tap/click a verse number* — verse numbers become the affordance; click one to
-  highlight/annotate that verse. Clean, discoverable, works on touch and desktop.
-- *(b) Select text, then a floating button appears* — closer to "highlighting" physically,
-  but with whole-verse granularity the free-text selection is slightly at odds with
-  verse-snapping (you'd snap the selection to whole verses anyway).
-- *(c) A margin gutter* — a clickable strip beside the text; click beside a verse to
-  annotate it. Very "study Bible margin," scales to showing existing-note markers (8.3).
-- **Recommendation: (a) for the core gesture, possibly evolving toward (c)'s margin for
-  *displaying* existing notes.** Verse-number-as-button is the simplest discoverable
-  invocation given whole-verse granularity; the margin is where existing annotations live
-  visually. They compose well.
+**8.1 — How to invoke a highlight?** (a) tap/click a verse number; (b) select text → floating
+button; (c) a margin gutter. **Rec: (a)** verse-number-as-button (simplest given whole-verse
+granularity), evolving toward (c)'s margin for *displaying* notes.
 
-**8.2 — Where does the note editor appear?**
-- *(a) A side panel / drawer* — text stays put on the left, the editor opens on the right.
-  Keeps reading context visible while writing. Best on desktop (your primary environment).
-- *(b) Inline expansion* — the verse expands and the editor appears beneath it. Very direct,
-  but pushes the text around and gets awkward for long notes.
-- *(c) A modal* — focused writing, but hides the passage (bad — you want the verse visible
-  while annotating it).
-- **Recommendation: (a) side panel/drawer.** Keeps the Scripture you're annotating in view
-  while you write, scales to long notes, and is the natural home for the TipTap editor on
-  desktop.
+**8.2 — Where does the note editor appear?** (a) side panel/drawer; (b) inline expansion; (c)
+modal. **Rec: (a) side panel** — keeps the verse in view while writing, scales to long notes,
+natural home for TipTap on desktop.
 
-**8.3 — How do existing annotations show in the text?**
-- *(a) Background highlight on the verse* (the literal highlighter) + *(b) a margin marker*
-  (a dot/icon beside annotated verses) — these aren't exclusive; the strong combination is
-  **both**: the verse is tinted (the highlight color), and a margin marker signals "there's
-  a note here," clicking it opens the note.
-- **Recommendation: highlight color on the verse + a margin marker that opens the note.**
-  The tint shows *what's* annotated at a glance; the marker is the affordance to *read* the
-  note without cluttering the text inline.
+**8.3 — How do existing annotations show in the text?** background highlight on the verse +
+a margin marker that opens the note. **Rec: both** — tint shows what's annotated; marker is
+the affordance to read the note without inline clutter.
 
-**8.4 — The reading view layout.**
-- A single comfortable reading column, with a margin gutter (8.1c/8.3) for annotation
-  markers, and the note editor as a side panel (8.2a). Translation selector and a
-  jump-to-reference bar in a header. **Recommendation: this — a centered reading column +
-  margin + side panel** — it's the study-Bible feel, matches Concord's serif-and-parchment
-  character, and uses desktop width well.
+**8.4 — Reading view layout.** **Rec:** a centered reading column + a margin gutter for
+markers + the editor as a side panel; translation selector + jump-to-reference in a header.
+Study-Bible feel, matches Concord's character.
 
-**8.5 — Choosing translation scope when writing a note.**
-- A small control in the editor panel: a default of **All translations**, with a quick toggle
-  to **This translation only**, and an expandable **checklist** for a subset.
-  **Recommendation: default to All (the common case), one-tap "this translation only," and a
-  "choose translations…" disclosure for the subset** — matches the three-tier model without
-  cluttering the common path.
+**8.5 — Translation scope when writing.** **Rec:** default **All**, one-tap **this
+translation only**, a **"choose translations…"** disclosure for the subset.
 
-**8.6 — Tags UI.**
-- A simple tag input on the note editor (type-to-add, autocomplete from existing tags), and a
-  tag filter on a "browse notes" view. **Recommendation: type-ahead tag input on the editor;
-  a faceted tag filter on the notes-browse view.** Keep it boring and fast.
+**8.6 — Tags UI.** **Rec:** type-ahead tag input on the editor; a faceted tag filter on a
+browse-notes view.
 
-These are the seams worth designing on purpose. We'll iterate on them as slices land —
-seeing a real reading view will sharpen them more than arguing in the abstract.
+We iterate on these as the reading view becomes real — seeing it beats arguing it cold.
 
 ## 9. Slice plan
 
-Same discipline as Concord: smallest reviewable, load-bearing unit; spec-first; PR-per-slice;
-never break a shipped slice. **Slice 1 is firmly defined; the rest is a roadmap, refined as
-we go.** Each slice is a *thin vertical cut* through the whole app — never a horizontal layer
-built in isolation.
+Smallest reviewable, load-bearing unit; spec-first; PR-per-slice; never break a shipped
+slice. **Slice 1 firmly defined; the rest a roadmap.** Each slice is a thin vertical cut, not
+a horizontal layer.
 
-- **Slice 1 — the core loop.** Open a chapter in one translation (reader backed by
-  `bible-core` in-process), highlight a verse, write a rich-text (Markdown/TipTap) note in
-  the side panel, save it (songbird's own DB), and see the highlight + note when you return
-  to that chapter. Establishes: the repo + stack, `bible-core` embedding (with the
-  threadpool boundary), the annotation schema + persistence, the canonical anchor + **the
-  bridge invariant test** (§4), the TipTap editor, and the reading view skeleton. It ships;
-  it's usable; it hits the riskiest thing (the annotation model + the bridge) first.
-- **Slice 2 — translation switching + scope.** Multiple translations in the reader; the
-  three-tier translation scope for annotations; prove an annotation displays correctly across
-  translations per its scope (the bridge invariant, exercised for real).
-- **Slice 3 — navigation.** Jump-to-reference bar (reuse `bible-core`'s reference parsing),
-  book/chapter navigation.
-- **Slice 4 — tags + browse.** Tag input on notes; a browse-notes view with tag filtering.
-- **Slice 5 — cross-references.** Surface `bible-core` cross-references for the current
-  passage.
-- **Slice 6 — geography.** Surface `bible-core` places for the passage (and, per UX taste, a
-  map); honesty model carried through.
-- **Slice 7 — semantic search.** Embed `bible-semantic`; find Scripture and your own notes by
-  meaning. The heavy slice (model footprint, first-run fetch, warm-up-with-a-verse), on proven
-  rails.
-- **Slice 8 — auth / multi-user.** Argon2 cookie-session (the soap-journal pattern), turning
-  the multi-user-ready schema into real multi-user — *if/when* you want it; deferred while
-  single-user.
-- **Ongoing — deploy + polish.** Single-unit Docker, the offline `--network none` discipline.
-
-Slice ordering mirrors Concord's lesson: cheap/pure capabilities first, the ML-heavy one
-late, on rails the earlier slices proved.
+- **Slice 0 — skeleton & boot.** Repo skeleton in the soap-journal stack shape (FastAPI
+  backend + React/Vite frontend, single-unit dev + Dockerfile), tooling
+  (Ruff/Pyright/pytest; TS strict/lint), `CONCORD_BASE_URL` config, a `/healthz` that also
+  reports **Concord reachability** (a ping to Concord's `/healthz`), and a trivial proof that
+  songbird can call **one** Concord endpoint and render the result. Establishes the stack and
+  the HTTP client to Concord.
+- **Slice 1 — the core loop.** Read a chapter in one translation **from Concord**, highlight
+  a verse, write a Markdown/TipTap note in the side panel, save it (songbird's own DB), and
+  see the highlight + note when you return — overlaid on Concord's chapter by canonical
+  coordinates. Establishes: the annotation schema + persistence, the canonical anchor + **the
+  bridge invariant test** (§4), the editor, the reading-view skeleton.
+- **Slice 2 — translation switching + scope.** Multiple translations from Concord; the
+  three-tier translation scope; prove annotations display correctly across translations (the
+  bridge, for real).
+- **Slice 3 — navigation.** Jump-to-reference + book/chapter navigation (Concord's
+  `/v1/verses/{ref}` resolution).
+- **Slice 4 — tags + browse.** Tag input; a browse-notes view with tag filtering.
+- **Slice 5 — cross-references.** Surface Concord cross-references for the passage.
+- **Slice 6 — geography.** Surface Concord places for the passage (and, per taste, a map).
+- **Slice 7 — semantic search.** Call Concord's `/v1/semantic-search`; combine with
+  annotation search to find Scripture and notes by meaning.
+- **Slice 8 — auth / multi-user.** Argon2 cookie-session (soap-journal pattern) — *if/when*
+  wanted; deferred while single-user.
+- **Ongoing — deploy + polish.** Single-unit Docker.
 
 ## 10. Out of scope / deferred
 
-- A SOAP-format entry mode (soap-journal does that, complete; a future songbird template
-  could, but the core model here is annotation).
-- Mobile (the Concord LAN/in-process constraint; deferred — soap-journal-mobile is the
-  offline SOAP option).
-- Sub-verse / word-level highlighting (whole-verse is the deliberate v1 granularity, §4).
-- Multi-color highlighting beyond a default (trivial later enhancement).
-- Cloud/multi-tenant hosting (self-hosted single-unit is the model).
-- Replacing soap-journal (a someday question; soap-journal stays as-is for now).
+- A SOAP-format entry mode (soap-journal does that).
+- Mobile.
+- Offline operation / Bible-text fallback when Concord is unreachable (Concord is a hard HTTP
+  dependency; its absence is an error — §3).
+- Sub-verse / word-level highlighting (whole-verse is the deliberate v1 granularity).
+- Multi-color highlighting beyond a default.
+- Cloud / multi-tenant hosting.
+- Replacing soap-journal.
 
 ## 11. Open questions (resolve as slices reach them)
 
-1. **Concord data acquisition** (§3) — build `bible.db` via `bible-core` loaders at build
-   time (reproducible, lean) vs. vendor Concord's pre-built artifact (simpler, stale risk).
-   Resolve in slice 1.
-2. **`scope_type = current` modeling** — store as a literal "current" + resolve at display,
-   or resolve-at-creation into a one-translation subset? (Lean: resolve to a concrete subset
-   so the stored intent is explicit.)
-3. **Markdown ↔ TipTap wiring** — confirm the TipTap Markdown extension covers links +
-   images + the formatting set cleanly; settle the round-trip in slice 1.
-4. **Concord as a dependency** — path dependency, git submodule, or installed package? (Both
-   are your repos; affects how songbird's build references `bible-core`.)
+1. **Frontend reads Scripture via songbird's backend proxy, or directly from Concord?**
+   (Lean: through songbird's backend, so songbird owns one API surface and can attach
+   annotations to reading responses.) Resolve in slice 0/1.
+2. **`scope_type = current` modeling** — store literal "current" + resolve at display, or
+   resolve-at-creation into a one-translation subset? (Lean: resolve to a concrete subset.)
+3. **Markdown ↔ TipTap wiring** — confirm the Markdown extension covers links + images + the
+   formatting set; settle the round-trip in slice 1.
+4. **Concord response caching** — none to start (call through every time); revisit only if
+   performance warrants. Not a data-ownership change if added.
 5. **The UX choices in §8** — yours to settle as the reading view becomes real.
 
-None block starting. Slice 1 is well-defined; the spec is the bottle, the cellar is open.
+None block starting. Slice 0 stands up the stack + the Concord HTTP client; slice 1 is the
+core loop.
