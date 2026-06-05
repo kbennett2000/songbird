@@ -1,0 +1,33 @@
+[project]
+name = "songbird-backend"
+version = "0.1.0"
+description = "songbird backend — a FastAPI app for annotating Scripture, a client of Concord."
+requires-python = ">=3.12"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["songbird*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["songbird"]
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "B", "UP", "ASYNC"]
+ignore = ["B008"]  # FastAPI's Depends() lives in defaults; B008 is noise here.
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+pythonpath = ["."]
+python_files = ["*_test.py"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+addopts = ["-m", "not concord", "--strict-markers"]
+markers = [
+    "concord: tests that require a live Concord instance; excluded from the default run",
+]

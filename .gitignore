@@ -21,6 +21,7 @@ data/*.db
 *.sqlite3
 .env
 .env.*
+!.env.example
 
 # Local / tooling
 .claude/
