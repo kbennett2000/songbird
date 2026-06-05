@@ -1,0 +1,7 @@
+{
+  "include": ["songbird"],
+  "exclude": ["**/__pycache__", "**/node_modules", "alembic"],
+  "typeCheckingMode": "strict",
+  "pythonVersion": "3.12",
+  "reportMissingTypeStubs": false
+}
