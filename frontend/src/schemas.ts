@@ -28,3 +28,54 @@ export const healthResponseSchema = z.object({
 
 export type Translation = z.infer<typeof translationSchema>;
 export type HealthResponse = z.infer<typeof healthResponseSchema>;
+
+// --- Reader + annotations (Slice 1) ---
+
+export const bookSchema = z.object({
+  id: z.string(), // USFM code
+  name: z.string(),
+  testament: z.string(),
+  chapter_count: z.number().nullable(),
+  canonical_order: z.number(),
+});
+
+export const booksResponseSchema = z.object({
+  books: z.array(bookSchema),
+});
+
+export const annotationSchema = z.object({
+  id: z.number(),
+  book_usfm: z.string(),
+  start_chapter: z.number(),
+  start_verse: z.number(),
+  end_chapter: z.number(),
+  end_verse: z.number(),
+  note_markdown: z.string(),
+  color: z.string().nullable(),
+  scope_type: z.string(),
+  author_id: z.number(),
+  created_at: z.string(),
+  updated_at: z.string(),
+});
+
+export const readVerseSchema = z.object({
+  book: z.string(),
+  chapter: z.number(),
+  verse: z.number(),
+  reference: z.string(),
+  text: z.string().nullable(),
+  annotations: z.array(annotationSchema),
+});
+
+export const readChapterSchema = z.object({
+  translation: z.string(),
+  book: z.string(),
+  chapter: z.number(),
+  reference: z.string(),
+  verses: z.array(readVerseSchema),
+});
+
+export type Book = z.infer<typeof bookSchema>;
+export type Annotation = z.infer<typeof annotationSchema>;
+export type ReadVerse = z.infer<typeof readVerseSchema>;
+export type ReadChapter = z.infer<typeof readChapterSchema>;

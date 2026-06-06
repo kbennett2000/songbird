@@ -1,10 +1,12 @@
 import { createBrowserRouter, RouterProvider } from "react-router-dom";
 
+import { ReaderView } from "@/routes/ReaderView";
 import { StatusView } from "@/routes/StatusView";
 
 const router = createBrowserRouter([
-  { path: "/", element: <StatusView /> },
-  { path: "*", element: <StatusView /> },
+  { path: "/", element: <ReaderView /> },
+  { path: "/status", element: <StatusView /> },
+  { path: "*", element: <ReaderView /> },
 ]);
 
 export function App(): JSX.Element {
