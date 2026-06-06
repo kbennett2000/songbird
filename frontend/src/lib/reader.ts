@@ -2,6 +2,7 @@ import { apiRequest } from "@/lib/api";
 import {
   type Annotation,
   type Book,
+  type CrossReference,
   type ReadChapter,
   type ResolvedReference,
   type ScopeType,
@@ -9,6 +10,7 @@ import {
   annotationSchema,
   annotationsListSchema,
   booksResponseSchema,
+  crossReferencesSchema,
   readChapterSchema,
   resolvedReferenceSchema,
   tagsListSchema,
@@ -29,6 +31,21 @@ export async function fetchTranslations(): Promise<Translation[]> {
 export async function resolveReference(ref: string): Promise<ResolvedReference> {
   const data = await apiRequest<unknown>("GET", `/resolve?ref=${encodeURIComponent(ref)}`);
   return resolvedReferenceSchema.parse(data);
+}
+
+/** Cross-references for a verse — sourced entirely from Concord (songbird stores none). */
+export async function fetchCrossReferences(
+  book: string,
+  chapter: number,
+  verse: number,
+  translation: string,
+): Promise<CrossReference[]> {
+  const qs = translation ? `?translation=${encodeURIComponent(translation)}` : "";
+  const data = await apiRequest<unknown>(
+    "GET",
+    `/cross-references/${book}/${chapter}/${verse}${qs}`,
+  );
+  return crossReferencesSchema.parse(data);
 }
 
 export async function fetchChapter(

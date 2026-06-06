@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type FormEvent, useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 
+import { CrossReferences } from "@/components/CrossReferences";
 import { NoteEditor } from "@/components/NoteEditor";
 import { ScopePicker } from "@/components/ScopePicker";
 import { SidePanel } from "@/components/SidePanel";
@@ -31,6 +32,13 @@ interface Editing {
   tags: string[];
 }
 
+interface XrefView {
+  book: string;
+  chapter: number;
+  verse: number;
+  reference: string;
+}
+
 export function ReaderView(): JSX.Element {
   const queryClient = useQueryClient();
   // A jump-from-browse arrives as ?book=&chapter=&verse=; seed the initial location from it.
@@ -39,6 +47,7 @@ export function ReaderView(): JSX.Element {
   const [book, setBook] = useState(() => searchParams.get("book") ?? "JHN");
   const [chapter, setChapter] = useState(() => Number(searchParams.get("chapter") ?? 3));
   const [editing, setEditing] = useState<Editing | null>(null);
+  const [xref, setXref] = useState<XrefView | null>(null);
   const [refInput, setRefInput] = useState("");
   const [resolveError, setResolveError] = useState<string | null>(null);
   const [highlightVerse, setHighlightVerse] = useState<number | null>(() => {
@@ -63,12 +72,15 @@ export function ReaderView(): JSX.Element {
     return Array.from({ length: count }, (_, i) => i + 1);
   }, [selectedBook, chapter]);
 
-  // Navigate the reader. A verse (from a single-verse jump) is scrolled-to + briefly highlit.
+  // Navigate the reader. A verse (from a single-verse jump or a cross-ref) is scrolled-to +
+  // briefly highlit. Closes any open panel.
   const navigate = (b: string, c: number, verse: number | null = null) => {
     setBook(b);
     setChapter(c);
     setHighlightVerse(verse);
     setResolveError(null);
+    setEditing(null);
+    setXref(null);
   };
 
   const next = nextChapter(books, book, chapter);
@@ -151,7 +163,8 @@ export function ReaderView(): JSX.Element {
     },
   });
 
-  const openNew = (verse: ReadVerse) =>
+  const openNew = (verse: ReadVerse) => {
+    setXref(null);
     setEditing({
       verse,
       annotationId: null,
@@ -160,8 +173,10 @@ export function ReaderView(): JSX.Element {
       scopeLabel: null,
       tags: [],
     });
+  };
 
-  const openExisting = (verse: ReadVerse, annotation: ReadAnnotation) =>
+  const openExisting = (verse: ReadVerse, annotation: ReadAnnotation) => {
+    setXref(null);
     setEditing({
       verse,
       annotationId: annotation.id,
@@ -175,6 +190,22 @@ export function ReaderView(): JSX.Element {
         : `written for ${annotation.scope_translations.join(", ")}`,
       tags: annotation.tags,
     });
+  };
+
+  const openXref = (verse: ReadVerse) => {
+    setEditing(null);
+    setXref({
+      book: chapterQuery.data?.book ?? book,
+      chapter,
+      verse: verse.verse,
+      reference: verse.reference,
+    });
+  };
+
+  const closePanel = () => {
+    setEditing(null);
+    setXref(null);
+  };
 
   return (
     <div className="min-h-screen bg-stone-50">
@@ -331,6 +362,15 @@ export function ReaderView(): JSX.Element {
                       ○
                     </button>
                   )}
+                  <button
+                    type="button"
+                    className="ml-2 align-middle text-xs text-gray-300 opacity-0 transition hover:text-blue-600 group-hover:opacity-100"
+                    onClick={() => openXref(v)}
+                    aria-label={`Cross-references for verse ${v.verse}`}
+                    title="Cross-references"
+                  >
+                    ⇄
+                  </button>
                 </p>
               );
             })}
@@ -339,11 +379,17 @@ export function ReaderView(): JSX.Element {
       </main>
 
       <SidePanel
-        open={editing !== null}
-        title={editing ? `Note on ${editing.verse.reference}` : ""}
+        open={editing !== null || xref !== null}
+        title={
+          editing
+            ? `Note on ${editing.verse.reference}`
+            : xref
+              ? `Cross-references — ${xref.reference}`
+              : ""
+        }
         subtitle={editing?.verse.text}
         scopeLabel={editing?.scopeLabel}
-        onClose={() => setEditing(null)}
+        onClose={closePanel}
       >
         {editing && (
           <div className="flex flex-col gap-4">
@@ -371,6 +417,15 @@ export function ReaderView(): JSX.Element {
               }
             />
           </div>
+        )}
+        {xref && (
+          <CrossReferences
+            book={xref.book}
+            chapter={xref.chapter}
+            verse={xref.verse}
+            translation={translation}
+            onJump={(b, c, v) => navigate(b, c, v)}
+          />
         )}
       </SidePanel>
     </div>
