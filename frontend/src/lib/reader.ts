@@ -10,6 +10,7 @@ import {
   type ScopeType,
   type SemanticResult,
   type Translation,
+  type TranslatorNote,
   annotationSchema,
   annotationsListSchema,
   booksResponseSchema,
@@ -21,6 +22,7 @@ import {
   semanticResultsSchema,
   tagsListSchema,
   translationsResponseSchema,
+  translatorNotesSchema,
 } from "@/schemas";
 
 export async function fetchBooks(): Promise<Book[]> {
@@ -52,6 +54,20 @@ export async function fetchCrossReferences(
     `/cross-references/${book}/${chapter}/${verse}${qs}`,
   );
   return crossReferencesSchema.parse(data);
+}
+
+/** Translator's notes for a whole chapter in one translation — from Concord (songbird stores
+ * no notes). A translation with none returns an empty array (the reader then shows no markers). */
+export async function fetchNotes(
+  translation: string,
+  book: string,
+  chapter: number,
+): Promise<TranslatorNote[]> {
+  const data = await apiRequest<unknown>(
+    "GET",
+    `/notes/${encodeURIComponent(translation)}/${encodeURIComponent(book)}/${chapter}`,
+  );
+  return translatorNotesSchema.parse(data);
 }
 
 /** Places named in a chapter — from Concord (songbird stores no place data). */

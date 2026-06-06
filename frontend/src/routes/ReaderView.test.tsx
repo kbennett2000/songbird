@@ -128,6 +128,63 @@ describe("ReaderView", () => {
     expect(screen.getByRole("button", { name: "View note on verse 16" })).toBeInTheDocument();
   });
 
+  it("overlays NET's translator's notes (separate from canonical annotations) and clears them on translation switch", async () => {
+    const tnote = {
+      book: "JHN",
+      chapter: 3,
+      verse: 16,
+      reference: "John 3:16",
+      type: "tn",
+      text: "A translator's note ἀγάπη",
+      char_offset: 19, // mirrors live NET John 3:16 (clamps to the synthetic verse's end)
+      marker: "7",
+      ordinal: 0, // live ordinals are 0-based
+      cross_references: [
+        {
+          to_book: "ROM",
+          to_chapter: 5,
+          to_verse_start: 8,
+          to_verse_end: null,
+          reference: "Romans 5:8",
+        },
+      ],
+    };
+    server.use(
+      // A canonical annotation is present in every translation (separate system).
+      http.get("/api/v1/read/:translation/:book/:chapter", ({ params }) =>
+        HttpResponse.json(readResponse([annotation()], String(params.translation))),
+      ),
+      // Notes exist only for WEB here (standing in for NET); other translations → empty.
+      http.get("/api/v1/notes/:translation/:book/:chapter", ({ params }) =>
+        HttpResponse.json(String(params.translation) === "WEB" ? [tnote] : []),
+      ),
+    );
+
+    const user = userEvent.setup();
+    renderReader();
+
+    // KJV (default): the canonical annotation overlay shows, but NO note marker.
+    expect(await screen.findByRole("button", { name: "View note on verse 16" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Translator's note 1" })).not.toBeInTheDocument();
+
+    // Switch to WEB → the note marker appears; the annotation overlay is untouched.
+    await user.selectOptions(await screen.findByLabelText("Translation"), "WEB");
+    const marker = await screen.findByRole("button", { name: "Translator's note 1" });
+    expect(screen.getByRole("button", { name: "View note on verse 16" })).toBeInTheDocument();
+
+    // Tapping the marker reveals the note (Greek intact) and its canonical cross-ref.
+    await user.click(marker);
+    expect(await screen.findByText(/A translator's note ἀγάπη/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Romans 5:8/ })).toBeInTheDocument();
+
+    // Switch away → markers clear (notes are NET's), annotation overlay remains.
+    await user.selectOptions(screen.getByLabelText("Translation"), "KJV");
+    expect(
+      await screen.findByRole("button", { name: "View note on verse 16" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Translator's note 1" })).not.toBeInTheDocument();
+  });
+
   it("sends the chosen scope when creating an annotation", async () => {
     let captured: Record<string, unknown> | null = null;
     server.use(

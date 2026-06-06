@@ -113,3 +113,42 @@ class SemanticResult(BaseModel):
 
 class SemanticSearchResponse(BaseModel):
     results: list[SemanticResult]
+
+
+class NoteCrossReference(BaseModel):
+    """A cross-reference carried by a translator's note → a target verse or range. Canonical
+    coordinates (so the popover reuses songbird's coordinate navigation)."""
+
+    to_book: str  # USFM code — canonical
+    to_chapter: int
+    to_verse_start: int
+    to_verse_end: int | None = None
+    reference: str
+
+
+class TranslatorNote(BaseModel):
+    """One translator's note: its canonical anchor, the `char_offset` point a client uses to
+    place the marker in the verse text, and the note's own cross-references."""
+
+    book: str  # USFM code — canonical
+    chapter: int
+    verse: int
+    reference: str
+    type: str | None = None  # tn | sn | tc | map | null (plain footnote)
+    text: str
+    char_offset: int
+    marker: str | None = None
+    ordinal: int
+    cross_references: list[NoteCrossReference]
+
+
+class NotesResponse(BaseModel):
+    """A passage's translator's notes. A known translation with no notes returns notes: []
+    (200), not an error — every translation on the public image ships zero notes."""
+
+    translation: str
+    book: str  # USFM code — canonical
+    chapter: int
+    verse: int | None = None
+    total: int
+    notes: list[TranslatorNote]
