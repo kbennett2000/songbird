@@ -53,9 +53,15 @@ export const annotationSchema = z.object({
   note_markdown: z.string(),
   color: z.string().nullable(),
   scope_type: z.string(),
+  scope_translations: z.array(z.string()),
   author_id: z.number(),
   created_at: z.string(),
   updated_at: z.string(),
+});
+
+// An overlaid annotation also carries whether it's in scope for the translation being read.
+export const readAnnotationSchema = annotationSchema.extend({
+  in_scope: z.boolean(),
 });
 
 export const readVerseSchema = z.object({
@@ -64,7 +70,7 @@ export const readVerseSchema = z.object({
   verse: z.number(),
   reference: z.string(),
   text: z.string().nullable(),
-  annotations: z.array(annotationSchema),
+  annotations: z.array(readAnnotationSchema),
 });
 
 export const readChapterSchema = z.object({
@@ -77,5 +83,13 @@ export const readChapterSchema = z.object({
 
 export type Book = z.infer<typeof bookSchema>;
 export type Annotation = z.infer<typeof annotationSchema>;
+export type ReadAnnotation = z.infer<typeof readAnnotationSchema>;
 export type ReadVerse = z.infer<typeof readVerseSchema>;
 export type ReadChapter = z.infer<typeof readChapterSchema>;
+
+// Annotation scope (SPEC §2) for the editor's scope picker.
+export type ScopeType = "all" | "current" | "subset";
+export interface Scope {
+  type: ScopeType;
+  translations: string[];
+}
