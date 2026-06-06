@@ -58,6 +58,8 @@ export async function apiRequest<TResponse>(
   const init: RequestInit = {
     method,
     headers: { Accept: "application/json" },
+    // Send the session cookie so the gated API recognizes the logged-in user (Slice 8).
+    credentials: "include",
   };
   if (body !== undefined) {
     init.headers = { ...init.headers, "Content-Type": "application/json" };
