@@ -3,6 +3,8 @@ import {
   type Annotation,
   type Book,
   type CrossReference,
+  type Place,
+  type PlaceVerse,
   type ReadChapter,
   type ResolvedReference,
   type ScopeType,
@@ -12,6 +14,8 @@ import {
   annotationsListSchema,
   booksResponseSchema,
   crossReferencesSchema,
+  placeVersesSchema,
+  placesSchema,
   readChapterSchema,
   resolvedReferenceSchema,
   semanticResultsSchema,
@@ -48,6 +52,24 @@ export async function fetchCrossReferences(
     `/cross-references/${book}/${chapter}/${verse}${qs}`,
   );
   return crossReferencesSchema.parse(data);
+}
+
+/** Places named in a chapter — from Concord (songbird stores no place data). */
+export async function fetchPlaces(book: string, chapter: number): Promise<Place[]> {
+  const data = await apiRequest<unknown>(
+    "GET",
+    `/places?book=${encodeURIComponent(book)}&chapter=${chapter}`,
+  );
+  return placesSchema.parse(data);
+}
+
+/** The verses that mention a place (canonical coords → jump reuses navigation). */
+export async function fetchPlaceVerses(placeId: string): Promise<PlaceVerse[]> {
+  const data = await apiRequest<unknown>(
+    "GET",
+    `/places/${encodeURIComponent(placeId)}/verses`,
+  );
+  return placeVersesSchema.parse(data);
 }
 
 export async function fetchChapter(

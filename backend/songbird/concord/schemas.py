@@ -72,6 +72,36 @@ class CrossRefResponse(BaseModel):
     cross_references: list[CrossRefEntry]
 
 
+class Place(BaseModel):
+    """A place named in Scripture, with Concord's honesty model: coordinates + confidence are
+    null for unknown/symbolic/multiple places — surfaced, not hidden."""
+
+    id: str  # OpenBible id, e.g. "a15257a"
+    friendly_id: str
+    name: str
+    type: str
+    latitude: float | None = None
+    longitude: float | None = None
+    confidence: str | None = None  # "high" | "medium" | "low" | null
+    confidence_score: int | None = None
+    status: str  # identified | disputed | unknown | symbolic | multiple
+
+
+class VersePlacesResponse(BaseModel):
+    places: list[Place]
+
+
+class PlaceVerse(BaseModel):
+    book: str  # USFM code — canonical
+    chapter: int
+    verse: int
+    reference: str
+
+
+class PlaceVersesResponse(BaseModel):
+    verses: list[PlaceVerse]
+
+
 class SemanticResult(BaseModel):
     book: str  # USFM code — canonical
     chapter: int

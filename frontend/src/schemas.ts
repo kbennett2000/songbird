@@ -104,6 +104,28 @@ export const crossReferenceSchema = z.object({
 });
 export const crossReferencesSchema = z.array(crossReferenceSchema);
 
+// A place (from Concord). Honesty model: lat/lon/confidence are null for unknown/symbolic.
+export const placeSchema = z.object({
+  id: z.string(),
+  friendly_id: z.string(),
+  name: z.string(),
+  type: z.string(),
+  latitude: z.number().nullable(),
+  longitude: z.number().nullable(),
+  confidence: z.string().nullable(),
+  confidence_score: z.number().nullable(),
+  status: z.string(),
+});
+export const placesSchema = z.array(placeSchema);
+
+export const placeVerseSchema = z.object({
+  book: z.string(),
+  chapter: z.number(),
+  verse: z.number(),
+  reference: z.string(),
+});
+export const placeVersesSchema = z.array(placeVerseSchema);
+
 export type Book = z.infer<typeof bookSchema>;
 export type Annotation = z.infer<typeof annotationSchema>;
 export type ReadAnnotation = z.infer<typeof readAnnotationSchema>;
@@ -111,6 +133,8 @@ export type ReadVerse = z.infer<typeof readVerseSchema>;
 export type ReadChapter = z.infer<typeof readChapterSchema>;
 export type ResolvedReference = z.infer<typeof resolvedReferenceSchema>;
 export type CrossReference = z.infer<typeof crossReferenceSchema>;
+export type Place = z.infer<typeof placeSchema>;
+export type PlaceVerse = z.infer<typeof placeVerseSchema>;
 
 // A ranked Scripture result from Concord's semantic search.
 export const semanticResultSchema = z.object({

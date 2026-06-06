@@ -16,9 +16,11 @@ from songbird.concord.schemas import (
     Chapter,
     ConcordHealth,
     CrossRefResponse,
+    PlaceVersesResponse,
     SemanticSearchResponse,
     Translation,
     TranslationsResponse,
+    VersePlacesResponse,
 )
 
 
@@ -140,6 +142,37 @@ class ConcordClient:
         except httpx.HTTPError as exc:
             raise ConcordUnreachableError(self._base_url, exc) from exc
         return CrossRefResponse.model_validate(response.json())
+
+    async def get_places(self, book: str, chapter: int) -> VersePlacesResponse:
+        """Places named in a chapter, from Concord (songbird owns no place data). Carries the
+        honesty model through — unknown/symbolic places have null coordinates."""
+        ref = f"{book} {chapter}"
+        try:
+            response = await self._client.get(f"/v1/verses/{quote(ref, safe='')}/places")
+            response.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code in (400, 404):
+                raise ConcordNotFoundError(f"Concord could not resolve '{ref}'") from exc
+            raise ConcordUnreachableError(self._base_url, exc) from exc
+        except httpx.HTTPError as exc:
+            raise ConcordUnreachableError(self._base_url, exc) from exc
+        return VersePlacesResponse.model_validate(response.json())
+
+    async def get_place_verses(self, place_id: str) -> PlaceVersesResponse:
+        """The verses that mention a place (canonical coords → jump reuses navigation)."""
+        try:
+            response = await self._client.get(
+                f"/v1/places/{quote(place_id, safe='')}/verses",
+                params={"include_text": "false", "limit": "200"},
+            )
+            response.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code in (400, 404):
+                raise ConcordNotFoundError(f"Concord has no place '{place_id}'") from exc
+            raise ConcordUnreachableError(self._base_url, exc) from exc
+        except httpx.HTTPError as exc:
+            raise ConcordUnreachableError(self._base_url, exc) from exc
+        return PlaceVersesResponse.model_validate(response.json())
 
     async def resolve_reference(self, ref: str) -> Chapter:
         """Resolve a raw human reference ("John 3", "Gen 1:1", "1 Cor 13") to canonical

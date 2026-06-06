@@ -76,6 +76,29 @@ class CrossReference(BaseModel):
     text: str | None  # the target's snippet (in the read translation), if available
 
 
+class Place(BaseModel):
+    """A place named in Scripture (from Concord). The honesty model is carried through
+    verbatim: `latitude`/`longitude`/`confidence` are null for unknown/symbolic/multiple
+    places — songbird never fabricates a coordinate."""
+
+    id: str
+    friendly_id: str
+    name: str
+    type: str
+    latitude: float | None
+    longitude: float | None
+    confidence: str | None
+    confidence_score: int | None
+    status: str  # identified | disputed | unknown | symbolic | multiple
+
+
+class PlaceVerse(BaseModel):
+    book: str  # USFM code — canonical
+    chapter: int
+    verse: int
+    reference: str
+
+
 class SemanticResult(BaseModel):
     """A ranked Scripture result from Concord's semantic search. Canonical coords → jump
     reuses navigation; `score` is Concord's confidence, surfaced honestly."""
