@@ -1,6 +1,16 @@
 import { http, HttpResponse } from "msw";
 
+// A logged-in user by default, so the gated views render under test (auth-specific tests
+// override these per-case via server.use()).
+const DEFAULT_USER = { id: 1, username: "tester", is_admin: true, created_at: "2026-01-01T00:00:00Z" };
+
 export const defaultHandlers = [
+  http.get("/api/v1/auth/me", () => HttpResponse.json({ user: DEFAULT_USER })),
+  http.post("/api/v1/auth/login", () => HttpResponse.json({ user: DEFAULT_USER })),
+  http.post("/api/v1/auth/register", () =>
+    HttpResponse.json({ user: DEFAULT_USER }, { status: 201 }),
+  ),
+  http.post("/api/v1/auth/logout", () => new HttpResponse(null, { status: 204 })),
   http.get("/healthz", () =>
     HttpResponse.json({
       status: "ok",
