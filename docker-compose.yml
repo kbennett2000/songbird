@@ -1,29 +1,49 @@
+# songbird — one command to run everything.
+#
+# This starts TWO things on one little private network:
+#   1. concord  — the Scripture engine (Bible text, search, places). Downloaded ready-to-run.
+#   2. songbird — the app you actually use, built from this repo.
+#
+# You don't need to understand the details. From this folder, just run:
+#
+#     docker compose up
+#
+# ...then open http://localhost:8077 in your browser. That's it.
+# (The first run takes a few minutes while it downloads Concord and builds songbird.)
+
 services:
+  # The Scripture engine. Pulled as a ready-made image — nothing to build.
+  concord:
+    image: ghcr.io/kbennett2000/concord:v1.0.0
+    restart: unless-stopped
+    # Concord is only used by songbird, on this private network.
+    # (We don't expose it to your whole computer — songbird talks to it internally.)
+    expose:
+      - "8000"
+    healthcheck:
+      # songbird waits until Concord is actually ready before it starts.
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/healthz').status==200 else 1)"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 40s
+
+  # The app you use. Built from this repo (quick — it's lightweight).
   songbird:
     build: .
-    image: songbird:local
-    container_name: songbird
     restart: unless-stopped
     ports:
-      - "${PORT:-8077}:8077"
+      # Open songbird in your browser at http://localhost:8077
+      - "8077:8077"
     environment:
-      # Concord is a hard runtime HTTP dependency. From INSIDE the container the host's
-      # localhost is NOT the host machine — point at the host gateway (below) or a LAN IP.
-      # songbird makes no co-location assumption (CLAUDE.md invariant 2).
-      CONCORD_BASE_URL: "${CONCORD_BASE_URL:-http://host.docker.internal:8000}"
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+      # How songbird finds Concord on the private network. You don't change this.
+      CONCORD_BASE_URL: "http://concord:8000"
     volumes:
-      - ./data:/data
-    healthcheck:
-      test:
-        [
-          "CMD",
-          "python",
-          "-c",
-          "import urllib.request; urllib.request.urlopen('http://localhost:8077/healthz').read()",
-        ]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 20s
+      # Your notes live here, on your computer, so they survive restarts.
+      - songbird-data:/data
+    depends_on:
+      concord:
+        condition: service_healthy
+
+volumes:
+  songbird-data:

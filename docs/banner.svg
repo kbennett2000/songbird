@@ -1,0 +1,54 @@
+<svg viewBox="0 0 1200 380" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="songbird — read Scripture, keep your notes in the margins. Built on Concord.">
+  <defs>
+    <linearGradient id="parchment" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#F7F0DD"/>
+      <stop offset="1" stop-color="#EEE2C6"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Aged-paper panel -->
+  <rect x="0" y="0" width="1200" height="380" rx="18" fill="url(#parchment)"/>
+
+  <!-- Classic double rule frame -->
+  <rect x="18" y="18" width="1164" height="344" rx="12" fill="none" stroke="#BFA877" stroke-width="2"/>
+  <rect x="27" y="27" width="1146" height="326" rx="8" fill="none" stroke="#CFBE97" stroke-width="1"/>
+
+  <!-- The songbird, perched -->
+  <g transform="translate(74,83)" stroke-linecap="round" stroke-linejoin="round">
+    <!-- branch -->
+    <path d="M70,168 L150,168 M150,168 l11,-6" fill="none" stroke="#33291B" stroke-width="3"/>
+    <!-- legs + feet -->
+    <path d="M96,138 L94,167 M94,167 l9,0 M112,136 L110,167 M110,167 l9,0" fill="none" stroke="#33291B" stroke-width="2.4"/>
+    <!-- body silhouette -->
+    <path d="M172,82
+             L152,79
+             C144,60 120,50 96,54
+             C74,58 60,70 50,90
+             C43,102 39,110 37,119
+             L7,151
+             C19,146 27,142 35,140
+             C31,133 35,129 47,129
+             C71,127 97,131 119,135
+             C141,139 156,127 162,109
+             C167,100 166,93 154,90 Z" fill="#33291B"/>
+    <!-- folded wing (carved in parchment) -->
+    <path d="M62,84 C90,94 108,106 106,128" fill="none" stroke="#EEE2C6" stroke-width="2.6"/>
+    <!-- eye -->
+    <circle cx="146" cy="72" r="2.8" fill="#EEE2C6"/>
+  </g>
+
+  <!-- Wordmark -->
+  <text x="372" y="212" font-family="Georgia, 'Iowan Old Style', 'Palatino Linotype', 'Times New Roman', serif"
+        font-size="106" letter-spacing="1" fill="#33291B">songbird</text>
+
+  <!-- Tagline -->
+  <text x="375" y="258" font-family="Georgia, 'Palatino Linotype', 'Times New Roman', serif"
+        font-size="27" font-style="italic" fill="#6B5B41">Read Scripture. Keep your notes in the margins.</text>
+
+  <!-- Lineage -->
+  <g>
+    <rect x="376" y="291" width="9" height="9" transform="rotate(45 380.5 295.5)" fill="#A6492C"/>
+    <text x="398" y="302" font-family="Georgia, 'Palatino Linotype', 'Times New Roman', serif"
+          font-size="19" fill="#8A775A">built on Concord</text>
+  </g>
+</svg>
