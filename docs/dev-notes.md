@@ -2,8 +2,61 @@
 
 A running log of per-slice decisions, gotchas, and how each slice was verified. Newest first.
 
-> Note: the Slice 6 (Geography) entry lives on PR #8; this branch was cut from `main` before
-> S6 merged, so S7 sits directly above S5 here. They reconcile when both PRs land.
+---
+
+## v1.0.0 — Documentation & first public release (songbird is shipped)
+
+- **Date:** 2026-06-06
+- **PR:** _Docs & v1.0.0 release_
+- **Branch:** `docs/readme-and-release`
+
+### What it establishes
+The first public release. songbird is feature-complete (S0–S8); this slice makes it something a
+**stranger can run**: the beginner-first README + banner, the one-command `docker compose up`
+(verified), three real seeded screenshots, the repo's public face, and the `v1.0.0` tag. No
+feature/behavior change — docs + packaging + release only.
+
+### The one-command setup — verified, no fix needed
+The combined `docker-compose.yml` replaces the Slice-0 single-service compose: it **pulls**
+`ghcr.io/kbennett2000/concord:v1.0.0` from GHCR and **builds songbird** from source on one private
+network, wiring `CONCORD_BASE_URL=http://concord:8000`, with songbird gated on
+`depends_on: condition: service_healthy`. Verified end to end from a clean state
+(`docker compose down -v` → `up`):
+- Concord image pulls; songbird builds (Vite SPA + uvicorn backend, multi-stage).
+- Ordering fires: Concord → **healthy**, *then* songbird starts (entrypoint runs
+  `alembic upgrade head`, seeds the unclaimed default user).
+- `GET /healthz` → 200 `concord.reachable: true` (13 translations) — songbird reaches Concord over
+  the compose network.
+- Register the owner (id=1, admin) → authed `GET /api/v1/read/KJV/JHN/3` → 36 verses. The whole
+  read path works through the auth gate + Concord. **The compose was correct as prepared.**
+
+### Screenshots — real, seeded, login-gated (Playwright)
+`scripts/screenshots/capture.mjs` (isolated, reproducible; `node_modules` gitignored) drives the
+running stack at :8077 through the **real login-gated UI**, seeds two tasteful notes via
+authenticated API calls (the browser's session cookie rides along), and captures three
+viewport-framed (1440×900 @2×) shots at the README's exact paths:
+- `reader.png` — John 3:16 highlighted, the note open in the drawer (TipTap-rendered, tagged).
+- `search.png` — "anxiety" → ranked semantic Scripture results with scores.
+- `places.png` — Genesis 2 places, the honesty model on display (Eden "Location unknown" beside
+  identified rivers with confidence).
+
+### Gotchas
+- **Playwright ships no Chromium build for this distro (ubuntu 26.04).** Fixed by launching the
+  system Google Chrome via `channel: "chrome"` (override with `PLAYWRIGHT_CHROME_CHANNEL`).
+- **Viewport, not full-page.** Full-page shots of a 36-verse chapter were ~5000px tall and read
+  badly in the README; viewport-framed shots are the clean hero look. The side panel is a fixed
+  right drawer, so it stays visible regardless of scroll.
+- **Prepared files arrived prefixed** (`songbird-README.md`, `songbird-docker-compose.yml`) and
+  were moved onto `README.md` / `docker-compose.yml`, replacing the bootstrap stub + Slice-0 compose.
+
+### How it was verified
+- `docker compose pull concord` + `docker compose up` from clean → both healthy, songbird at
+  :8077, `/healthz` reachable, register + authed John 3 read returns verses.
+- Three screenshots captured against real Concord data, committed at the README paths; README
+  renders banner + all three.
+- No app code touched → backend/frontend gates untouched and green.
+
+### songbird is shipped — S0–S8 complete.
 
 ---
 
