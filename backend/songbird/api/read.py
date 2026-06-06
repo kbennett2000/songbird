@@ -11,7 +11,13 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from songbird.api.deps import get_concord_client, get_db
-from songbird.api.schemas import AnnotationOut, ReadAnnotation, ReadChapter, ReadVerse
+from songbird.api.schemas import (
+    AnnotationOut,
+    ReadAnnotation,
+    ReadChapter,
+    ReadVerse,
+    ResolvedReference,
+)
 from songbird.concord.client import (
     ConcordClient,
     ConcordNotFoundError,
@@ -54,6 +60,32 @@ async def list_books(
     except ConcordUnreachableError as exc:
         raise_http(502, ErrorCode.CONCORD_UNREACHABLE, str(exc))
     return BooksResponse(books=books)
+
+
+@router.get("/resolve", response_model=ResolvedReference)
+async def resolve_reference(
+    ref: str,
+    concord: ConcordClient = Depends(get_concord_client),
+) -> ResolvedReference:
+    """Resolve a raw human reference to canonical coordinates via Concord (songbird does not
+    parse references itself). Unparseable / unknown reference → 404; Concord down → 502."""
+    try:
+        resolved = await concord.resolve_reference(ref)
+    except ConcordNotFoundError as exc:
+        raise_http(404, ErrorCode.NOT_FOUND, f"Couldn't find reference '{ref}': {exc}")
+    except ConcordUnreachableError as exc:
+        raise_http(502, ErrorCode.CONCORD_UNREACHABLE, str(exc))
+
+    if not resolved.verses:
+        raise_http(404, ErrorCode.NOT_FOUND, f"Couldn't find reference '{ref}'")
+
+    first = resolved.verses[0]
+    # Exactly one verse back ⇒ the reference named a specific verse (highlight it); more ⇒ a
+    # chapter (just load it).
+    verse = first.verse if len(resolved.verses) == 1 else None
+    return ResolvedReference(
+        reference=resolved.reference, book=first.book, chapter=first.chapter, verse=verse
+    )
 
 
 @router.get("/read/{translation}/{book}/{chapter}", response_model=ReadChapter)
