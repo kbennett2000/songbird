@@ -54,10 +54,14 @@ export const annotationSchema = z.object({
   color: z.string().nullable(),
   scope_type: z.string(),
   scope_translations: z.array(z.string()),
+  tags: z.array(z.string()),
   author_id: z.number(),
   created_at: z.string(),
   updated_at: z.string(),
 });
+
+export const annotationsListSchema = z.array(annotationSchema);
+export const tagsListSchema = z.array(z.string());
 
 // An overlaid annotation also carries whether it's in scope for the translation being read.
 export const readAnnotationSchema = annotationSchema.extend({

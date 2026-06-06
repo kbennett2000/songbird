@@ -7,9 +7,11 @@ import {
   type ScopeType,
   type Translation,
   annotationSchema,
+  annotationsListSchema,
   booksResponseSchema,
   readChapterSchema,
   resolvedReferenceSchema,
+  tagsListSchema,
   translationsResponseSchema,
 } from "@/schemas";
 
@@ -47,6 +49,7 @@ export interface CreateAnnotationInput {
   note_markdown: string;
   scope_type: ScopeType;
   translations: string[];
+  tags: string[];
 }
 
 export async function createAnnotation(input: CreateAnnotationInput): Promise<Annotation> {
@@ -58,6 +61,7 @@ export interface UpdateAnnotationInput {
   note_markdown?: string;
   scope_type?: ScopeType;
   translations?: string[];
+  tags?: string[];
 }
 
 export async function updateAnnotation(
@@ -70,4 +74,20 @@ export async function updateAnnotation(
 
 export async function deleteAnnotation(id: number): Promise<void> {
   await apiRequest<void>("DELETE", `/annotations/${id}`);
+}
+
+/** All tags in songbird (for the editor's type-ahead). Concord-free. */
+export async function fetchTags(): Promise<string[]> {
+  const data = await apiRequest<unknown>("GET", "/tags");
+  return tagsListSchema.parse(data);
+}
+
+/** Browse annotations, optionally narrowed by tags (AND). Concord-free. */
+export async function browseAnnotations(
+  tags: string[],
+  match: "all" | "any" = "all",
+): Promise<Annotation[]> {
+  const qs = tags.length > 0 ? `?tags=${encodeURIComponent(tags.join(","))}&match=${match}` : "";
+  const data = await apiRequest<unknown>("GET", `/annotations${qs}`);
+  return annotationsListSchema.parse(data);
 }
