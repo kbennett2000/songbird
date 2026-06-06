@@ -1,37 +1,48 @@
 """Test fixtures.
 
-The fast suite never needs a live Concord: routes depend on `get_concord_client`, which we
-override with a `FakeConcordClient`. The app's lifespan (which builds the real client) is not
-run, so tests stay hermetic.
+The fast suite never needs a live Concord: routes depend on `get_concord_client`, overridden
+with a `FakeConcordClient`. They also depend on `get_db`, overridden to use an in-memory SQLite
+DB (shared via StaticPool) seeded with the default author. The app's lifespan is not run, so
+tests stay hermetic.
 """
 
 import os
 
 os.environ.setdefault("DATA_DIR", "/tmp/songbird-test-data")
 
-from collections.abc import Callable
+from collections.abc import AsyncIterator, Callable
 
 import httpx
 import pytest
+import pytest_asyncio
 from fastapi import FastAPI
-from songbird.api.deps import get_concord_client
-from songbird.concord.schemas import ConcordHealth, Translation
+from songbird.api.deps import get_concord_client, get_db
+from songbird.concord.schemas import Book, Chapter, ConcordHealth, Translation
+from songbird.db import models  # noqa: F401  (register models on Base.metadata)
+from songbird.db.base import Base
+from songbird.db.models import User
 from songbird.main import create_app
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.pool import StaticPool
 
 
 class FakeConcordClient:
-    """Duck-types ConcordClient for tests. Either returns canned data or raises `error`."""
+    """Duck-types ConcordClient for tests. Returns canned data or raises `error`."""
 
     def __init__(
         self,
         *,
         health: ConcordHealth | None = None,
         translations: list[Translation] | None = None,
+        chapter: Chapter | None = None,
+        books: list[Book] | None = None,
         error: Exception | None = None,
         base_url: str = "http://concord.test",
     ) -> None:
         self._health = health
         self._translations = translations or []
+        self._chapter = chapter
+        self._books = books or []
         self._error = error
         self.base_url = base_url
 
@@ -46,11 +57,46 @@ class FakeConcordClient:
             raise self._error
         return self._translations
 
+    async def list_books(self) -> list[Book]:
+        if self._error is not None:
+            raise self._error
+        return self._books
+
+    async def get_chapter(self, book: str, chapter: int, translation: str) -> Chapter:
+        if self._error is not None:
+            raise self._error
+        assert self._chapter is not None
+        return self._chapter
+
+
+@pytest_asyncio.fixture
+async def db_sessionmaker() -> AsyncIterator[async_sessionmaker[AsyncSession]]:
+    engine = create_async_engine(
+        "sqlite+aiosqlite://",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    sessionmaker = async_sessionmaker(engine, expire_on_commit=False)
+    async with sessionmaker() as session:  # seed the default author
+        session.add(User(id=1, name="default"))
+        await session.commit()
+    yield sessionmaker
+    await engine.dispose()
+
+
+@pytest_asyncio.fixture
+async def db_session(
+    db_sessionmaker: async_sessionmaker[AsyncSession],
+) -> AsyncIterator[AsyncSession]:
+    async with db_sessionmaker() as session:
+        yield session
+
 
 @pytest.fixture
 def app() -> FastAPI:
-    application = create_app()
-    return application
+    return create_app()
 
 
 @pytest.fixture
@@ -59,9 +105,17 @@ def make_concord() -> type[FakeConcordClient]:
 
 
 @pytest.fixture
-def client_for(app: FastAPI) -> Callable[[FakeConcordClient], httpx.AsyncClient]:
+def client_for(
+    app: FastAPI,
+    db_sessionmaker: async_sessionmaker[AsyncSession],
+) -> Callable[[FakeConcordClient], httpx.AsyncClient]:
     def _build(concord: FakeConcordClient) -> httpx.AsyncClient:
+        async def _get_db_override() -> AsyncIterator[AsyncSession]:
+            async with db_sessionmaker() as session:
+                yield session
+
         app.dependency_overrides[get_concord_client] = lambda: concord
+        app.dependency_overrides[get_db] = _get_db_override
         transport = httpx.ASGITransport(app=app)
         return httpx.AsyncClient(transport=transport, base_url="http://test")
 

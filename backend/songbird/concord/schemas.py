@@ -26,3 +26,29 @@ class ConcordHealth(BaseModel):
     cross_ref_count: int = 0
     book_count: int = 0
     place_count: int = 0
+
+
+class ChapterVerse(BaseModel):
+    book: str  # USFM code, e.g. "JHN" — the canonical coordinate
+    chapter: int
+    verse: int
+    reference: str
+    text: dict[str, str | None]  # {translation_id: text-or-null}, even for one translation
+
+
+class Chapter(BaseModel):
+    reference: str
+    translations: list[str]
+    verses: list[ChapterVerse]
+
+
+class Book(BaseModel):
+    id: str  # USFM code
+    name: str
+    testament: str
+    chapter_count: int | None = None
+    canonical_order: int
+
+
+class BooksResponse(BaseModel):
+    books: list[Book]

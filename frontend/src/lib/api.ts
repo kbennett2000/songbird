@@ -44,23 +44,38 @@ async function readError(response: Response): Promise<ApiError> {
  * Typed `fetch` wrapper for songbird's own API.
  *
  * - Prefixes paths with /api/v1.
+ * - Optional `body` is JSON-encoded (for POST/PATCH/PUT).
  * - Throws ApiError on non-2xx (status, code, message from the backend's `detail`).
  * - Network failures throw ApiError(0, "NETWORK_ERROR", ...).
+ * - 204 No Content resolves to undefined.
  * - Callers Zod-parse the returned JSON when they need runtime validation.
  */
-export async function apiRequest<TResponse>(method: Method, path: string): Promise<TResponse> {
+export async function apiRequest<TResponse>(
+  method: Method,
+  path: string,
+  body?: unknown,
+): Promise<TResponse> {
+  const init: RequestInit = {
+    method,
+    headers: { Accept: "application/json" },
+  };
+  if (body !== undefined) {
+    init.headers = { ...init.headers, "Content-Type": "application/json" };
+    init.body = JSON.stringify(body);
+  }
+
   let response: Response;
   try {
-    response = await fetch(`${API_PREFIX}${path}`, {
-      method,
-      headers: { Accept: "application/json" },
-    });
+    response = await fetch(`${API_PREFIX}${path}`, init);
   } catch (err) {
     throw new ApiError(0, "NETWORK_ERROR", (err as Error).message || "Network error");
   }
 
   if (!response.ok) {
     throw await readError(response);
+  }
+  if (response.status === 204) {
+    return undefined as TResponse;
   }
   return (await response.json()) as TResponse;
 }

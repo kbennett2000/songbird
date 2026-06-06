@@ -1,3 +1,19 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* TipTap / ProseMirror note editor */
+.ProseMirror {
+  min-height: 8rem;
+  outline: none;
+}
+.ProseMirror p {
+  margin: 0.25rem 0;
+}
+.ProseMirror a {
+  color: #2563eb;
+  text-decoration: underline;
+}
+.ProseMirror:focus {
+  outline: none;
+}
