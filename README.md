@@ -22,9 +22,9 @@ It’s **self-hosted**: it runs on your computer, your notes never leave it, and
 
 ![Searching Scripture by meaning](docs/screenshots/search.png)
 
-**Explore the passage.** See the places mentioned and the cross-references for what you’re reading — honest about what’s known and what isn’t.
+**See it on a map.** A passage’s places pinned on a Bible-world map — honest about the ones it can’t place.
 
-![The places and cross-references panel](docs/screenshots/places.png)
+![A passage’s places pinned on the Bible-world map](docs/screenshots/map-desktop.png)
 
 <br>
 
