@@ -6,6 +6,7 @@ import {
   type ReadChapter,
   type ResolvedReference,
   type ScopeType,
+  type SemanticResult,
   type Translation,
   annotationSchema,
   annotationsListSchema,
@@ -13,6 +14,7 @@ import {
   crossReferencesSchema,
   readChapterSchema,
   resolvedReferenceSchema,
+  semanticResultsSchema,
   tagsListSchema,
   translationsResponseSchema,
 } from "@/schemas";
@@ -106,5 +108,26 @@ export async function browseAnnotations(
 ): Promise<Annotation[]> {
   const qs = tags.length > 0 ? `?tags=${encodeURIComponent(tags.join(","))}&match=${match}` : "";
   const data = await apiRequest<unknown>("GET", `/annotations${qs}`);
+  return annotationsListSchema.parse(data);
+}
+
+/** Search Scripture by meaning — via Concord's semantic search (songbird runs no ML). */
+export async function semanticSearch(
+  q: string,
+  translation: string,
+  limit = 20,
+): Promise<SemanticResult[]> {
+  const t = translation ? `&translation=${encodeURIComponent(translation)}` : "";
+  const data = await apiRequest<unknown>(
+    "GET",
+    `/semantic-search?q=${encodeURIComponent(q)}&limit=${limit}${t}`,
+  );
+  return semanticResultsSchema.parse(data);
+}
+
+/** Keyword search over the user's notes (Concord-free). Semantic note search awaits a Concord
+ * embed endpoint; until then this is the honest stand-in. */
+export async function searchAnnotations(q: string): Promise<Annotation[]> {
+  const data = await apiRequest<unknown>("GET", `/annotations?q=${encodeURIComponent(q)}`);
   return annotationsListSchema.parse(data);
 }

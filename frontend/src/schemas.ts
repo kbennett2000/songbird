@@ -112,6 +112,18 @@ export type ReadChapter = z.infer<typeof readChapterSchema>;
 export type ResolvedReference = z.infer<typeof resolvedReferenceSchema>;
 export type CrossReference = z.infer<typeof crossReferenceSchema>;
 
+// A ranked Scripture result from Concord's semantic search.
+export const semanticResultSchema = z.object({
+  book: z.string(),
+  chapter: z.number(),
+  verse: z.number(),
+  reference: z.string(),
+  score: z.number(),
+  text: z.string().nullable(),
+});
+export const semanticResultsSchema = z.array(semanticResultSchema);
+export type SemanticResult = z.infer<typeof semanticResultSchema>;
+
 // Annotation scope (SPEC §2) for the editor's scope picker.
 export type ScopeType = "all" | "current" | "subset";
 export interface Scope {

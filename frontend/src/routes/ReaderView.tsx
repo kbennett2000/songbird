@@ -216,6 +216,9 @@ export function ReaderView(): JSX.Element {
             <Link to="/browse" className="text-sm text-blue-700 hover:underline">
               Browse notes
             </Link>
+            <Link to="/search" className="text-sm text-blue-700 hover:underline">
+              Search
+            </Link>
             <div className="ml-auto flex items-center gap-2 text-sm">
               <label className="flex items-center gap-1">
                 <span className="text-gray-500">Book</span>
