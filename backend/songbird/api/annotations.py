@@ -10,15 +10,13 @@ from fastapi import APIRouter, Depends, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from songbird.api.deps import get_concord_client, get_db
+from songbird.api.deps import get_concord_client, get_current_user, get_db
 from songbird.api.schemas import AnnotationCreate, AnnotationOut, AnnotationUpdate
 from songbird.concord.client import ConcordClient, ConcordUnreachableError
 from songbird.core.errors import ErrorCode, raise_http
-from songbird.db.models import Annotation, AnnotationTranslation, Tag
+from songbird.db.models import Annotation, AnnotationTranslation, Tag, User
 
 router = APIRouter(prefix="/api/v1/annotations", tags=["annotations"])
-
-DEFAULT_AUTHOR_ID = 1
 
 
 def _normalize_tags(names: list[str]) -> list[str]:
@@ -80,9 +78,12 @@ async def _resolve_scope(
     return codes
 
 
-async def _get_or_404(db: AsyncSession, annotation_id: int) -> Annotation:
-    # select() (not db.get) so the selectin-loaded `translations` are populated.
-    result = await db.execute(select(Annotation).where(Annotation.id == annotation_id))
+async def _get_or_404(db: AsyncSession, annotation_id: int, author_id: int) -> Annotation:
+    # select() (not db.get) so the selectin-loaded `translations` are populated. Scoped to the
+    # author: another user's annotation is a 404 (no existence leak).
+    result = await db.execute(
+        select(Annotation).where(Annotation.id == annotation_id, Annotation.author_id == author_id)
+    )
     annotation = result.scalar_one_or_none()
     if annotation is None:
         raise_http(404, ErrorCode.ANNOTATION_NOT_FOUND, f"No annotation {annotation_id}")
@@ -95,12 +96,13 @@ async def list_annotations(
     match: str = "all",
     q: str | None = None,
     db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
 ) -> list[AnnotationOut]:
-    """Browse / search annotations. Concord-free — annotations are songbird's own domain.
-    `tags` filters by tag (`match=all` default → all the given tags; `any` → any). `q` is a
-    case-insensitive keyword search over the note text (the honest stand-in for semantic note
-    search, which awaits a Concord embed-arbitrary-text endpoint). Filters compose."""
-    stmt = select(Annotation)
+    """Browse / search the current user's annotations. Concord-free — annotations are
+    songbird's own domain. `tags` filters by tag (`match=all` default → all the given tags;
+    `any` → any). `q` is a case-insensitive keyword search over the note text (the honest
+    stand-in for semantic note search, which awaits a Concord embed endpoint). Filters compose."""
+    stmt = select(Annotation).where(Annotation.author_id == user.id)
     names = _normalize_tags(tags.split(",")) if tags else []
     if names:
         stmt = stmt.join(Annotation.tags).where(Tag.name.in_(names)).group_by(Annotation.id)
@@ -120,6 +122,7 @@ async def create_annotation(
     body: AnnotationCreate,
     db: AsyncSession = Depends(get_db),
     concord: ConcordClient = Depends(get_concord_client),
+    user: User = Depends(get_current_user),
 ) -> AnnotationOut:
     codes = await _resolve_scope(body.scope_type, body.translations, concord)
     annotation = Annotation(
@@ -131,7 +134,7 @@ async def create_annotation(
         note_markdown=body.note_markdown,
         color=body.color,
         scope_type=body.scope_type,
-        author_id=DEFAULT_AUTHOR_ID,
+        author_id=user.id,
         translations=[AnnotationTranslation(translation_code=c) for c in codes],
         tags=await _resolve_tags(db, body.tags),
     )
@@ -144,8 +147,9 @@ async def create_annotation(
 async def get_annotation(
     annotation_id: int,
     db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
 ) -> AnnotationOut:
-    annotation = await _get_or_404(db, annotation_id)
+    annotation = await _get_or_404(db, annotation_id, user.id)
     return AnnotationOut.model_validate(annotation)
 
 
@@ -155,8 +159,9 @@ async def update_annotation(
     body: AnnotationUpdate,
     db: AsyncSession = Depends(get_db),
     concord: ConcordClient = Depends(get_concord_client),
+    user: User = Depends(get_current_user),
 ) -> AnnotationOut:
-    annotation = await _get_or_404(db, annotation_id)
+    annotation = await _get_or_404(db, annotation_id, user.id)
     if body.note_markdown is not None:
         annotation.note_markdown = body.note_markdown
     if body.color is not None:
@@ -179,7 +184,8 @@ async def update_annotation(
 async def delete_annotation(
     annotation_id: int,
     db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
 ) -> None:
-    annotation = await _get_or_404(db, annotation_id)
+    annotation = await _get_or_404(db, annotation_id, user.id)
     await db.delete(annotation)
     await db.commit()
