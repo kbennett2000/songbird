@@ -4,6 +4,57 @@ A running log of per-slice decisions, gotchas, and how each slice was verified. 
 
 ---
 
+## Slice 4 — Tags + browse
+
+- **Date:** 2026-06-05
+- **PR:** [#6 — Slice 4: Tags + browse](https://github.com/kbennett2000/songbird/pull/6)
+- **Branch:** `slice/4-tags-browse`
+
+### What it establishes
+Free-form tags on annotations + a browse view to find notes by tag. The first slice whose core
+makes **no Concord call** — tags are an annotation concern, so they live entirely in songbird.
+
+### Open-question resolutions
+1. **Browse list = reference + note preview + tags, no per-item Concord call.** The backend
+   browse path is Concord-free (returns the canonical anchor + note + tags). The frontend
+   prettifies "JHN 3:16" → "John 3:16" via the **books list it already fetches once** (shared,
+   not per-item; falls back to USFM).
+2. **Multi-tag filter = AND** (narrowing). `match=any` exists in the API for later.
+3. **Tag input = chips + type-ahead** (autocomplete from existing tags, add on Enter/comma,
+   create-on-the-fly, remove via ×).
+4. **Browse = `/browse`** route + a "Browse notes" header link; jump-to-verse via
+   `?book=&chapter=&verse=` search params that `ReaderView` seeds its initial state from.
+
+### Gotchas / decisions
+- **The tag/browse core is Concord-free, and it's tested.** `concord_free_test.py` injects a
+  fake `ConcordClient` that raises on any call; browse, tags-list, and creating an `all`-scope
+  tagged note all still succeed → no Concord call possible. (Create only touches Concord for
+  *scope* validation, and `all`-scope skips even that.) Verified live too: with Concord down,
+  tags/browse/create-all-scope return 200/201 while read + current-scope-create return 502.
+- **Tag normalization:** names are trimmed + lowercased + de-duplicated on the way in; unique by
+  name; tags are **reused** across annotations (get-or-create), so `GET /api/v1/tags` has one row
+  per distinct tag.
+- **`AnnotationOut.tags` validator:** a `@field_validator("tags", mode="before")` maps ORM `Tag`
+  objects → names (so `model_validate(annotation)` works), and passes plain strings through (so
+  `ReadAnnotation(**dump)` round-trips). Same eager pattern as `translations` (selectin +
+  `expire_on_commit=False`).
+- **Browse ordering** is `(book_usfm, start_chapter, start_verse, id)` — deterministic and
+  Concord-free, but *alphabetical by USFM*, not canonical book order (canonical sort would need
+  Concord's `canonical_order`; a later nicety).
+- **Router in tests:** `ReaderView` now uses `useSearchParams`/`Link`, so its Vitest renders are
+  wrapped in `MemoryRouter`; the jump-to-verse test asserts navigation via a probe route.
+- **Pyright:** association `Table` columns need an explicit type (`Column("…", Integer,
+  ForeignKey(...))`) or strict mode flags `Column[Unknown]`.
+
+### How it was verified
+- Backend: Ruff + Pyright-strict clean; `pytest` 49 passed (3 `concord` live deselected). New:
+  `tags_crud_test.py`, `browse_test.py`, `concord_free_test.py`.
+- Frontend: ESLint + `tsc` clean; Vitest 25 passed. New: `TagInput.test.tsx`, `BrowseView.test.tsx`.
+- Live: tag normalize/dedupe, sorted tags-list, browse AND-filter → [16], and the Concord-down
+  proof above.
+
+---
+
 ## Slice 3 — Navigation
 
 - **Date:** 2026-06-05
