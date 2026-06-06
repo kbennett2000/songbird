@@ -104,6 +104,31 @@ export const crossReferenceSchema = z.object({
 });
 export const crossReferencesSchema = z.array(crossReferenceSchema);
 
+// A translator's note (from Concord) — NET's tn/sn/tc/map footnotes. Translation-specific:
+// `char_offset` is a point anchor into THAT translation's verse text where the marker attaches.
+// The note's cross-refs are canonical → tapping one reuses the reader's coordinate navigation.
+export const noteCrossReferenceSchema = z.object({
+  to_book: z.string(), // USFM code — canonical
+  to_chapter: z.number(),
+  to_verse_start: z.number(),
+  to_verse_end: z.number().nullable(),
+  reference: z.string(), // human-readable, e.g. "Romans 5:8"
+});
+
+export const translatorNoteSchema = z.object({
+  book: z.string(), // USFM code — the note's canonical anchor
+  chapter: z.number(),
+  verse: z.number(),
+  reference: z.string(),
+  type: z.string().nullable(), // tn | sn | tc | map | null (plain footnote)
+  text: z.string(),
+  char_offset: z.number(),
+  marker: z.string().nullable(),
+  ordinal: z.number(),
+  cross_references: z.array(noteCrossReferenceSchema),
+});
+export const translatorNotesSchema = z.array(translatorNoteSchema);
+
 // A place (from Concord). Honesty model: lat/lon/confidence are null for unknown/symbolic.
 export const placeSchema = z.object({
   id: z.string(),
@@ -133,6 +158,8 @@ export type ReadVerse = z.infer<typeof readVerseSchema>;
 export type ReadChapter = z.infer<typeof readChapterSchema>;
 export type ResolvedReference = z.infer<typeof resolvedReferenceSchema>;
 export type CrossReference = z.infer<typeof crossReferenceSchema>;
+export type NoteCrossReference = z.infer<typeof noteCrossReferenceSchema>;
+export type TranslatorNote = z.infer<typeof translatorNoteSchema>;
 export type Place = z.infer<typeof placeSchema>;
 export type PlaceVerse = z.infer<typeof placeVerseSchema>;
 

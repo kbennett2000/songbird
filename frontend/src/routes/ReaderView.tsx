@@ -7,9 +7,11 @@ import { Geography } from "@/components/Geography";
 import { MapView } from "@/components/MapView";
 import { Modal } from "@/components/Modal";
 import { NoteEditor } from "@/components/NoteEditor";
+import { NotePopover } from "@/components/NotePopover";
 import { ScopePicker } from "@/components/ScopePicker";
 import { SidePanel } from "@/components/SidePanel";
 import { TagInput } from "@/components/TagInput";
+import { VerseText } from "@/components/VerseText";
 import { useAuth } from "@/hooks/useAuth";
 import { ApiError } from "@/lib/api";
 import { nextChapter, prevChapter } from "@/lib/navigation";
@@ -18,13 +20,14 @@ import {
   deleteAnnotation,
   fetchBooks,
   fetchChapter,
+  fetchNotes,
   fetchPlaces,
   fetchTags,
   fetchTranslations,
   resolveReference,
   updateAnnotation,
 } from "@/lib/reader";
-import type { ReadAnnotation, ReadVerse, Scope } from "@/schemas";
+import type { ReadAnnotation, ReadVerse, Scope, TranslatorNote } from "@/schemas";
 
 const DEFAULT_TRANSLATION = "KJV";
 
@@ -56,6 +59,10 @@ export function ReaderView(): JSX.Element {
   const [xref, setXref] = useState<XrefView | null>(null);
   const [geo, setGeo] = useState(false);
   const [map, setMap] = useState(false);
+  // The translator's note whose popover is open, with the marker it's anchored to.
+  const [openNote, setOpenNote] = useState<{ note: TranslatorNote; anchor: HTMLElement } | null>(
+    null,
+  );
   const [refInput, setRefInput] = useState("");
   const [resolveError, setResolveError] = useState<string | null>(null);
   const [highlightVerse, setHighlightVerse] = useState<number | null>(() => {
@@ -81,6 +88,23 @@ export function ReaderView(): JSX.Element {
   const hasMappable = (placesQuery.data ?? []).some(
     (p) => p.latitude !== null && p.longitude !== null,
   );
+  // Translator's notes for the chapter, in the CURRENT translation (NET's tn/sn/tc/map). The key
+  // includes `translation`, so switching away from NET refetches → empty → markers clear, while
+  // the canonical annotations (from chapterQuery) are untouched. Notes overlay verse text only;
+  // an unreachable Concord surfaces a small notice without blocking the already-loaded chapter.
+  const notesQuery = useQuery({
+    queryKey: ["notes", translation, chapterBook, chapter],
+    queryFn: () => fetchNotes(translation, chapterBook, chapter),
+  });
+  const notesByVerse = useMemo(() => {
+    const map = new Map<number, TranslatorNote[]>();
+    for (const note of notesQuery.data ?? []) {
+      const list = map.get(note.verse);
+      if (list) list.push(note);
+      else map.set(note.verse, [note]);
+    }
+    return map;
+  }, [notesQuery.data]);
 
   const translations = useMemo(() => translationsQuery.data ?? [], [translationsQuery.data]);
   const books = useMemo(() => booksQuery.data ?? [], [booksQuery.data]);
@@ -102,6 +126,7 @@ export function ReaderView(): JSX.Element {
     setXref(null);
     setGeo(false);
     setMap(false);
+    setOpenNote(null);
   };
 
   const next = nextChapter(books, book, chapter);
@@ -309,7 +334,12 @@ export function ReaderView(): JSX.Element {
                 <select
                   className="rounded border border-gray-300 px-2 py-1"
                   value={translation}
-                  onChange={(e) => setTranslation(e.target.value)}
+                  onChange={(e) => {
+                    // Notes are translation-specific; close any open note popover whose marker is
+                    // about to be refetched away (the canonical annotation overlay is untouched).
+                    setOpenNote(null);
+                    setTranslation(e.target.value);
+                  }}
                   aria-label="Translation"
                 >
                   {(translations.length > 0
@@ -396,6 +426,11 @@ export function ReaderView(): JSX.Element {
                 🌐 Map
               </button>
             </div>
+            {notesQuery.isError && (
+              <p className="mb-3 font-sans text-sm text-red-600">
+                Translator&rsquo;s notes unavailable (is Concord reachable?).
+              </p>
+            )}
             {chapterQuery.data.verses.map((v) => {
               const inScope = v.annotations.filter((a) => a.in_scope);
               const outScope = v.annotations.filter((a) => !a.in_scope);
@@ -415,7 +450,11 @@ export function ReaderView(): JSX.Element {
                   >
                     {v.verse}
                   </button>
-                  <span>{v.text}</span>
+                  <VerseText
+                    text={v.text ?? ""}
+                    notes={notesByVerse.get(v.verse) ?? []}
+                    onOpenNote={(note, anchor) => setOpenNote({ note, anchor })}
+                  />
                   {inScope.length > 0 && (
                     <button
                       type="button"
@@ -521,6 +560,15 @@ export function ReaderView(): JSX.Element {
       >
         <MapView book={chapterBook} chapter={chapter} onJump={(b, c, v) => navigate(b, c, v)} />
       </Modal>
+
+      {openNote && (
+        <NotePopover
+          note={openNote.note}
+          anchor={openNote.anchor}
+          onClose={() => setOpenNote(null)}
+          onJump={(b, c, v) => navigate(b, c, v)}
+        />
+      )}
     </div>
   );
 }
