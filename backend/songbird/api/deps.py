@@ -3,6 +3,9 @@
 from fastapi import Request
 
 from songbird.concord.client import ConcordClient
+from songbird.db.session import get_db
+
+__all__ = ["get_concord_client", "get_db"]
 
 
 def get_concord_client(request: Request) -> ConcordClient:

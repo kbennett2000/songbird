@@ -8,6 +8,8 @@ from fastapi import HTTPException
 
 class ErrorCode(StrEnum):
     CONCORD_UNREACHABLE = "CONCORD_UNREACHABLE"
+    NOT_FOUND = "NOT_FOUND"
+    ANNOTATION_NOT_FOUND = "ANNOTATION_NOT_FOUND"
 
 
 def raise_http(status: int, code: ErrorCode, message: str | None = None) -> NoReturn:
