@@ -162,3 +162,66 @@ async def test_resolve_reference_transport_error_is_unreachable() -> None:
     with pytest.raises(ConcordUnreachableError):
         await client.resolve_reference("John 3")
     await client.aclose()
+
+
+def _cross_refs_json() -> dict[str, object]:
+    return {
+        "reference": "John 3:16",
+        "total": 1,
+        "cross_references": [
+            {
+                "from": {"book": "JHN", "chapter": 3, "verse": 16, "reference": "John 3:16"},
+                "to": {
+                    "book": "ROM",
+                    "chapter": 5,
+                    "verse_start": 8,
+                    "verse_end": None,
+                    "reference": "Romans 5:8",
+                },
+                "votes": 968,
+                "text": "But God commendeth his love...",
+            }
+        ],
+    }
+
+
+async def test_get_cross_references_parses() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=_cross_refs_json())
+
+    client = ConcordClient("http://concord.test", transport=httpx.MockTransport(handler))
+    result = await client.get_cross_references("JHN", 3, 16, "KJV")
+    await client.aclose()
+    assert result.cross_references[0].to.book == "ROM"
+    assert result.cross_references[0].to.verse_start == 8
+    assert result.cross_references[0].votes == 968
+
+
+async def test_get_cross_references_400_is_not_found() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(400, json={"error": {"code": "unparseable_reference"}})
+
+    client = ConcordClient("http://concord.test", transport=httpx.MockTransport(handler))
+    with pytest.raises(ConcordNotFoundError):
+        await client.get_cross_references("XXX", 3, 16)
+    await client.aclose()
+
+
+async def test_get_cross_references_404_is_not_found() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(404, json={"error": {"code": "no_verses_found"}})
+
+    client = ConcordClient("http://concord.test", transport=httpx.MockTransport(handler))
+    with pytest.raises(ConcordNotFoundError):
+        await client.get_cross_references("JHN", 3, 999)
+    await client.aclose()
+
+
+async def test_get_cross_references_5xx_is_unreachable() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(503)
+
+    client = ConcordClient("http://concord.test", transport=httpx.MockTransport(handler))
+    with pytest.raises(ConcordUnreachableError):
+        await client.get_cross_references("JHN", 3, 16)
+    await client.aclose()

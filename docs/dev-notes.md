@@ -4,6 +4,47 @@ A running log of per-slice decisions, gotchas, and how each slice was verified. 
 
 ---
 
+## Slice 5 — Cross-references
+
+- **Date:** 2026-06-05
+- **PR:** [#7 — Slice 5: Cross-references](https://github.com/kbennett2000/songbird/pull/7)
+- **Branch:** `slice/5-cross-references`
+
+### What it establishes
+Cross-references (Concord's TSK data) surfaced on demand in the reader, with click-to-jump. A
+thin Concord-call slice — the inverse of S4: cross-refs are Scripture-domain, so Concord owns
+them and songbird stores none.
+
+### Open-question resolutions
+1. **Surface = on-demand, side panel** — a subtle per-verse affordance (hover-revealed, so the
+   reading column stays clean) opens the panel, which now multiplexes note-editor vs cross-refs.
+2. **Fetch = lazily per verse** (Concord's endpoint is per-verse).
+3. **Snippet = included** — `include_text=true` returns the target snippets in the *same* call.
+4. **Votes = surfaced** (Concord orders by votes desc; shown subtly).
+
+### Gotchas / decisions
+- **`include_text=true` gives free snippets** — the target verse text comes back in the one
+  cross-references call (no N+1); pass the reader's current `translation`.
+- **400 AND 404 → one songbird 404** — same as `resolve` (S3). Concord returns 400 for an
+  unparseable ref and 404 for unknown/out-of-range; both are "bad reference." Only connection/5xx
+  → 502. A valid verse with no cross-refs is `200 []`.
+- **Jump skips `resolve`** — cross-ref targets are already canonical USFM coords, so the click
+  calls `navigate(book, chapter, verse_start)` directly (no re-parse). This is *why* the slice is
+  thin: the foundation hands back coordinates the reader already speaks.
+- **The side panel now multiplexes** — `editing` (note editor) XOR `xref` (cross-references);
+  opening one closes the other, and `navigate()` closes both.
+- **Concord's `from` key** is a Python keyword — not modelled (Pydantic ignores it); songbird
+  only needs `to` + `votes` + `text`.
+
+### How it was verified
+- Backend: Ruff + Pyright-strict clean; `pytest` 57 passed (3 `concord` live deselected). New:
+  `cross_references_test.py` + extended `concord_client_test.py`.
+- Frontend: ESLint + `tsc` clean; Vitest 26 passed.
+- Live: `JHN/3/16` → 20 refs votes-desc (Romans 5:8 @968) with snippets + ranges; bad verse →
+  404; Concord-down → 502 (clean single-server check).
+
+---
+
 ## Slice 4 — Tags + browse
 
 - **Date:** 2026-06-05

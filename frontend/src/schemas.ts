@@ -92,12 +92,25 @@ export const resolvedReferenceSchema = z.object({
   verse: z.number().nullable(),
 });
 
+// A cross-reference target (from Concord). Coords are canonical → jump reuses navigation.
+export const crossReferenceSchema = z.object({
+  book: z.string(),
+  chapter: z.number(),
+  verse_start: z.number(),
+  verse_end: z.number().nullable(),
+  reference: z.string(),
+  votes: z.number().nullable(),
+  text: z.string().nullable(),
+});
+export const crossReferencesSchema = z.array(crossReferenceSchema);
+
 export type Book = z.infer<typeof bookSchema>;
 export type Annotation = z.infer<typeof annotationSchema>;
 export type ReadAnnotation = z.infer<typeof readAnnotationSchema>;
 export type ReadVerse = z.infer<typeof readVerseSchema>;
 export type ReadChapter = z.infer<typeof readChapterSchema>;
 export type ResolvedReference = z.infer<typeof resolvedReferenceSchema>;
+export type CrossReference = z.infer<typeof crossReferenceSchema>;
 
 // Annotation scope (SPEC §2) for the editor's scope picker.
 export type ScopeType = "all" | "current" | "subset";

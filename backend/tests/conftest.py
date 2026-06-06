@@ -17,7 +17,13 @@ import pytest
 import pytest_asyncio
 from fastapi import FastAPI
 from songbird.api.deps import get_concord_client, get_db
-from songbird.concord.schemas import Book, Chapter, ConcordHealth, Translation
+from songbird.concord.schemas import (
+    Book,
+    Chapter,
+    ConcordHealth,
+    CrossRefResponse,
+    Translation,
+)
 from songbird.db import models  # noqa: F401  (register models on Base.metadata)
 from songbird.db.base import Base
 from songbird.db.models import User
@@ -36,6 +42,7 @@ class FakeConcordClient:
         translations: list[Translation] | None = None,
         chapter: Chapter | None = None,
         books: list[Book] | None = None,
+        cross_refs: CrossRefResponse | None = None,
         error: Exception | None = None,
         base_url: str = "http://concord.test",
     ) -> None:
@@ -43,6 +50,7 @@ class FakeConcordClient:
         self._translations = translations or []
         self._chapter = chapter
         self._books = books or []
+        self._cross_refs = cross_refs
         self._error = error
         self.base_url = base_url
 
@@ -73,6 +81,17 @@ class FakeConcordClient:
             raise self._error
         assert self._chapter is not None
         return self._chapter
+
+    async def get_cross_references(
+        self, book: str, chapter: int, verse: int, translation: str | None = None
+    ) -> CrossRefResponse:
+        if self._error is not None:
+            raise self._error
+        return (
+            self._cross_refs
+            if self._cross_refs is not None
+            else CrossRefResponse(cross_references=[])
+        )
 
 
 @pytest_asyncio.fixture

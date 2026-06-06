@@ -252,6 +252,37 @@ describe("ReaderView", () => {
     expect(screen.getByRole("button", { name: "View note on verse 16" })).toBeInTheDocument();
   });
 
+  it("shows cross-references for a verse and jumps to one", async () => {
+    server.use(
+      http.get("/api/v1/cross-references/:book/:chapter/:verse", () =>
+        HttpResponse.json([
+          {
+            book: "ROM",
+            chapter: 5,
+            verse_start: 8,
+            verse_end: null,
+            reference: "Romans 5:8",
+            votes: 968,
+            text: "But God commendeth his love...",
+          },
+        ]),
+      ),
+    );
+
+    const user = userEvent.setup();
+    renderReader();
+
+    await screen.findByText(/JHN 3:16/);
+    await user.click(screen.getByRole("button", { name: "Cross-references for verse 16" }));
+    // The cross-ref renders (sourced from Concord) with its snippet.
+    expect(await screen.findByText("Romans 5:8")).toBeInTheDocument();
+    expect(screen.getByText(/But God commendeth/)).toBeInTheDocument();
+
+    // Clicking it jumps the reader to that verse (reusing navigation).
+    await user.click(screen.getByText("Romans 5:8"));
+    expect(await screen.findByText(/ROM 5:16/)).toBeInTheDocument();
+  });
+
   it("includes tags when saving an annotation", async () => {
     let captured: Record<string, unknown> | null = null;
     server.use(
