@@ -22,6 +22,7 @@ from songbird.concord.schemas import (
     Chapter,
     ConcordHealth,
     CrossRefResponse,
+    SemanticSearchResponse,
     Translation,
 )
 from songbird.db import models  # noqa: F401  (register models on Base.metadata)
@@ -43,6 +44,7 @@ class FakeConcordClient:
         chapter: Chapter | None = None,
         books: list[Book] | None = None,
         cross_refs: CrossRefResponse | None = None,
+        semantic: SemanticSearchResponse | None = None,
         error: Exception | None = None,
         base_url: str = "http://concord.test",
     ) -> None:
@@ -51,6 +53,7 @@ class FakeConcordClient:
         self._chapter = chapter
         self._books = books or []
         self._cross_refs = cross_refs
+        self._semantic = semantic
         self._error = error
         self.base_url = base_url
 
@@ -92,6 +95,13 @@ class FakeConcordClient:
             if self._cross_refs is not None
             else CrossRefResponse(cross_references=[])
         )
+
+    async def semantic_search(
+        self, q: str, translation: str | None = None, limit: int = 20
+    ) -> SemanticSearchResponse:
+        if self._error is not None:
+            raise self._error
+        return self._semantic if self._semantic is not None else SemanticSearchResponse(results=[])
 
 
 @pytest_asyncio.fixture
