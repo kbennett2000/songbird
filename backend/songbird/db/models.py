@@ -7,10 +7,35 @@ id. No Bible text is stored here (invariant 5); notes are Markdown (invariant 6)
 
 from datetime import UTC, datetime
 
-from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint
+from sqlalchemy import (
+    Column,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Table,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from songbird.db.base import Base
+
+# Many-to-many join between annotations and tags (tags are songbird-owned; Concord never hears
+# about them).
+annotation_tags = Table(
+    "annotation_tags",
+    Base.metadata,
+    Column(
+        "annotation_id",
+        Integer,
+        ForeignKey("annotations.id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+    Column("tag_id", Integer, ForeignKey("tags.id", ondelete="CASCADE"), primary_key=True),
+    Index("ix_annotation_tags_tag", "tag_id"),
+)
 
 
 def _utcnow() -> datetime:
@@ -72,10 +97,22 @@ class Annotation(Base):
         lazy="selectin",
     )
 
+    tags: Mapped[list["Tag"]] = relationship(secondary=annotation_tags, lazy="selectin")
+
     @property
     def scope_translations(self) -> list[str]:
         """The concrete translation codes this annotation is scoped to ([] for 'all')."""
         return [t.translation_code for t in self.translations]
+
+
+class Tag(Base):
+    """A free-form tag (songbird-owned). Names are normalized (trimmed + lowercased) and
+    unique; many-to-many with annotations via `annotation_tags`."""
+
+    __tablename__ = "tags"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String(64), nullable=False, unique=True, index=True)
 
 
 class AnnotationTranslation(Base):
