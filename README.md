@@ -6,7 +6,7 @@
 
 ---
 
-songbird lets you **read the Bible, highlight a verse, and write a note behind it** — like marking up a study Bible, but yours, private, and on your own machine. Switch between translations and your notes stay put. Tag them, search them, and explore the places and cross-references behind each passage.
+songbird lets you **read the Bible, highlight a verse, and write a note behind it** — like marking up a study Bible, but yours, private, and on your own machine. Switch between translations and your notes stay put. Tag them, search them, see a passage’s places on a map, and follow the cross-references behind each verse.
 
 It’s **self-hosted**: it runs on your computer, your notes never leave it, and it works without an internet connection once it’s set up.
 
@@ -104,13 +104,13 @@ In the terminal, press **Ctrl + C**, then run `docker compose down`. Your notes 
 - **Write a note** — click any verse number; a notepad opens beside it. Notes can have **bold**, *italics*, links, and lists.
 - **Switch translations** — pick a different translation up top; your notes stay anchored to the right verses. A note you wrote in one translation is gently marked when you read another.
 - **Tag and find** — add tags to a note, then use the **browse** view to find notes by tag, or **search** to find Scripture by meaning.
-- **Go deeper** — hover a verse to see its **cross-references**, or open **places** to see where things happened on the map of the text.
+- **Go deeper** — hover a verse for its **cross-references**, or tap the **globe** to see a passage’s places on a map, when their locations are known.
 
 <br>
 
 ## How it works (for the curious)
 
-songbird is the app you use. The Scripture itself — the text, the search, the places — comes from **[Concord](https://github.com/kbennett2000/concord)**, a companion Scripture engine that runs alongside songbird. The single command above starts both for you. songbird keeps only *your* notes; Concord provides the Bible. If you’re technically inclined, [the design notes are here](docs/v1/SPEC.md).
+songbird is the app you use. The Scripture itself — the text, the search, the places — comes from **[Concord](https://github.com/kbennett2000/concord)**, a companion Scripture engine that runs alongside songbird. The single command above starts both for you. songbird keeps only *your* notes; Concord provides the Bible. If you’re technically inclined, [the design notes are here](docs/v1/SPEC.md), and the **map view** (added in v1.1) is described [here](docs/v1.1/MAP-SPEC.md).
 
 <br>
 
