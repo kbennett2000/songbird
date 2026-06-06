@@ -4,6 +4,57 @@ A running log of per-slice decisions, gotchas, and how each slice was verified. 
 
 ---
 
+## Slice 6 — Geography
+
+- **Date:** 2026-06-05
+- **PR:** [#8 — Slice 6: Geography](https://github.com/kbennett2000/songbird/pull/8)
+- **Branch:** `slice/6-geography`
+
+### What it establishes
+The places named in a passage, surfaced on demand with Concord's honesty model carried through:
+identified places show coordinates; unknown/symbolic show as honestly unlocated (no fabricated
+pin); disputed shown contested. Click a place → its verses → jump. Same thin shape as cross-refs.
+
+### Open-question resolutions
+1. **List-first, NO map.** A tile map would need an outbound third-party tile call (against
+   songbird's offline-except-Concord posture) or a heavy bundled-tile stack. So this ships the
+   honest list (status + coordinates); a map is a clean follow-up only if tiles can be sourced
+   without an outbound call.
+2. **Surface = side panel, on-demand** — the panel now triple-multiplexes note-editor ↔
+   cross-refs ↔ geography.
+3. **Per chapter** — `/v1/verses/{book chapter}/places`.
+4. **Unknown-place visual:** name + status badge (identified=green, disputed=amber,
+   unknown/symbolic/multiple=gray) + confidence, and either `lat, lon` (disputed adds
+   "contested") or a muted *"Location unknown"* — never a fabricated coordinate.
+
+### Gotchas / decisions
+- **Honesty nulls carried through verbatim** — `latitude`/`longitude`/`confidence` stay null for
+  unknown/symbolic; backend + frontend assert this (not defaulted to 0/""). The crux of the slice.
+- **Place id is a string** (`a15257a`), used directly in the `/places/{id}/verses` path.
+- **Endpoint refs need a NAME, not USFM, for `/v1/verses/{ref}/places`** — see below; songbird
+  builds `"{book_usfm} {chapter}"`, which is what Concord's resolver expects (USFM book codes
+  work via the alias resolver, same as elsewhere).
+- The side panel now renders one of three modes; `navigate()` + each open-helper close the others.
+
+### ⚠️ Live verification gap (running Concord is stale)
+The geography endpoints are **committed and shipped in Concord** (PR #22, `/v1/places*`), but the
+**running Docker image predates them** — every places route returns FastAPI's bare
+`{"detail":"Not Found"}` (an unregistered route, not Concord's `{"error":{…}}` envelope), and
+`/openapi.json` lists no `place` paths. So this slice was built against Concord's **real source
+contract** (read directly) with **airtight mocked tests**, but live geography verification needed
+a **rebuilt geography-capable Concord** (`docker compose build` in the concord repo). [Update
+this entry with the live result once verified.]
+
+### How it was verified
+- Backend: Ruff + Pyright-strict clean; `pytest` 68 passed (3 `concord` live deselected). New:
+  `geography_test.py` (honesty fields carried through; empty/404/502; place-verses) + extended
+  `concord_client_test.py` (null coords preserved on parse).
+- Frontend: ESLint + `tsc` clean; Vitest 27 passed — places render with status, an unknown place
+  shows *"Location unknown"*, an identified place shows coords, and jump-to-place-verse navigates.
+- Live: pending a geography-capable Concord (see the gap above).
+
+---
+
 ## Slice 5 — Cross-references
 
 - **Date:** 2026-06-05

@@ -3,6 +3,7 @@ import { type FormEvent, useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 
 import { CrossReferences } from "@/components/CrossReferences";
+import { Geography } from "@/components/Geography";
 import { NoteEditor } from "@/components/NoteEditor";
 import { ScopePicker } from "@/components/ScopePicker";
 import { SidePanel } from "@/components/SidePanel";
@@ -48,6 +49,7 @@ export function ReaderView(): JSX.Element {
   const [chapter, setChapter] = useState(() => Number(searchParams.get("chapter") ?? 3));
   const [editing, setEditing] = useState<Editing | null>(null);
   const [xref, setXref] = useState<XrefView | null>(null);
+  const [geo, setGeo] = useState(false);
   const [refInput, setRefInput] = useState("");
   const [resolveError, setResolveError] = useState<string | null>(null);
   const [highlightVerse, setHighlightVerse] = useState<number | null>(() => {
@@ -81,6 +83,7 @@ export function ReaderView(): JSX.Element {
     setResolveError(null);
     setEditing(null);
     setXref(null);
+    setGeo(false);
   };
 
   const next = nextChapter(books, book, chapter);
@@ -165,6 +168,7 @@ export function ReaderView(): JSX.Element {
 
   const openNew = (verse: ReadVerse) => {
     setXref(null);
+    setGeo(false);
     setEditing({
       verse,
       annotationId: null,
@@ -177,6 +181,7 @@ export function ReaderView(): JSX.Element {
 
   const openExisting = (verse: ReadVerse, annotation: ReadAnnotation) => {
     setXref(null);
+    setGeo(false);
     setEditing({
       verse,
       annotationId: annotation.id,
@@ -194,6 +199,7 @@ export function ReaderView(): JSX.Element {
 
   const openXref = (verse: ReadVerse) => {
     setEditing(null);
+    setGeo(false);
     setXref({
       book: chapterQuery.data?.book ?? book,
       chapter,
@@ -202,9 +208,16 @@ export function ReaderView(): JSX.Element {
     });
   };
 
+  const openGeo = () => {
+    setEditing(null);
+    setXref(null);
+    setGeo(true);
+  };
+
   const closePanel = () => {
     setEditing(null);
     setXref(null);
+    setGeo(false);
   };
 
   return (
@@ -319,7 +332,16 @@ export function ReaderView(): JSX.Element {
         )}
         {chapterQuery.data && (
           <article className="font-serif text-lg leading-8">
-            <h2 className="mb-4 font-sans text-xl font-semibold">{chapterQuery.data.reference}</h2>
+            <div className="mb-4 flex items-center gap-3">
+              <h2 className="font-sans text-xl font-semibold">{chapterQuery.data.reference}</h2>
+              <button
+                type="button"
+                className="rounded border border-gray-300 px-2 py-0.5 font-sans text-xs text-gray-600 hover:bg-gray-100"
+                onClick={openGeo}
+              >
+                Places in this chapter
+              </button>
+            </div>
             {chapterQuery.data.verses.map((v) => {
               const inScope = v.annotations.filter((a) => a.in_scope);
               const outScope = v.annotations.filter((a) => !a.in_scope);
@@ -379,13 +401,15 @@ export function ReaderView(): JSX.Element {
       </main>
 
       <SidePanel
-        open={editing !== null || xref !== null}
+        open={editing !== null || xref !== null || geo}
         title={
           editing
             ? `Note on ${editing.verse.reference}`
             : xref
               ? `Cross-references — ${xref.reference}`
-              : ""
+              : geo
+                ? `Places — ${chapterQuery.data?.reference ?? ""}`
+                : ""
         }
         subtitle={editing?.verse.text}
         scopeLabel={editing?.scopeLabel}
@@ -424,6 +448,13 @@ export function ReaderView(): JSX.Element {
             chapter={xref.chapter}
             verse={xref.verse}
             translation={translation}
+            onJump={(b, c, v) => navigate(b, c, v)}
+          />
+        )}
+        {geo && (
+          <Geography
+            book={chapterQuery.data?.book ?? book}
+            chapter={chapter}
             onJump={(b, c, v) => navigate(b, c, v)}
           />
         )}

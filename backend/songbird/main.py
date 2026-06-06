@@ -15,6 +15,7 @@ from fastapi.staticfiles import StaticFiles
 from songbird import __version__
 from songbird.api.annotations import router as annotations_router
 from songbird.api.concord import router as concord_router
+from songbird.api.geography import router as geography_router
 from songbird.api.health import router as health_router
 from songbird.api.read import router as read_router
 from songbird.api.tags import router as tags_router
@@ -65,6 +66,7 @@ def create_app() -> FastAPI:
     app.include_router(read_router)
     app.include_router(annotations_router)
     app.include_router(tags_router)
+    app.include_router(geography_router)
 
     settings = get_settings()
     dist_dir = settings.frontend_dist_dir

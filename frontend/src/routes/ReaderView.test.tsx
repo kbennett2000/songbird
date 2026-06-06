@@ -283,6 +283,57 @@ describe("ReaderView", () => {
     expect(await screen.findByText(/ROM 5:16/)).toBeInTheDocument();
   });
 
+  it("shows places with the honesty model and jumps to a place's verse", async () => {
+    server.use(
+      http.get("/api/v1/places", () =>
+        HttpResponse.json([
+          {
+            id: "a15257a",
+            friendly_id: "Jerusalem",
+            name: "Jerusalem",
+            type: "settlement",
+            latitude: 31.78,
+            longitude: 35.23,
+            confidence: "high",
+            confidence_score: 90,
+            status: "identified",
+          },
+          {
+            id: "a1ad8e1",
+            friendly_id: "Nod",
+            name: "Land of Nod",
+            type: "region",
+            latitude: null,
+            longitude: null,
+            confidence: null,
+            confidence_score: null,
+            status: "unknown",
+          },
+        ]),
+      ),
+      http.get("/api/v1/places/:placeId/verses", () =>
+        HttpResponse.json([{ book: "GEN", chapter: 2, verse: 8, reference: "Genesis 2:8" }]),
+      ),
+    );
+
+    const user = userEvent.setup();
+    renderReader();
+
+    await screen.findByText(/JHN 3:16/);
+    await user.click(screen.getByRole("button", { name: "Places in this chapter" }));
+
+    // Identified place shows its coordinates; the unknown place is honestly unlocated.
+    expect(await screen.findByText("Jerusalem")).toBeInTheDocument();
+    expect(screen.getByText(/31\.78, 35\.23/)).toBeInTheDocument();
+    expect(screen.getByText("Land of Nod")).toBeInTheDocument();
+    expect(screen.getByText("Location unknown")).toBeInTheDocument();
+
+    // Expand a place → its verses → click one → reader jumps there.
+    await user.click(screen.getByRole("button", { name: /Jerusalem/ }));
+    await user.click(await screen.findByRole("button", { name: "Genesis 2:8" }));
+    expect(await screen.findByText(/GEN 2:16/)).toBeInTheDocument();
+  });
+
   it("includes tags when saving an annotation", async () => {
     let captured: Record<string, unknown> | null = null;
     server.use(
