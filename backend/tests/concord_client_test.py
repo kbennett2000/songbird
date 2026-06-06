@@ -225,3 +225,84 @@ async def test_get_cross_references_5xx_is_unreachable() -> None:
     with pytest.raises(ConcordUnreachableError):
         await client.get_cross_references("JHN", 3, 16)
     await client.aclose()
+
+
+def _places_json() -> dict[str, object]:
+    return {
+        "reference": "Genesis 4",
+        "total": 1,
+        "places": [
+            {
+                "id": "a1ad8e1",
+                "friendly_id": "Nod",
+                "name": "Land of Nod",
+                "type": "region",
+                "latitude": None,
+                "longitude": None,
+                "confidence": None,
+                "confidence_score": None,
+                "status": "unknown",
+            }
+        ],
+    }
+
+
+async def test_get_places_parses_and_preserves_nulls() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=_places_json())
+
+    client = ConcordClient("http://concord.test", transport=httpx.MockTransport(handler))
+    result = await client.get_places("GEN", 4)
+    await client.aclose()
+    assert result.places[0].friendly_id == "Nod"
+    assert result.places[0].status == "unknown"
+    assert result.places[0].latitude is None
+    assert result.places[0].confidence is None
+
+
+async def test_get_places_404_is_not_found() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(404, json={"error": {"code": "unknown_book"}})
+
+    client = ConcordClient("http://concord.test", transport=httpx.MockTransport(handler))
+    with pytest.raises(ConcordNotFoundError):
+        await client.get_places("XXX", 1)
+    await client.aclose()
+
+
+async def test_get_places_5xx_is_unreachable() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(503)
+
+    client = ConcordClient("http://concord.test", transport=httpx.MockTransport(handler))
+    with pytest.raises(ConcordUnreachableError):
+        await client.get_places("GEN", 2)
+    await client.aclose()
+
+
+async def test_get_place_verses_parses() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "id": "af3daeb",
+                "total": 1,
+                "verses": [{"book": "GEN", "chapter": 2, "verse": 8, "reference": "Genesis 2:8"}],
+            },
+        )
+
+    client = ConcordClient("http://concord.test", transport=httpx.MockTransport(handler))
+    result = await client.get_place_verses("af3daeb")
+    await client.aclose()
+    assert result.verses[0].book == "GEN"
+    assert result.verses[0].verse == 8
+
+
+async def test_get_place_verses_unknown_is_not_found() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(404, json={"error": {"code": "unknown_place"}})
+
+    client = ConcordClient("http://concord.test", transport=httpx.MockTransport(handler))
+    with pytest.raises(ConcordNotFoundError):
+        await client.get_place_verses("does-not-exist")
+    await client.aclose()

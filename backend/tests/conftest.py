@@ -22,7 +22,9 @@ from songbird.concord.schemas import (
     Chapter,
     ConcordHealth,
     CrossRefResponse,
+    PlaceVersesResponse,
     Translation,
+    VersePlacesResponse,
 )
 from songbird.db import models  # noqa: F401  (register models on Base.metadata)
 from songbird.db.base import Base
@@ -43,6 +45,8 @@ class FakeConcordClient:
         chapter: Chapter | None = None,
         books: list[Book] | None = None,
         cross_refs: CrossRefResponse | None = None,
+        places: VersePlacesResponse | None = None,
+        place_verses: PlaceVersesResponse | None = None,
         error: Exception | None = None,
         base_url: str = "http://concord.test",
     ) -> None:
@@ -51,6 +55,8 @@ class FakeConcordClient:
         self._chapter = chapter
         self._books = books or []
         self._cross_refs = cross_refs
+        self._places = places
+        self._place_verses = place_verses
         self._error = error
         self.base_url = base_url
 
@@ -91,6 +97,18 @@ class FakeConcordClient:
             self._cross_refs
             if self._cross_refs is not None
             else CrossRefResponse(cross_references=[])
+        )
+
+    async def get_places(self, book: str, chapter: int) -> VersePlacesResponse:
+        if self._error is not None:
+            raise self._error
+        return self._places if self._places is not None else VersePlacesResponse(places=[])
+
+    async def get_place_verses(self, place_id: str) -> PlaceVersesResponse:
+        if self._error is not None:
+            raise self._error
+        return (
+            self._place_verses if self._place_verses is not None else PlaceVersesResponse(verses=[])
         )
 
 
