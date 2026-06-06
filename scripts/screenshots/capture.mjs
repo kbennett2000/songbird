@@ -115,10 +115,113 @@ async function capturePlaces(page) {
   console.log("✓ places.png");
 }
 
+// Open the map modal for the current passage and wait until it has plotted its pins.
+async function openMap(page, knownPin) {
+  await page.getByRole("button", { name: "Show map" }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog.waitFor({ state: "visible", timeout: 15000 });
+  await page.getByRole("button", { name: knownPin }).first().waitFor({ state: "visible", timeout: 15000 });
+  await page.waitForTimeout(500);
+  return dialog;
+}
+
+// Pick the most isolated pin (largest nearest-neighbour distance) so the click isn't stolen by
+// an overlapping neighbour — the Mesopotamian rivers sit almost on top of each other.
+async function isolatedPin(page) {
+  const pins = await page.getByTestId("map-pin").all();
+  const boxes = await Promise.all(
+    pins.map(async (p) => ({ p, box: await p.boundingBox(), name: await p.getAttribute("aria-label") })),
+  );
+  const valid = boxes.filter((b) => b.box);
+  let best = valid[0];
+  let bestDist = -1;
+  for (const a of valid) {
+    const ax = a.box.x + a.box.width / 2;
+    const ay = a.box.y + a.box.height / 2;
+    let nearest = Infinity;
+    for (const b of valid) {
+      if (b === a) continue;
+      const dx = b.box.x + b.box.width / 2 - ax;
+      const dy = b.box.y + b.box.height / 2 - ay;
+      nearest = Math.min(nearest, Math.hypot(dx, dy));
+    }
+    if (nearest > bestDist) {
+      bestDist = nearest;
+      best = a;
+    }
+  }
+  return best;
+}
+
+// Desktop (1440×900): the whole modal — pins on the basemap + the honesty lists below it.
+async function captureMapDesktop(page) {
+  await page.goto(`${BASE}/?book=GEN&chapter=2`, { waitUntil: "networkidle" });
+  const dialog = await openMap(page, "Euphrates");
+  await dialog.screenshot({ path: `${OUT}/map-desktop.png` });
+  console.log("✓ map-desktop.png");
+
+  try {
+    // Tap an isolated pin → the selected-place card (name/status/confidence + jump chips).
+    const pin = await isolatedPin(page);
+    await pin.p.click();
+    await page.getByTestId("place-card").waitFor({ state: "visible", timeout: 8000 });
+    await page.waitForTimeout(300);
+    await dialog.screenshot({ path: `${OUT}/map-desktop-card.png` });
+    console.log(`✓ map-desktop-card.png (selected: ${pin.name})`);
+
+    // Jump from the card → reader navigates and the modal closes (point 5).
+    await page.getByTestId("place-card").getByRole("button").first().click();
+    await page.getByRole("dialog").waitFor({ state: "hidden", timeout: 8000 });
+    console.log("✓ jump closes the modal");
+  } catch (err) {
+    console.warn(`⚠ desktop card/jump step skipped: ${err.message.split("\n")[0]}`);
+  }
+}
+
+// Mobile (390×844, touch — no hover): near-full-screen modal, finger-sized pins, tap-to-select.
+// hasTouch enables .tap() (so selection is touch, not hover). We deliberately leave isMobile off:
+// with a fixed deviceScaleFactor its meta-viewport emulation lays the page out at a width that
+// doesn't match the requested viewport, so screenshots would frame at 390 while layout used ~484
+// and look falsely clipped. innerWidth then equals 390 and the shot reflects a real phone.
+async function captureMapMobile(browser, channel) {
+  const context = await browser.newContext({
+    viewport: { width: 390, height: 844 },
+    deviceScaleFactor: 2,
+    hasTouch: true,
+    ...(channel ? { channel } : {}),
+  });
+  const page = await context.newPage();
+  try {
+    await ensureSignedIn(page);
+    await page.goto(`${BASE}/?book=GEN&chapter=2`, { waitUntil: "networkidle" });
+    await openMap(page, "Euphrates");
+    // Viewport (not element) screenshot — the honest "what the user sees" framing, which also
+    // confirms the modal genuinely covers the small screen rather than sitting in a box.
+    await page.screenshot({ path: `${OUT}/map-mobile.png` });
+    console.log("✓ map-mobile.png");
+
+    try {
+      // Tap (not hover) an isolated pin → card appears; confirms touch selection on mobile.
+      const pin = await isolatedPin(page);
+      await pin.p.tap();
+      await page.getByTestId("place-card").waitFor({ state: "visible", timeout: 8000 });
+      await page.waitForTimeout(300);
+      await page.screenshot({ path: `${OUT}/map-mobile-card.png` });
+      console.log(`✓ map-mobile-card.png (tapped: ${pin.name})`);
+    } catch (err) {
+      console.warn(`⚠ mobile tap step skipped: ${err.message.split("\n")[0]}`);
+    }
+  } finally {
+    await context.close();
+  }
+}
+
 async function main() {
   // Playwright ships no Chromium build for some newer distros; use the system Chrome when
   // present (set PLAYWRIGHT_CHROME_CHANNEL="" to force the bundled browser).
   const channel = process.env.PLAYWRIGHT_CHROME_CHANNEL ?? "chrome";
+  // Map-only run (for live visual verification): MAP_ONLY=1 skips the README shots + note seeding.
+  const mapOnly = process.env.MAP_ONLY === "1";
   const browser = await chromium.launch(channel ? { channel } : {});
   const context = await browser.newContext({
     viewport: { width: 1440, height: 900 },
@@ -127,10 +230,14 @@ async function main() {
   const page = await context.newPage();
   try {
     await ensureSignedIn(page);
-    await seedNotes(page);
-    await captureReader(page);
-    await captureSearch(page);
-    await capturePlaces(page);
+    if (!mapOnly) {
+      await seedNotes(page);
+      await captureReader(page);
+      await captureSearch(page);
+      await capturePlaces(page);
+    }
+    await captureMapDesktop(page);
+    await captureMapMobile(browser, channel);
   } finally {
     await browser.close();
   }
