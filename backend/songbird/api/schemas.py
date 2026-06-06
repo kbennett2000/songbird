@@ -76,6 +76,18 @@ class CrossReference(BaseModel):
     text: str | None  # the target's snippet (in the read translation), if available
 
 
+class SemanticResult(BaseModel):
+    """A ranked Scripture result from Concord's semantic search. Canonical coords → jump
+    reuses navigation; `score` is Concord's confidence, surfaced honestly."""
+
+    book: str  # USFM code — canonical
+    chapter: int
+    verse: int
+    reference: str
+    score: float
+    text: str | None
+
+
 class ResolvedReference(BaseModel):
     """A raw reference resolved (by Concord) to canonical coordinates. `verse` is set only
     when the reference named a single verse (so the reader can scroll to / highlight it)."""
