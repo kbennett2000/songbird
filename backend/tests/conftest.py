@@ -15,8 +15,8 @@ from collections.abc import AsyncIterator, Callable
 import httpx
 import pytest
 import pytest_asyncio
-from fastapi import FastAPI
-from songbird.api.deps import get_concord_client, get_db
+from fastapi import Depends, FastAPI
+from songbird.api.deps import get_concord_client, get_current_user, get_db
 from songbird.concord.schemas import (
     Book,
     Chapter,
@@ -162,6 +162,41 @@ def client_for(
     app: FastAPI,
     db_sessionmaker: async_sessionmaker[AsyncSession],
 ) -> Callable[[FakeConcordClient], httpx.AsyncClient]:
+    """Authenticated client: `get_current_user` is overridden to the seeded user (id=1), so the
+    whole pre-auth suite stays green behind the Slice 8 gate. Annotations created in those tests
+    get author_id=1 and the overlay filters to author 1 — i.e. unchanged behavior. Tests that
+    need the *real* auth flow (cookies, 401s, multi-user scoping) use `unauth_client` instead."""
+
+    def _build(concord: FakeConcordClient) -> httpx.AsyncClient:
+        async def _get_db_override() -> AsyncIterator[AsyncSession]:
+            async with db_sessionmaker() as session:
+                yield session
+
+        async def _current_user_override(
+            db: AsyncSession = Depends(get_db),
+        ) -> User:
+            user = await db.get(User, 1)
+            assert user is not None
+            return user
+
+        app.dependency_overrides[get_concord_client] = lambda: concord
+        app.dependency_overrides[get_db] = _get_db_override
+        app.dependency_overrides[get_current_user] = _current_user_override
+        transport = httpx.ASGITransport(app=app)
+        return httpx.AsyncClient(transport=transport, base_url="http://test")
+
+    return _build
+
+
+@pytest.fixture
+def unauth_client(
+    app: FastAPI,
+    db_sessionmaker: async_sessionmaker[AsyncSession],
+) -> Callable[[FakeConcordClient], httpx.AsyncClient]:
+    """Real-auth client: only get_db + get_concord_client overridden — `get_current_user` runs
+    for real (cookie → session → user), and the cookie jar persists across requests, so the full
+    register/login/logout flow and gated-route 401s are exercised end to end."""
+
     def _build(concord: FakeConcordClient) -> httpx.AsyncClient:
         async def _get_db_override() -> AsyncIterator[AsyncSession]:
             async with db_sessionmaker() as session:

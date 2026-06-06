@@ -7,6 +7,73 @@ A running log of per-slice decisions, gotchas, and how each slice was verified. 
 
 ---
 
+## Slice 8 — Auth & multi-user (final slice)
+
+- **Date:** 2026-06-06
+- **PR:** _Slice 8: Auth & multi-user_
+- **Branch:** `slice/8-auth`
+
+### What it establishes
+Real users + login, turning on the multi-user capability the schema has carried since S1
+(`users` + `author_id` on every annotation). Argon2 cookie-session auth (mirroring
+soap-journal's proven pattern), annotations scoped to their author, the whole app gated behind
+login. **Auth is entirely songbird's domain — Concord stays read-only and user-unaware; the
+`ConcordClient` is unchanged.** This completes S0–S8.
+
+### The four open-question resolutions
+1. **Default-user migration = claim-on-first-registration.** The seeded user (id=1) is left
+   *unclaimed* (nullable `username`/`password_hash`); the **first registration claims it in
+   place** (sets credentials + `is_admin=true`) rather than inserting a new row — so every
+   pre-auth annotation (author_id=1) stays owned, never orphaned. Later signups insert new users.
+2. **User creation = open registration.** First account claims the default + becomes admin;
+   registration stays open (personal/small-group tool — an admin-gated toggle is deferred, noted).
+3. **Sessions = soap-journal's exact cookie-session.** DB-backed `sessions` table (random
+   `token_urlsafe(48)`, 30-day sliding TTL extended on resolve), httponly cookie
+   `songbird_session` (`secure=False` for LAN HTTP, `samesite=lax`). **No signing secret** — the
+   tokens are random DB rows, so logout truly revokes server-side.
+4. **Gate the whole app.** Every data route requires a user (read, annotations, tags,
+   translations, places, semantic-search); only `/healthz` + `/api/v1/auth/*` are open. Frontend:
+   every route behind `RequireAuth` except `/login`.
+
+### Author scoping
+- `annotations`: `create` → `author_id=user.id`; `list` (browse/search) → `where(author_id ==
+  user.id)`; `_get_or_404` also filters `author_id` so another user's note is a **404, not 403**
+  (no existence leak) — get/patch/delete inherit it.
+- `read.py`: the chapter overlay query gains `author_id == user.id` — a reader sees only their
+  own notes overlaid.
+- `tags`-list stays a global vocabulary for type-ahead (low-sensitivity; per-user tag visibility
+  is a deferred nicety, noted).
+
+### Gotchas
+- **Gating breaks every existing test.** Router-level `dependencies=[Depends(get_current_user)]`
+  401s all ~78 pre-auth tests. Fix: the shared **`client_for` fixture overrides
+  `get_current_user`** to return the seeded user (id=1) — existing tests stay green and behave as
+  before (their annotations are author 1, the overlay filters to author 1). A separate
+  **`unauth_client`** (real `get_current_user`, persistent cookie jar) drives the actual auth /
+  scoping / gating tests.
+- **Nullable `username`/`password_hash`** is what makes the unclaimed-default claim work — NULL
+  hash = claimable; `_unclaimed_default` finds it, `_any_claimed_user` decides first-vs-later.
+- **No signing secret needed** — random DB tokens, unlike a signed-JWT scheme. One less config
+  knob, and logout is a real DELETE.
+- **passlib `crypt` DeprecationWarning** on 3.12 (and an argon2 `__version__` warning) are
+  harmless — argon2id hashing/verification works; warnings only.
+- **FastAPI caches the dependency**, so a router-level gate plus a route-level `user: User =
+  Depends(get_current_user)` value-dep resolves once per request (no double DB hit).
+
+### How it was verified
+- Backend: Ruff + `ruff format --check` + Pyright-strict clean; `pytest` **92 passed** (3
+  `concord` live deselected). New: `auth_test.py`, `scoping_test.py`, `gating_test.py`,
+  `default_claim_test.py`.
+- Frontend: ESLint + `tsc` clean; Vitest **37 passed**; `vite build` ok. New: `useAuth.test.tsx`,
+  `RequireAuth.test.tsx`, `LoginPage.test.tsx`.
+- Live (Concord up, fresh DATA_DIR): unauth read / annotations → **401**; `/healthz` → 200;
+  register → **claims default user id=1, is_admin=true**, cookie set; `me` → 200; authed read of
+  John 3 (36 verses, from Concord) works; create note → 201, overlay shows it; logout → 204, then
+  `me` → 401; second user (bob, id=2, not admin) sees **none** of kris's notes (browse `[]`,
+  overlay empty, GET kris's note → 404).
+
+---
+
 ## Slice 7 — Semantic search
 
 - **Date:** 2026-06-06

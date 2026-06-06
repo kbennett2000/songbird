@@ -4,9 +4,38 @@ Kept separate from `concord/schemas.py` (which models Concord's responses).
 """
 
 from datetime import datetime
-from typing import Any
+from typing import Annotated, Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+# --- Auth (Slice 8) ---
+
+USERNAME_PATTERN = r"^[A-Za-z0-9_-]+$"
+UsernameStr = Annotated[str, Field(min_length=3, max_length=32, pattern=USERNAME_PATTERN)]
+PasswordStr = Annotated[str, Field(min_length=8)]
+
+
+class RegisterRequest(BaseModel):
+    username: UsernameStr
+    password: PasswordStr
+
+
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+
+class UserResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    username: str | None
+    is_admin: bool
+    created_at: datetime
+
+
+class AuthEnvelope(BaseModel):
+    user: UserResponse
 
 
 class AnnotationCreate(BaseModel):

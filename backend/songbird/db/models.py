@@ -8,6 +8,7 @@ id. No Bible text is stored here (invariant 5); notes are Markdown (invariant 6)
 from datetime import UTC, datetime
 
 from sqlalchemy import (
+    Boolean,
     Column,
     DateTime,
     ForeignKey,
@@ -43,16 +44,39 @@ def _utcnow() -> datetime:
 
 
 class User(Base):
-    """An author. Multi-user-ready from line one; a single default row exists today
-    (auth is Slice 8)."""
+    """An author / login. Multi-user-ready since Slice 1; Slice 8 turns auth on. `username` and
+    `password_hash` are nullable because the original seeded default user is *unclaimed* until
+    the first registration claims it (preserving its existing annotations)."""
 
     __tablename__ = "users"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     name: Mapped[str] = mapped_column(String(64), nullable=False)
+    username: Mapped[str | None] = mapped_column(String(32), unique=True, index=True, nullable=True)
+    password_hash: Mapped[str | None] = mapped_column(String, nullable=True)
+    is_admin: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="0"
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=_utcnow
     )
+
+
+class UserSession(Base):
+    """A logged-in session: a random token (in an httponly cookie) → user, with expiry.
+    Server-side source of truth, so logout truly revokes."""
+
+    __tablename__ = "sessions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True, nullable=False
+    )
+    token: Mapped[str] = mapped_column(String, unique=True, index=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=_utcnow
+    )
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
 class Annotation(Base):

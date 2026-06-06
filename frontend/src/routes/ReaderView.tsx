@@ -8,6 +8,7 @@ import { NoteEditor } from "@/components/NoteEditor";
 import { ScopePicker } from "@/components/ScopePicker";
 import { SidePanel } from "@/components/SidePanel";
 import { TagInput } from "@/components/TagInput";
+import { useAuth } from "@/hooks/useAuth";
 import { ApiError } from "@/lib/api";
 import { nextChapter, prevChapter } from "@/lib/navigation";
 import {
@@ -42,6 +43,7 @@ interface XrefView {
 
 export function ReaderView(): JSX.Element {
   const queryClient = useQueryClient();
+  const { user, logout } = useAuth();
   // A jump-from-browse arrives as ?book=&chapter=&verse=; seed the initial location from it.
   const [searchParams] = useSearchParams();
   const [translation, setTranslation] = useState(DEFAULT_TRANSLATION);
@@ -232,6 +234,18 @@ export function ReaderView(): JSX.Element {
             <Link to="/search" className="text-sm text-blue-700 hover:underline">
               Search
             </Link>
+            {user && (
+              <span className="flex items-center gap-2 text-sm text-gray-500">
+                <span title={user.is_admin ? "Admin" : undefined}>{user.username}</span>
+                <button
+                  type="button"
+                  className="text-blue-700 hover:underline"
+                  onClick={() => void logout()}
+                >
+                  Log out
+                </button>
+              </span>
+            )}
             <div className="ml-auto flex items-center gap-2 text-sm">
               <label className="flex items-center gap-1">
                 <span className="text-gray-500">Book</span>

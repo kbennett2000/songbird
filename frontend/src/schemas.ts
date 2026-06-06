@@ -148,6 +148,19 @@ export const semanticResultSchema = z.object({
 export const semanticResultsSchema = z.array(semanticResultSchema);
 export type SemanticResult = z.infer<typeof semanticResultSchema>;
 
+// --- Auth (Slice 8) ---
+
+export const userSchema = z.object({
+  id: z.number(),
+  username: z.string().nullable(),
+  is_admin: z.boolean(),
+  created_at: z.string(),
+});
+export const authEnvelopeSchema = z.object({
+  user: userSchema,
+});
+export type User = z.infer<typeof userSchema>;
+
 // Annotation scope (SPEC §2) for the editor's scope picker.
 export type ScopeType = "all" | "current" | "subset";
 export interface Scope {

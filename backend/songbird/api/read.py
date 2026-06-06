@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from songbird.api.deps import get_concord_client, get_db
+from songbird.api.deps import get_concord_client, get_current_user, get_db
 from songbird.api.schemas import (
     AnnotationOut,
     CrossReference,
@@ -26,7 +26,7 @@ from songbird.concord.client import (
 )
 from songbird.concord.schemas import BooksResponse
 from songbird.core.errors import ErrorCode, raise_http
-from songbird.db.models import Annotation
+from songbird.db.models import Annotation, User
 
 router = APIRouter(prefix="/api/v1", tags=["read"])
 
@@ -127,6 +127,7 @@ async def read_chapter(
     chapter: int,
     concord: ConcordClient = Depends(get_concord_client),
     db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
 ) -> ReadChapter:
     try:
         chapter_data = await concord.get_chapter(book, chapter, translation)
@@ -142,8 +143,10 @@ async def read_chapter(
     # regardless of how `book` was spelled in the URL.
     book_usfm = chapter_data.verses[0].book
 
+    # Overlay only the current user's annotations (Slice 8 scoping).
     result = await db.execute(
         select(Annotation).where(
+            Annotation.author_id == user.id,
             Annotation.book_usfm == book_usfm,
             Annotation.start_chapter <= chapter,
             Annotation.end_chapter >= chapter,
