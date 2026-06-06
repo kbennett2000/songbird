@@ -4,6 +4,61 @@ A running log of per-slice decisions, gotchas, and how each slice was verified. 
 
 ---
 
+## Slice 2 — Translation switching + scope
+
+- **Date:** 2026-06-05
+- **PR:** [#4 — Slice 2: Translation switching + scope](https://github.com/kbennett2000/songbird/pull/4)
+- **Branch:** `slice/2-translation-scope`
+
+### What it establishes
+Translation switching in the reader + the three-tier scope (all / current / subset). Switching
+KJV → WEB re-fetches the chapter from Concord and re-overlays annotations on the right verses —
+the canonical-coordinate bridge (invariant 4) as a visible feature.
+
+### Open-question resolutions
+1. **`current` resolves at creation** to a concrete single-member subset (one row in
+   `annotation_translations`), so the stored intent is explicit and decision-B's label has a
+   real value.
+2. **Out-of-scope visual = option 3** (per Kris): a **gray hollow `○` marker only — no tint, no
+   inline label** in the reading column; the `written for {codes}` label shows in the
+   **side-panel header** when opened. In-scope keeps amber tint + filled `●`. Rationale: don't
+   hide it, but don't clutter the page you're reading.
+3. **Selector:** header, **in-memory** (resets to KJV on reload); persistence deferred.
+4. **Subset picker:** "choose translations…" disclosure with a checklist of Concord's codes.
+
+### Scope modeling
+- `annotation_translations` (`annotation_id` FK cascade, `translation_code`, unique pair) holds
+  codes for `current`/`subset`; empty for `all`. `Annotation.translations` is a
+  `lazy="selectin"` relationship; `Annotation.scope_translations` is a convenience property.
+- **In-scope rule** (computed server-side in the read overlay): `all` → always; else the read
+  translation ∈ codes (case-insensitive). Emitted per annotation as `in_scope` on
+  `ReadAnnotation`.
+- **Decision B is data-level:** out-of-scope annotations are returned with `in_scope:false`,
+  never dropped — the frontend marks them.
+
+### Gotchas / decisions
+- **Scope validation needs Concord.** Create/update validate codes against
+  `concord.list_translations()`; unknown → 422 `INVALID_TRANSLATION`, malformed → 422
+  `INVALID_SCOPE`, Concord unreachable → 502. `all`-scope skips the Concord call entirely
+  (no codes to validate), so plain notes still work without a round trip.
+- **`expire_on_commit=False`** (both the app and the test sessionmaker) lets create/update set
+  `annotation.translations` in-memory and return `AnnotationOut.model_validate(annotation)`
+  right after commit without a lazy re-load (which would need a greenlet in async).
+- **`_get_or_404` uses `select()`, not `db.get()`**, so the selectin-loaded `translations` are
+  populated for the response.
+- **Codes are normalized to upper-case** and de-duplicated on the way in (Concord ids are
+  upper-case, e.g. `KJV`, `WEB`).
+
+### How it was verified
+- Backend: Ruff + Pyright-strict clean; `pytest` 30 passed (3 `concord` live deselected; live
+  pass). New: `scope_crud_test.py`, `scope_overlay_test.py`, extended `bridge_test.py`.
+- Frontend: ESLint + `tsc` clean; Vitest 9 passed; `vite build` OK.
+- Live (uvicorn + real Concord): `current`→KJV note shows `in_scope:true` in KJV and
+  `in_scope:false` (written for KJV) in WEB; `all` in-scope everywhere; `subset {KJV,WEB}`
+  in-scope KJV/WEB, out ASV; invalid code → 422; bad chapter → 404.
+
+---
+
 ## Slice 1 — The core loop
 
 - **Date:** 2026-06-05
