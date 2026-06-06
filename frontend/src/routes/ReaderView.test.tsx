@@ -334,6 +334,59 @@ describe("ReaderView", () => {
     expect(await screen.findByText(/GEN 2:16/)).toBeInTheDocument();
   });
 
+  it("disables the globe when the chapter has no mappable places", async () => {
+    server.use(
+      http.get("/api/v1/places", () =>
+        HttpResponse.json([
+          {
+            id: "a1ad8e1",
+            friendly_id: "Nod",
+            name: "Land of Nod",
+            type: "region",
+            latitude: null,
+            longitude: null,
+            confidence: null,
+            confidence_score: null,
+            status: "unknown",
+          },
+        ]),
+      ),
+    );
+    renderReader();
+    await screen.findByText(/JHN 3:16/);
+    expect(await screen.findByRole("button", { name: "Show map" })).toBeDisabled();
+  });
+
+  it("enables the globe and opens the map modal when there's a located place", async () => {
+    server.use(
+      http.get("/api/v1/places", () =>
+        HttpResponse.json([
+          {
+            id: "a15257a",
+            friendly_id: "Jerusalem",
+            name: "Jerusalem",
+            type: "settlement",
+            latitude: 31.78,
+            longitude: 35.23,
+            confidence: "high",
+            confidence_score: 90,
+            status: "identified",
+          },
+        ]),
+      ),
+    );
+    const user = userEvent.setup();
+    renderReader();
+    await screen.findByText(/JHN 3:16/);
+
+    const globe = await screen.findByRole("button", { name: "Show map" });
+    expect(globe).toBeEnabled();
+    await user.click(globe);
+
+    expect(await screen.findByRole("dialog", { name: "Map — JHN 3" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Jerusalem" })).toBeInTheDocument();
+  });
+
   it("includes tags when saving an annotation", async () => {
     let captured: Record<string, unknown> | null = null;
     server.use(
