@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
+import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
 
 // Stub the TipTap editor so the flow test doesn't depend on contenteditable/DOM internals.
@@ -37,6 +38,7 @@ function annotation(overrides: Record<string, unknown> = {}) {
     color: null,
     scope_type: "all",
     scope_translations: [] as string[],
+    tags: [] as string[],
     in_scope: true,
     author_id: 1,
     created_at: "2026-06-05T00:00:00Z",
@@ -68,7 +70,9 @@ function renderReader() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={client}>
-      <ReaderView />
+      <MemoryRouter>
+        <ReaderView />
+      </MemoryRouter>
     </QueryClientProvider>,
   );
 }
@@ -246,5 +250,29 @@ describe("ReaderView", () => {
     await user.click(screen.getByRole("button", { name: "Next chapter" }));
     expect(await screen.findByText(/JHN 4:16/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "View note on verse 16" })).toBeInTheDocument();
+  });
+
+  it("includes tags when saving an annotation", async () => {
+    let captured: Record<string, unknown> | null = null;
+    server.use(
+      http.get("/api/v1/read/:translation/:book/:chapter", () =>
+        HttpResponse.json(readResponse([])),
+      ),
+      http.post("/api/v1/annotations", async ({ request }) => {
+        captured = (await request.json()) as Record<string, unknown>;
+        return HttpResponse.json(annotation({ tags: ["grace"] }), { status: 201 });
+      }),
+    );
+
+    const user = userEvent.setup();
+    renderReader();
+
+    await user.click(await screen.findByRole("button", { name: "Annotate verse 16" }));
+    await user.type(screen.getByLabelText("Add a tag"), "grace");
+    await user.keyboard("{Enter}");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    await screen.findByRole("button", { name: "Annotate verse 16" });
+    expect(captured).toMatchObject({ tags: ["grace"] });
   });
 });
