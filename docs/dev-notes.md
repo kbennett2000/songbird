@@ -4,6 +4,57 @@ A running log of per-slice decisions, gotchas, and how each slice was verified. 
 
 ---
 
+## v1.1 Map View — live visual verification
+
+- **Date:** 2026-06-06
+- **Branch:** `docs/map-visual-verify`
+- **Scope:** verification + screenshots only — **no feature code changed.** The only code touched
+  is the screenshot tooling (`scripts/screenshots/capture.mjs`, new `captureMapDesktop` /
+  `captureMapMobile`, gated behind `MAP_ONLY=1` for a map-only run).
+
+### Why
+The Map View (slices A+B) was component-tested and the projection accuracy test proves the
+lat/lon→pixel math to ±2px, but the **rendered modal had never been looked at** — real pins on the
+real parchment basemap, desktop and mobile. This is the human confirmation that "≈90% from the
+left" *actually sits on Mesopotamia*, that confidence encoding reads at a glance, and that the
+mobile modal is usable with touch.
+
+### How
+`docker compose up` (real Concord v1.0.0 + songbird at :8077), then drove the login-gated UI with
+Playwright (system Chrome) against **Genesis 2** — a place-rich chapter (Euphrates, Tigris,
+Assyria, Cush, Pishon, Gihon, Havilah located; **Eden** unknown). Two viewports: **desktop
+1440×900** and **mobile 390×844** (touch, `.tap()` not hover). Screenshots in `docs/screenshots/`:
+`map-desktop.png`, `map-desktop-card.png`, `map-mobile.png`, `map-mobile-card.png`,
+`map-globe-disabled.png`.
+
+### Result — all 7 points pass
+1. **Pins land right** — Euphrates/Tigris/Assyria cluster in Mesopotamia (right side), Cush/Havilah
+   toward the Nile/south; nothing in the Mediterranean.
+2. **Basemap** — parchment/ink, legible, coastlines recognizable, no rendering garbage.
+3. **Confidence reads** — solid (high) vs faded-hollow (med/low) clearly distinguishable; an
+   *identified-but-medium* place (Pishon) renders **faded** — the chosen honest read, confirmed.
+4. **Honesty line** — "Also mentioned, location unknown: **Eden**" listed, not plotted; no
+   off-extent places this chapter.
+5. **Tap → card → jump** — tapping a pin shows name/status/confidence + verse chips; clicking a
+   verse navigates the reader and **closes the modal**.
+6. **Mobile correct** — near-full-screen modal, map scales to fit (no horizontal scroll),
+   finger-sized pins, **touch** selection (no hover), obvious ✕.
+7. **Globe state** — enabled on GEN 2 (7 located); **disabled + "No mapped locations in this
+   passage"** on place-free chapters (PSA 23, PRO 3, JHN 17 — 0 located).
+
+### Gotchas / observations (none blocking)
+- **Playwright `isMobile` framing artifact:** with `isMobile:true` + a fixed `deviceScaleFactor`,
+  the page laid out at ~484 CSS px while the screenshot framed at the requested 390 → the shot
+  looked falsely right-clipped. A DOM probe proved `scrollWidth === innerWidth` (no real overflow).
+  Fix: capture mobile with `hasTouch:true` but **`isMobile` off** so layout width matches the shot.
+  (No songbird change — purely a harness setting.)
+- **Dense-cluster overlap:** the Mesopotamian rivers sit almost on top of each other; the
+  deterministic offset separates them enough to read as distinct pins, but they overlap enough that
+  one pin can intercept a click meant for its neighbour (the harness now selects the most-isolated
+  pin). Acceptable graceful degradation for v1.1; tighter de-clustering is the deferred polish.
+
+---
+
 ## v1.0.0 — Documentation & first public release (songbird is shipped)
 
 - **Date:** 2026-06-06
