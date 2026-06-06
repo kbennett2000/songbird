@@ -4,6 +4,8 @@ import { Link, useSearchParams } from "react-router-dom";
 
 import { CrossReferences } from "@/components/CrossReferences";
 import { Geography } from "@/components/Geography";
+import { MapView } from "@/components/MapView";
+import { Modal } from "@/components/Modal";
 import { NoteEditor } from "@/components/NoteEditor";
 import { ScopePicker } from "@/components/ScopePicker";
 import { SidePanel } from "@/components/SidePanel";
@@ -16,6 +18,7 @@ import {
   deleteAnnotation,
   fetchBooks,
   fetchChapter,
+  fetchPlaces,
   fetchTags,
   fetchTranslations,
   resolveReference,
@@ -52,6 +55,7 @@ export function ReaderView(): JSX.Element {
   const [editing, setEditing] = useState<Editing | null>(null);
   const [xref, setXref] = useState<XrefView | null>(null);
   const [geo, setGeo] = useState(false);
+  const [map, setMap] = useState(false);
   const [refInput, setRefInput] = useState("");
   const [resolveError, setResolveError] = useState<string | null>(null);
   const [highlightVerse, setHighlightVerse] = useState<number | null>(() => {
@@ -66,6 +70,17 @@ export function ReaderView(): JSX.Element {
     queryKey: ["chapter", translation, book, chapter],
     queryFn: () => fetchChapter(translation, book, chapter),
   });
+  // The canonical book for this chapter (Concord's USFM code), used for places + the map.
+  const chapterBook = chapterQuery.data?.book ?? book;
+  // Reuse the per-chapter places fetch (shared cache with the list + the map) to decide whether
+  // the globe is enabled: it lights up only when ≥1 place actually has coordinates to plot.
+  const placesQuery = useQuery({
+    queryKey: ["places", chapterBook, chapter],
+    queryFn: () => fetchPlaces(chapterBook, chapter),
+  });
+  const hasMappable = (placesQuery.data ?? []).some(
+    (p) => p.latitude !== null && p.longitude !== null,
+  );
 
   const translations = useMemo(() => translationsQuery.data ?? [], [translationsQuery.data]);
   const books = useMemo(() => booksQuery.data ?? [], [booksQuery.data]);
@@ -86,6 +101,7 @@ export function ReaderView(): JSX.Element {
     setEditing(null);
     setXref(null);
     setGeo(false);
+    setMap(false);
   };
 
   const next = nextChapter(books, book, chapter);
@@ -171,6 +187,7 @@ export function ReaderView(): JSX.Element {
   const openNew = (verse: ReadVerse) => {
     setXref(null);
     setGeo(false);
+    setMap(false);
     setEditing({
       verse,
       annotationId: null,
@@ -184,6 +201,7 @@ export function ReaderView(): JSX.Element {
   const openExisting = (verse: ReadVerse, annotation: ReadAnnotation) => {
     setXref(null);
     setGeo(false);
+    setMap(false);
     setEditing({
       verse,
       annotationId: annotation.id,
@@ -202,6 +220,7 @@ export function ReaderView(): JSX.Element {
   const openXref = (verse: ReadVerse) => {
     setEditing(null);
     setGeo(false);
+    setMap(false);
     setXref({
       book: chapterQuery.data?.book ?? book,
       chapter,
@@ -213,7 +232,15 @@ export function ReaderView(): JSX.Element {
   const openGeo = () => {
     setEditing(null);
     setXref(null);
+    setMap(false);
     setGeo(true);
+  };
+
+  const openMap = () => {
+    setEditing(null);
+    setXref(null);
+    setGeo(false);
+    setMap(true);
   };
 
   const closePanel = () => {
@@ -358,6 +385,16 @@ export function ReaderView(): JSX.Element {
               >
                 Places in this chapter
               </button>
+              <button
+                type="button"
+                className="rounded border border-gray-300 px-2 py-0.5 font-sans text-xs text-gray-600 hover:bg-gray-100 disabled:opacity-40 disabled:hover:bg-transparent"
+                onClick={openMap}
+                disabled={!hasMappable}
+                aria-label="Show map"
+                title={hasMappable ? "Show map" : "No mapped locations in this passage"}
+              >
+                🌐 Map
+              </button>
             </div>
             {chapterQuery.data.verses.map((v) => {
               const inScope = v.annotations.filter((a) => a.in_scope);
@@ -470,12 +507,20 @@ export function ReaderView(): JSX.Element {
         )}
         {geo && (
           <Geography
-            book={chapterQuery.data?.book ?? book}
+            book={chapterBook}
             chapter={chapter}
             onJump={(b, c, v) => navigate(b, c, v)}
           />
         )}
       </SidePanel>
+
+      <Modal
+        open={map}
+        title={`Map — ${chapterQuery.data?.reference ?? ""}`}
+        onClose={() => setMap(false)}
+      >
+        <MapView book={chapterBook} chapter={chapter} onJump={(b, c, v) => navigate(b, c, v)} />
+      </Modal>
     </div>
   );
 }
