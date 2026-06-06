@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -67,5 +67,15 @@ describe("NotePopover", () => {
     const { onClose } = renderPopover(note());
     await userEvent.keyboard("{Escape}");
     expect(onClose).toHaveBeenCalled();
+  });
+
+  it("stays open while the note's own content is scrolled, but closes on an outside scroll", () => {
+    const { onClose } = renderPopover(note({ text: "A very long text-critical note…" }));
+    // Scrolling inside the popover (a long note) must NOT dismiss it.
+    fireEvent.scroll(screen.getByRole("dialog"));
+    expect(onClose).not.toHaveBeenCalled();
+    // Scrolling the surrounding page/reader does dismiss it (so it can't drift from its anchor).
+    fireEvent.scroll(document);
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 });

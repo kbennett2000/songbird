@@ -62,14 +62,22 @@ export function NotePopover({ note, anchor, onClose, onJump }: NotePopoverProps)
       const target = e.target as Node;
       if (!popRef.current?.contains(target) && !anchor.contains(target)) onClose();
     };
+    // Dismiss when an OUTSIDE surface scrolls (reader/page) so the popover never drifts from
+    // its anchor — but let the note scroll its own overflow content. `capture: true` is needed
+    // to catch scrolls from any scroll container; that also delivers the popover's own scroll
+    // events here, so we ignore scrolls that originate inside it.
+    const onScroll = (e: Event) => {
+      if (popRef.current?.contains(e.target as Node)) return;
+      onClose();
+    };
     document.addEventListener("keydown", onKeyDown);
     document.addEventListener("mousedown", onPointerDown);
-    window.addEventListener("scroll", onClose, true);
+    window.addEventListener("scroll", onScroll, true);
     window.addEventListener("resize", onClose);
     return () => {
       document.removeEventListener("keydown", onKeyDown);
       document.removeEventListener("mousedown", onPointerDown);
-      window.removeEventListener("scroll", onClose, true);
+      window.removeEventListener("scroll", onScroll, true);
       window.removeEventListener("resize", onClose);
     };
   }, [anchor, onClose]);
