@@ -173,4 +173,78 @@ describe("ReaderView", () => {
     await user.click(grayMarker);
     expect(await screen.findByText(/written for KJV/)).toBeInTheDocument();
   });
+
+  it("jumps to a reference (resolved by Concord) and navigates", async () => {
+    server.use(
+      http.get("/api/v1/resolve", () =>
+        HttpResponse.json({ reference: "Acts 1", book: "ACT", chapter: 1, verse: null }),
+      ),
+    );
+    const user = userEvent.setup();
+    renderReader();
+
+    expect(await screen.findByText(/JHN 3:16/)).toBeInTheDocument();
+    await user.type(screen.getByLabelText("Jump to reference"), "Acts 1");
+    await user.click(screen.getByRole("button", { name: "Go" }));
+    expect(await screen.findByText(/ACT 1:16/)).toBeInTheDocument();
+  });
+
+  it("shows a not-found message for an unparseable reference", async () => {
+    server.use(
+      http.get("/api/v1/resolve", () =>
+        HttpResponse.json({ detail: { code: "NOT_FOUND", message: "nope" } }, { status: 404 }),
+      ),
+    );
+    const user = userEvent.setup();
+    renderReader();
+
+    await user.type(await screen.findByLabelText("Jump to reference"), "asdfqwer");
+    await user.click(screen.getByRole("button", { name: "Go" }));
+    expect(await screen.findByText(/Couldn't find that reference/)).toBeInTheDocument();
+  });
+
+  it("navigates with next and previous chapter", async () => {
+    const user = userEvent.setup();
+    renderReader();
+
+    expect(await screen.findByText(/JHN 3:16/)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Next chapter" }));
+    expect(await screen.findByText(/JHN 4:16/)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Previous chapter" }));
+    expect(await screen.findByText(/JHN 3:16/)).toBeInTheDocument();
+  });
+
+  it("keeps the annotation overlay after navigating", async () => {
+    server.use(
+      http.get("/api/v1/read/:translation/:book/:chapter", ({ params }) => {
+        const book = String(params.book);
+        const chapter = Number(params.chapter);
+        return HttpResponse.json({
+          translation: "KJV",
+          book,
+          chapter,
+          reference: `${book} ${chapter}`,
+          verses: [
+            {
+              book,
+              chapter,
+              verse: 16,
+              reference: `${book} ${chapter}:16`,
+              text: `${book} ${chapter}:16 — text`,
+              annotations: [annotation()],
+            },
+          ],
+        });
+      }),
+    );
+    const user = userEvent.setup();
+    renderReader();
+
+    expect(
+      await screen.findByRole("button", { name: "View note on verse 16" }),
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Next chapter" }));
+    expect(await screen.findByText(/JHN 4:16/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "View note on verse 16" })).toBeInTheDocument();
+  });
 });

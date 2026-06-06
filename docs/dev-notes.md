@@ -4,6 +4,52 @@ A running log of per-slice decisions, gotchas, and how each slice was verified. 
 
 ---
 
+## Slice 3 — Navigation
+
+- **Date:** 2026-06-05
+- **PR:** [#5 — Slice 3: Navigation](https://github.com/kbennett2000/songbird/pull/5)
+- **Branch:** `slice/3-navigation`
+
+### What it establishes
+Jump-to-reference bar, book/chapter picker, and next/previous chapter across book boundaries.
+A thin slice: **Concord parses references and owns the canon; songbird wires the UI.** Overlay +
+translation switching keep working through navigation.
+
+### Open-question resolutions
+1. **Dedicated resolve endpoint** `GET /api/v1/resolve?ref=` proxying Concord's `/v1/verses/{ref}`.
+2. **Verse in a reference** → load the chapter + scroll-to/soft-highlight that verse (single-verse
+   refs only; ranges just load the chapter).
+3. **Boundary data** = `/v1/books` `chapter_count` + `canonical_order` (already proxied from S1);
+   next/prev computed client-side in `lib/navigation.ts`.
+4. **Picker** = book + chapter dropdowns (book change resets to chapter 1), joined by the jump bar
+   + next/prev buttons.
+
+### Gotchas / decisions
+- **Concord returns BOTH 400 and 404 for a bad reference**, and both mean "couldn't find it":
+  `400 unparseable_reference` (garbage, or a book with no chapter like "Romans") and
+  `404 unknown_book / no_verses_found` ("Hesitations 3", "John 999"). `resolve_reference` maps
+  **both → `ConcordNotFoundError` → songbird 404**; only connection/5xx → 502. This widens Slice
+  1's `get_chapter` (which special-cased 404 only) — don't assume parse failures are 404.
+- **Verse heuristic:** Concord's resolver returns the whole chapter for a chapter ref ("John 3" →
+  36 verses) and exactly one verse for a verse ref ("Gen 1:1" → 1). So `verse = verses[0].verse
+  if len(verses)==1 else None`. (No single-verse chapters exist in the canon, so this is safe.)
+- **No canon in songbird:** next/prev derive entirely from `/v1/books` (`chapter_count` +
+  `canonical_order`, GEN=1 … REV=66); `lib/navigation.ts` returns `null` at the ends (caller
+  disables the button). Pure + unit-tested.
+- **Reference encoding:** the raw string is `encodeURIComponent`-d on the way to songbird and
+  `urllib.parse.quote`-d on the way to Concord — "1 Cor 13" (space + number) resolves fine.
+- **scrollIntoView guard:** the highlight effect checks `typeof el.scrollIntoView === "function"`
+  (happy-dom doesn't implement it) so the Vitest suite stays green.
+
+### How it was verified
+- Backend: Ruff + Pyright-strict clean; `pytest` 39 passed (3 `concord` live deselected). New:
+  `resolve_test.py` + extended `concord_client_test.py`.
+- Frontend: ESLint + `tsc` clean; Vitest 19 passed (incl. `navigation.test.ts` boundary/clamp).
+- Live (real Concord): resolve "John 3"/"Gen 1:1"/"1 Cor 13" correct; "asdf"/"Romans"/"John 999"/
+  "Hesitations 3" all → songbird 404 (none leak as 502).
+
+---
+
 ## Slice 2 — Translation switching + scope
 
 - **Date:** 2026-06-05

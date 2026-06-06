@@ -81,11 +81,19 @@ export const readChapterSchema = z.object({
   verses: z.array(readVerseSchema),
 });
 
+export const resolvedReferenceSchema = z.object({
+  reference: z.string(),
+  book: z.string(),
+  chapter: z.number(),
+  verse: z.number().nullable(),
+});
+
 export type Book = z.infer<typeof bookSchema>;
 export type Annotation = z.infer<typeof annotationSchema>;
 export type ReadAnnotation = z.infer<typeof readAnnotationSchema>;
 export type ReadVerse = z.infer<typeof readVerseSchema>;
 export type ReadChapter = z.infer<typeof readChapterSchema>;
+export type ResolvedReference = z.infer<typeof resolvedReferenceSchema>;
 
 // Annotation scope (SPEC §2) for the editor's scope picker.
 export type ScopeType = "all" | "current" | "subset";

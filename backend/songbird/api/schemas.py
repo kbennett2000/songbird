@@ -53,6 +53,16 @@ class ReadAnnotation(AnnotationOut):
     in_scope: bool
 
 
+class ResolvedReference(BaseModel):
+    """A raw reference resolved (by Concord) to canonical coordinates. `verse` is set only
+    when the reference named a single verse (so the reader can scroll to / highlight it)."""
+
+    reference: str  # Concord's parsed/canonical form, e.g. "John 3"
+    book: str  # USFM code
+    chapter: int
+    verse: int | None
+
+
 class ReadVerse(BaseModel):
     book: str  # USFM code — canonical
     chapter: int

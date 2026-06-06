@@ -3,11 +3,13 @@ import {
   type Annotation,
   type Book,
   type ReadChapter,
+  type ResolvedReference,
   type ScopeType,
   type Translation,
   annotationSchema,
   booksResponseSchema,
   readChapterSchema,
+  resolvedReferenceSchema,
   translationsResponseSchema,
 } from "@/schemas";
 
@@ -19,6 +21,12 @@ export async function fetchBooks(): Promise<Book[]> {
 export async function fetchTranslations(): Promise<Translation[]> {
   const data = await apiRequest<unknown>("GET", "/translations");
   return translationsResponseSchema.parse(data).translations;
+}
+
+/** Resolve a raw reference ("John 3", "Gen 1:1") to canonical coords — via Concord. */
+export async function resolveReference(ref: string): Promise<ResolvedReference> {
+  const data = await apiRequest<unknown>("GET", `/resolve?ref=${encodeURIComponent(ref)}`);
+  return resolvedReferenceSchema.parse(data);
 }
 
 export async function fetchChapter(

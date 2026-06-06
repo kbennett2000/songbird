@@ -1,15 +1,18 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { type FormEvent, useEffect, useMemo, useState } from "react";
 
 import { NoteEditor } from "@/components/NoteEditor";
 import { ScopePicker } from "@/components/ScopePicker";
 import { SidePanel } from "@/components/SidePanel";
+import { ApiError } from "@/lib/api";
+import { nextChapter, prevChapter } from "@/lib/navigation";
 import {
   createAnnotation,
   deleteAnnotation,
   fetchBooks,
   fetchChapter,
   fetchTranslations,
+  resolveReference,
   updateAnnotation,
 } from "@/lib/reader";
 import type { ReadAnnotation, ReadVerse, Scope } from "@/schemas";
@@ -30,6 +33,9 @@ export function ReaderView(): JSX.Element {
   const [book, setBook] = useState("JHN");
   const [chapter, setChapter] = useState(3);
   const [editing, setEditing] = useState<Editing | null>(null);
+  const [refInput, setRefInput] = useState("");
+  const [resolveError, setResolveError] = useState<string | null>(null);
+  const [highlightVerse, setHighlightVerse] = useState<number | null>(null);
 
   const booksQuery = useQuery({ queryKey: ["books"], queryFn: fetchBooks });
   const translationsQuery = useQuery({ queryKey: ["translations"], queryFn: fetchTranslations });
@@ -39,15 +45,57 @@ export function ReaderView(): JSX.Element {
   });
 
   const translations = useMemo(() => translationsQuery.data ?? [], [translationsQuery.data]);
+  const books = useMemo(() => booksQuery.data ?? [], [booksQuery.data]);
 
-  const selectedBook = useMemo(
-    () => booksQuery.data?.find((b) => b.id === book),
-    [booksQuery.data, book],
-  );
+  const selectedBook = useMemo(() => books.find((b) => b.id === book), [books, book]);
   const chapterOptions = useMemo(() => {
     const count = selectedBook?.chapter_count ?? chapter;
     return Array.from({ length: count }, (_, i) => i + 1);
   }, [selectedBook, chapter]);
+
+  // Navigate the reader. A verse (from a single-verse jump) is scrolled-to + briefly highlit.
+  const navigate = (b: string, c: number, verse: number | null = null) => {
+    setBook(b);
+    setChapter(c);
+    setHighlightVerse(verse);
+    setResolveError(null);
+  };
+
+  const next = nextChapter(books, book, chapter);
+  const prev = prevChapter(books, book, chapter);
+
+  const resolveMutation = useMutation({
+    mutationFn: (ref: string) => resolveReference(ref),
+    onSuccess: (r) => {
+      navigate(r.book, r.chapter, r.verse);
+      setRefInput("");
+    },
+    onError: (err) => {
+      const code = err instanceof ApiError ? err.code : "";
+      setResolveError(
+        code === "NOT_FOUND"
+          ? "Couldn't find that reference."
+          : "Couldn't resolve that reference (is Concord reachable?).",
+      );
+    },
+  });
+
+  const submitRef = (e: FormEvent) => {
+    e.preventDefault();
+    const ref = refInput.trim();
+    if (ref) resolveMutation.mutate(ref);
+  };
+
+  // Scroll to / briefly highlight a jumped-to verse once the chapter has rendered.
+  useEffect(() => {
+    if (highlightVerse === null || !chapterQuery.data) return;
+    const el = document.getElementById(`v-${highlightVerse}`);
+    if (el && typeof el.scrollIntoView === "function") {
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+    const timer = setTimeout(() => setHighlightVerse(null), 2500);
+    return () => clearTimeout(timer);
+  }, [highlightVerse, chapterQuery.data]);
 
   const invalidateChapter = () =>
     queryClient.invalidateQueries({ queryKey: ["chapter", translation, book, chapter] });
@@ -116,56 +164,101 @@ export function ReaderView(): JSX.Element {
   return (
     <div className="min-h-screen bg-stone-50">
       <header className="border-b border-gray-200 bg-white">
-        <div className="mx-auto flex max-w-3xl flex-wrap items-center gap-3 p-4">
-          <h1 className="text-2xl font-bold tracking-tight">songbird</h1>
-          <div className="ml-auto flex items-center gap-2 text-sm">
-            <label className="flex items-center gap-1">
-              <span className="text-gray-500">Book</span>
-              <select
-                className="rounded border border-gray-300 px-2 py-1"
-                value={book}
-                onChange={(e) => setBook(e.target.value)}
-                aria-label="Book"
-              >
-                {(booksQuery.data ?? [{ id: book, name: book, chapter_count: null }]).map((b) => (
-                  <option key={b.id} value={b.id}>
-                    {b.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="flex items-center gap-1">
-              <span className="text-gray-500">Chapter</span>
-              <select
-                className="rounded border border-gray-300 px-2 py-1"
-                value={chapter}
-                onChange={(e) => setChapter(Number(e.target.value))}
-                aria-label="Chapter"
-              >
-                {chapterOptions.map((c) => (
-                  <option key={c} value={c}>
-                    {c}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="flex items-center gap-1">
-              <span className="text-gray-500">Translation</span>
-              <select
-                className="rounded border border-gray-300 px-2 py-1"
-                value={translation}
-                onChange={(e) => setTranslation(e.target.value)}
-                aria-label="Translation"
-              >
-                {(translations.length > 0 ? translations : [{ id: translation, name: translation }]).map(
-                  (t) => (
+        <div className="mx-auto flex max-w-3xl flex-col gap-3 p-4">
+          <div className="flex flex-wrap items-center gap-3">
+            <h1 className="text-2xl font-bold tracking-tight">songbird</h1>
+            <div className="ml-auto flex items-center gap-2 text-sm">
+              <label className="flex items-center gap-1">
+                <span className="text-gray-500">Book</span>
+                <select
+                  className="rounded border border-gray-300 px-2 py-1"
+                  value={book}
+                  onChange={(e) => navigate(e.target.value, 1)}
+                  aria-label="Book"
+                >
+                  {(books.length > 0 ? books : [{ id: book, name: book }]).map((b) => (
+                    <option key={b.id} value={b.id}>
+                      {b.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="flex items-center gap-1">
+                <span className="text-gray-500">Chapter</span>
+                <select
+                  className="rounded border border-gray-300 px-2 py-1"
+                  value={chapter}
+                  onChange={(e) => navigate(book, Number(e.target.value))}
+                  aria-label="Chapter"
+                >
+                  {chapterOptions.map((c) => (
+                    <option key={c} value={c}>
+                      {c}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="flex items-center gap-1">
+                <span className="text-gray-500">Translation</span>
+                <select
+                  className="rounded border border-gray-300 px-2 py-1"
+                  value={translation}
+                  onChange={(e) => setTranslation(e.target.value)}
+                  aria-label="Translation"
+                >
+                  {(translations.length > 0
+                    ? translations
+                    : [{ id: translation, name: translation }]
+                  ).map((t) => (
                     <option key={t.id} value={t.id}>
                       {t.id}
                     </option>
-                  ),
-                )}
-              </select>
-            </label>
+                  ))}
+                </select>
+              </label>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3">
+            <form onSubmit={submitRef} className="flex items-center gap-2">
+              <input
+                type="text"
+                value={refInput}
+                onChange={(e) => setRefInput(e.target.value)}
+                placeholder="Jump to… e.g. John 3, Gen 1:1"
+                aria-label="Jump to reference"
+                className="w-56 rounded border border-gray-300 px-2 py-1 text-sm"
+              />
+              <button
+                type="submit"
+                className="rounded bg-blue-600 px-3 py-1 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+                disabled={resolveMutation.isPending}
+              >
+                Go
+              </button>
+              {resolveError && <span className="text-sm text-red-600">{resolveError}</span>}
+            </form>
+
+            <div className="ml-auto flex items-center gap-2">
+              <button
+                type="button"
+                className="rounded border border-gray-300 px-3 py-1 text-sm hover:bg-gray-100 disabled:opacity-40"
+                onClick={() => prev && navigate(prev.book, prev.chapter)}
+                disabled={!prev}
+                aria-label="Previous chapter"
+              >
+                ← Prev
+              </button>
+              <button
+                type="button"
+                className="rounded border border-gray-300 px-3 py-1 text-sm hover:bg-gray-100 disabled:opacity-40"
+                onClick={() => next && navigate(next.book, next.chapter)}
+                disabled={!next}
+                aria-label="Next chapter"
+              >
+                Next →
+              </button>
+            </div>
           </div>
         </div>
       </header>
@@ -184,9 +277,10 @@ export function ReaderView(): JSX.Element {
               return (
                 <p
                   key={v.verse}
+                  id={`v-${v.verse}`}
                   className={`group relative -mx-3 rounded px-3 py-0.5 ${
                     inScope.length > 0 ? "bg-amber-100" : ""
-                  }`}
+                  } ${highlightVerse === v.verse ? "ring-2 ring-blue-400" : ""}`}
                 >
                   <button
                     type="button"

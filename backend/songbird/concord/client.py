@@ -6,6 +6,8 @@ over HTTP at a configured URL, never embedded; when it is unreachable songbird r
 clear error rather than falling back.
 """
 
+from urllib.parse import quote
+
 import httpx
 
 from songbird.concord.schemas import (
@@ -86,6 +88,23 @@ class ConcordClient:
                 raise ConcordNotFoundError(
                     f"Concord has no {book} {chapter} (in {translation})"
                 ) from exc
+            raise ConcordUnreachableError(self._base_url, exc) from exc
+        except httpx.HTTPError as exc:
+            raise ConcordUnreachableError(self._base_url, exc) from exc
+        return Chapter.model_validate(response.json())
+
+    async def resolve_reference(self, ref: str) -> Chapter:
+        """Resolve a raw human reference ("John 3", "Gen 1:1", "1 Cor 13") to canonical
+        coordinates by delegating to Concord's resolver — songbird never parses references
+        itself. Concord returns 400 for an unparseable reference and 404 for an unknown
+        book / out-of-range chapter; both are a "couldn't find that reference" (not
+        unreachability), so both surface as ConcordNotFoundError."""
+        try:
+            response = await self._client.get(f"/v1/verses/{quote(ref, safe='')}")
+            response.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code in (400, 404):
+                raise ConcordNotFoundError(f"Concord could not resolve '{ref}'") from exc
             raise ConcordUnreachableError(self._base_url, exc) from exc
         except httpx.HTTPError as exc:
             raise ConcordUnreachableError(self._base_url, exc) from exc

@@ -110,3 +110,55 @@ async def test_get_chapter_transport_error_is_unreachable() -> None:
     with pytest.raises(ConcordUnreachableError):
         await client.get_chapter("JHN", 3, "KJV")
     await client.aclose()
+
+
+async def test_resolve_reference_parses() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=_chapter_json())
+
+    client = ConcordClient("http://concord.test", transport=httpx.MockTransport(handler))
+    chapter = await client.resolve_reference("John 3:16")
+    await client.aclose()
+    assert chapter.verses[0].book == "JHN"
+    assert chapter.verses[0].chapter == 3
+
+
+async def test_resolve_reference_400_is_not_found() -> None:
+    # Concord returns 400 for an unparseable reference — a "couldn't find it", not unreachable.
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(400, json={"error": {"code": "unparseable_reference"}})
+
+    client = ConcordClient("http://concord.test", transport=httpx.MockTransport(handler))
+    with pytest.raises(ConcordNotFoundError):
+        await client.resolve_reference("asdfqwer")
+    await client.aclose()
+
+
+async def test_resolve_reference_404_is_not_found() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(404, json={"error": {"code": "unknown_book"}})
+
+    client = ConcordClient("http://concord.test", transport=httpx.MockTransport(handler))
+    with pytest.raises(ConcordNotFoundError):
+        await client.resolve_reference("Hesitations 3")
+    await client.aclose()
+
+
+async def test_resolve_reference_5xx_is_unreachable() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(503)
+
+    client = ConcordClient("http://concord.test", transport=httpx.MockTransport(handler))
+    with pytest.raises(ConcordUnreachableError):
+        await client.resolve_reference("John 3")
+    await client.aclose()
+
+
+async def test_resolve_reference_transport_error_is_unreachable() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("no route", request=request)
+
+    client = ConcordClient("http://concord.test", transport=httpx.MockTransport(handler))
+    with pytest.raises(ConcordUnreachableError):
+        await client.resolve_reference("John 3")
+    await client.aclose()
