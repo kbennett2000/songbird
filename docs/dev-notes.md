@@ -4,6 +4,34 @@ A running log of per-slice decisions, gotchas, and how each slice was verified. 
 
 ---
 
+## v1.1.0 — Map view documented + released
+
+- **Date:** 2026-06-06
+- **Branch:** `docs/v1.1-release`
+- **PR:** _Docs & v1.1.0 release_
+
+### What it establishes
+songbird is now at **v1.1** — the offline **map view** is the v1.1 addition on top of the
+feature-complete v1.0.0 core (still fully offline, still built on Concord). The map shipped (slices
+S9/S10) and was live-verified, but the docs didn't show or mention it. This makes it **visible**: a
+finished feature a stranger reading the README can't tell exists isn't really done.
+
+### What changed (docs only — no feature/behavior/Concord change)
+- **README "See it":** swapped the places-*list* screenshot for the **map** (`map-desktop.png`,
+  reused from the live-visual-verify pass) — geography now leads with the map. Still three
+  screenshots (reader, search, map).
+- **README copy:** the intro line, the "Using songbird" tour (tap the globe → places on a map, when
+  known), and the "How it works" link to **`docs/v1.1/MAP-SPEC.md`** + a light "added in v1.1" note.
+  Honest framing kept throughout — located places pinned, unknown/off-map listed, never faked.
+
+### Topology note
+The map feature + screenshots lived on `slice/9-map-projection` (PRs #14/#15 merged there), not yet
+on `main`. This PR was cut off `slice/9-map-projection`, so the single merge to `main` brought the
+already-reviewed map feature (#14), the verification (#15), **and** these v1.1 docs together — then
+`v1.1.0` was tagged on `main`.
+
+---
+
 ## v1.1 Map View — live visual verification
 
 - **Date:** 2026-06-06
