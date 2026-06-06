@@ -34,4 +34,43 @@ export const defaultHandlers = [
       ],
     }),
   ),
+  http.get("/api/v1/books", () =>
+    HttpResponse.json({
+      books: [
+        {
+          id: "JHN",
+          name: "John",
+          testament: "NT",
+          chapter_count: 21,
+          canonical_order: 43,
+        },
+      ],
+    }),
+  ),
+  http.get("/api/v1/read/:translation/:book/:chapter", () =>
+    HttpResponse.json({
+      translation: "KJV",
+      book: "JHN",
+      chapter: 3,
+      reference: "John 3",
+      verses: [
+        {
+          book: "JHN",
+          chapter: 3,
+          verse: 16,
+          reference: "John 3:16",
+          text: "For God so loved the world...",
+          annotations: [],
+        },
+        {
+          book: "JHN",
+          chapter: 3,
+          verse: 17,
+          reference: "John 3:17",
+          text: "For God sent not his Son...",
+          annotations: [],
+        },
+      ],
+    }),
+  ),
 ];
