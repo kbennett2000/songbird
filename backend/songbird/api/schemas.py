@@ -140,6 +140,34 @@ class SemanticResult(BaseModel):
     text: str | None
 
 
+class NoteCrossReference(BaseModel):
+    """A cross-reference carried by a translator's note (from Concord) → a target verse or
+    range. Canonical coords, so the note popover reuses songbird's coordinate navigation."""
+
+    to_book: str  # USFM code — canonical (jump reuses navigation directly)
+    to_chapter: int
+    to_verse_start: int
+    to_verse_end: int | None
+    reference: str  # human-readable, e.g. "Romans 5:8"
+
+
+class TranslatorNote(BaseModel):
+    """One translator's note (from Concord). Translation-specific: `char_offset` is a point
+    anchor into THAT translation's verse text where the marker attaches. songbird stores
+    none of this — it's a pass-through of Concord's notes data."""
+
+    book: str  # USFM code — canonical (the note's anchor)
+    chapter: int
+    verse: int
+    reference: str  # human-readable, e.g. "John 3:16"
+    type: str | None  # tn | sn | tc | map | null (plain footnote)
+    text: str
+    char_offset: int  # point anchor into the verse text — where the marker attaches
+    marker: str | None  # source marker (e.g. NET's footnote number)
+    ordinal: int  # stable order within a verse
+    cross_references: list[NoteCrossReference]
+
+
 class ResolvedReference(BaseModel):
     """A raw reference resolved (by Concord) to canonical coordinates. `verse` is set only
     when the reference named a single verse (so the reader can scroll to / highlight it)."""

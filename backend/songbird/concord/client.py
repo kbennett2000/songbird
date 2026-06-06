@@ -16,6 +16,7 @@ from songbird.concord.schemas import (
     Chapter,
     ConcordHealth,
     CrossRefResponse,
+    NotesResponse,
     PlaceVersesResponse,
     SemanticSearchResponse,
     Translation,
@@ -157,6 +158,26 @@ class ConcordClient:
         except httpx.HTTPError as exc:
             raise ConcordUnreachableError(self._base_url, exc) from exc
         return VersePlacesResponse.model_validate(response.json())
+
+    async def get_notes(self, translation: str, book: str, chapter: int) -> NotesResponse:
+        """Translator's notes for a whole chapter in one translation, from Concord (songbird
+        owns no notes). A known translation with no notes is a normal empty 200, not an error;
+        a 400/404 (unknown translation/book) is a not-found, not unreachability."""
+        try:
+            response = await self._client.get(
+                f"/v1/translations/{quote(translation, safe='')}"
+                f"/notes/{quote(book, safe='')}/{chapter}"
+            )
+            response.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code in (400, 404):
+                raise ConcordNotFoundError(
+                    f"Concord has no notes for {book} {chapter} (in {translation})"
+                ) from exc
+            raise ConcordUnreachableError(self._base_url, exc) from exc
+        except httpx.HTTPError as exc:
+            raise ConcordUnreachableError(self._base_url, exc) from exc
+        return NotesResponse.model_validate(response.json())
 
     async def get_place_verses(self, place_id: str) -> PlaceVersesResponse:
         """The verses that mention a place (canonical coords → jump reuses navigation)."""
