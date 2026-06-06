@@ -2,6 +2,53 @@
 
 A running log of per-slice decisions, gotchas, and how each slice was verified. Newest first.
 
+> Note: the Slice 6 (Geography) entry lives on PR #8; this branch was cut from `main` before
+> S6 merged, so S7 sits directly above S5 here. They reconcile when both PRs land.
+
+---
+
+## Slice 7 — Semantic search
+
+- **Date:** 2026-06-06
+- **PR:** [#9 — Slice 7: Semantic search](https://github.com/kbennett2000/songbird/pull/9)
+- **Branch:** `slice/7-semantic-search`
+
+### What it establishes
+Search Scripture by meaning via Concord's `/v1/semantic-search` (ranked verses with scores,
+each jumping to the verse), plus keyword search of the user's own notes. The architectural
+payoff: the heaviest capability (313MB model + ONNX) is a one-line HTTP call — the model lives
+in Concord, never in songbird.
+
+### The Q1 decision (note search) + reasoning
+Concord exposes **no embed-arbitrary-text endpoint** — its complete `/v1` surface is books,
+chapters, cross-references, random, search, semantic-search, translations, verses. So songbird
+**cannot** semantically embed note text without growing its own ML stack (which the invariant
+forbids). Decision: **Scripture = semantic (Concord); notes = keyword** (case-insensitive
+substring over `note_markdown`, via a new `q` param on the browse list). **Semantic note search
+is deferred**, explicitly gated on a future Concord embed endpoint — documented and labeled in
+the UI ("keyword"), never faked. (Option (b) impossible; (c) violates no-ML.)
+
+### Other resolutions
+2. **One combined `/search` view**, two clearly-labeled sections (Scripture *semantic* + notes
+   *keyword*); "Search" link in the reader header.
+3. **Params:** `translation` for display (KJV first cut), `limit=20`, no `min_score`; empty query
+   short-circuits to `[]` (Concord 422s on empty `q`).
+4. **Result → reader:** reuse the `/?book=&chapter=&verse=` search-param jump (S3/S4).
+
+### Gotchas
+- **422 on empty/invalid query** — the client maps **400/404/422 → ConcordNotFoundError**; the
+  endpoint also guards empty `q` → `[]` (no call), so the common case never hits Concord.
+- **Scores are honest signal** — surfaced like cross-ref votes / geography status; results stay in
+  Concord's rank order.
+- **No ML entered songbird** — `requirements.txt` unchanged; the slice is a schema + a `try/except`.
+
+### How it was verified
+- Backend: Ruff + Pyright-strict clean; `pytest` 67 passed (3 `concord` live deselected). New:
+  `semantic_search_test.py`, `annotation_search_test.py` + extended `concord_client_test.py`.
+- Frontend: ESLint + `tsc` clean; Vitest 28 passed. New: `SearchView.test.tsx`.
+- Live (semantic-capable Concord): "anxiety" → Proverbs 12:25 (0.895) etc. with scores; empty q
+  → `[]` (no call); unknown translation → 404; note keyword search finds the matching note.
+
 ---
 
 ## Slice 5 — Cross-references
