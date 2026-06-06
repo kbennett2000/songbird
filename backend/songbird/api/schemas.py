@@ -4,8 +4,9 @@ Kept separate from `concord/schemas.py` (which models Concord's responses).
 """
 
 from datetime import datetime
+from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class AnnotationCreate(BaseModel):
@@ -19,6 +20,7 @@ class AnnotationCreate(BaseModel):
     scope_type: str = "all"
     # Concrete translation codes for 'current' (exactly 1) / 'subset' (≥1); empty for 'all'.
     translations: list[str] = Field(default_factory=list)
+    tags: list[str] = Field(default_factory=list)
 
 
 class AnnotationUpdate(BaseModel):
@@ -26,6 +28,7 @@ class AnnotationUpdate(BaseModel):
     color: str | None = None
     scope_type: str | None = None
     translations: list[str] | None = None
+    tags: list[str] | None = None
 
 
 class AnnotationOut(BaseModel):
@@ -41,9 +44,16 @@ class AnnotationOut(BaseModel):
     color: str | None
     scope_type: str
     scope_translations: list[str]  # resolved codes; [] for 'all'
+    tags: list[str]
     author_id: int
     created_at: datetime
     updated_at: datetime
+
+    @field_validator("tags", mode="before")
+    @classmethod
+    def _tag_names(cls, value: Any) -> list[str]:
+        # Map ORM Tag objects → names (from_attributes); pass plain strings through.
+        return [getattr(t, "name", t) for t in value]
 
 
 class ReadAnnotation(AnnotationOut):

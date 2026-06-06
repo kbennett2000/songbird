@@ -7,18 +7,40 @@ Concord's translation list.
 """
 
 from fastapi import APIRouter, Depends, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from songbird.api.deps import get_concord_client, get_db
 from songbird.api.schemas import AnnotationCreate, AnnotationOut, AnnotationUpdate
 from songbird.concord.client import ConcordClient, ConcordUnreachableError
 from songbird.core.errors import ErrorCode, raise_http
-from songbird.db.models import Annotation, AnnotationTranslation
+from songbird.db.models import Annotation, AnnotationTranslation, Tag
 
 router = APIRouter(prefix="/api/v1/annotations", tags=["annotations"])
 
 DEFAULT_AUTHOR_ID = 1
+
+
+def _normalize_tags(names: list[str]) -> list[str]:
+    return list(dict.fromkeys(n.strip().lower() for n in names if n.strip()))
+
+
+async def _resolve_tags(db: AsyncSession, names: list[str]) -> list[Tag]:
+    """Get-or-create Tag rows for these names (songbird-owned; no Concord)."""
+    normalized = _normalize_tags(names)
+    if not normalized:
+        return []
+    existing = (await db.execute(select(Tag).where(Tag.name.in_(normalized)))).scalars().all()
+    by_name = {t.name: t for t in existing}
+    resolved: list[Tag] = []
+    for name in normalized:
+        tag = by_name.get(name)
+        if tag is None:
+            tag = Tag(name=name)
+            db.add(tag)
+            by_name[name] = tag
+        resolved.append(tag)
+    return resolved
 
 
 async def _resolve_scope(
@@ -67,6 +89,28 @@ async def _get_or_404(db: AsyncSession, annotation_id: int) -> Annotation:
     return annotation
 
 
+@router.get("", response_model=list[AnnotationOut])
+async def list_annotations(
+    tags: str | None = None,
+    match: str = "all",
+    db: AsyncSession = Depends(get_db),
+) -> list[AnnotationOut]:
+    """Browse annotations, optionally filtered by tag(s). Concord-free — tags are songbird's
+    own domain. `match=all` (default) returns annotations having ALL the given tags; `any`
+    returns those having any. No tags → all annotations."""
+    stmt = select(Annotation)
+    names = _normalize_tags(tags.split(",")) if tags else []
+    if names:
+        stmt = stmt.join(Annotation.tags).where(Tag.name.in_(names)).group_by(Annotation.id)
+        if match == "all":
+            stmt = stmt.having(func.count(func.distinct(Tag.id)) == len(names))
+    stmt = stmt.order_by(
+        Annotation.book_usfm, Annotation.start_chapter, Annotation.start_verse, Annotation.id
+    )
+    annotations = (await db.execute(stmt)).scalars().unique().all()
+    return [AnnotationOut.model_validate(a) for a in annotations]
+
+
 @router.post("", response_model=AnnotationOut, status_code=status.HTTP_201_CREATED)
 async def create_annotation(
     body: AnnotationCreate,
@@ -85,9 +129,10 @@ async def create_annotation(
         scope_type=body.scope_type,
         author_id=DEFAULT_AUTHOR_ID,
         translations=[AnnotationTranslation(translation_code=c) for c in codes],
+        tags=await _resolve_tags(db, body.tags),
     )
     db.add(annotation)
-    await db.commit()  # expire_on_commit=False keeps the in-memory translations
+    await db.commit()  # expire_on_commit=False keeps the in-memory translations + tags
     return AnnotationOut.model_validate(annotation)
 
 
@@ -120,6 +165,8 @@ async def update_annotation(
         codes = await _resolve_scope(new_scope_type, new_codes, concord)
         annotation.scope_type = new_scope_type
         annotation.translations = [AnnotationTranslation(translation_code=c) for c in codes]
+    if body.tags is not None:
+        annotation.tags = await _resolve_tags(db, body.tags)
     await db.commit()
     return AnnotationOut.model_validate(annotation)
 
