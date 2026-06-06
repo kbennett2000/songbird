@@ -1,0 +1,13 @@
+{
+  "name": "songbird-screenshots",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Reproducible Playwright capture of the three README screenshots, driven against a running songbird stack (docker compose up).",
+  "scripts": {
+    "capture": "node capture.mjs"
+  },
+  "dependencies": {
+    "playwright": "^1.49.0"
+  }
+}
