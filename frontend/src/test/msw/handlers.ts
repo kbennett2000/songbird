@@ -67,4 +67,6 @@ export const defaultHandlers = [
   http.get("/api/v1/resolve", () =>
     HttpResponse.json({ reference: "John 3", book: "JHN", chapter: 3, verse: null }),
   ),
+  http.get("/api/v1/tags", () => HttpResponse.json([])),
+  http.get("/api/v1/annotations", () => HttpResponse.json([])),
 ];

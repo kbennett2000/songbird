@@ -27,3 +27,5 @@ data/*.db
 .claude/
 .DS_Store
 Thumbs.db
+
+docs/older-brother.md

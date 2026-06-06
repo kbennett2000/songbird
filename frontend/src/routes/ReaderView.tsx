@@ -1,9 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type FormEvent, useEffect, useMemo, useState } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 
 import { NoteEditor } from "@/components/NoteEditor";
 import { ScopePicker } from "@/components/ScopePicker";
 import { SidePanel } from "@/components/SidePanel";
+import { TagInput } from "@/components/TagInput";
 import { ApiError } from "@/lib/api";
 import { nextChapter, prevChapter } from "@/lib/navigation";
 import {
@@ -11,6 +13,7 @@ import {
   deleteAnnotation,
   fetchBooks,
   fetchChapter,
+  fetchTags,
   fetchTranslations,
   resolveReference,
   updateAnnotation,
@@ -25,20 +28,27 @@ interface Editing {
   initialMarkdown: string;
   scope: Scope;
   scopeLabel: string | null; // "written for KJV" when out-of-scope for the current translation
+  tags: string[];
 }
 
 export function ReaderView(): JSX.Element {
   const queryClient = useQueryClient();
+  // A jump-from-browse arrives as ?book=&chapter=&verse=; seed the initial location from it.
+  const [searchParams] = useSearchParams();
   const [translation, setTranslation] = useState(DEFAULT_TRANSLATION);
-  const [book, setBook] = useState("JHN");
-  const [chapter, setChapter] = useState(3);
+  const [book, setBook] = useState(() => searchParams.get("book") ?? "JHN");
+  const [chapter, setChapter] = useState(() => Number(searchParams.get("chapter") ?? 3));
   const [editing, setEditing] = useState<Editing | null>(null);
   const [refInput, setRefInput] = useState("");
   const [resolveError, setResolveError] = useState<string | null>(null);
-  const [highlightVerse, setHighlightVerse] = useState<number | null>(null);
+  const [highlightVerse, setHighlightVerse] = useState<number | null>(() => {
+    const v = searchParams.get("verse");
+    return v ? Number(v) : null;
+  });
 
   const booksQuery = useQuery({ queryKey: ["books"], queryFn: fetchBooks });
   const translationsQuery = useQuery({ queryKey: ["translations"], queryFn: fetchTranslations });
+  const tagsQuery = useQuery({ queryKey: ["tags"], queryFn: fetchTags });
   const chapterQuery = useQuery({
     queryKey: ["chapter", translation, book, chapter],
     queryFn: () => fetchChapter(translation, book, chapter),
@@ -108,6 +118,7 @@ export function ReaderView(): JSX.Element {
           note_markdown: markdown,
           scope_type: editing.scope.type,
           translations: editing.scope.translations,
+          tags: editing.tags,
         });
       } else {
         await createAnnotation({
@@ -119,11 +130,13 @@ export function ReaderView(): JSX.Element {
           note_markdown: markdown,
           scope_type: editing.scope.type,
           translations: editing.scope.translations,
+          tags: editing.tags,
         });
       }
     },
     onSuccess: async () => {
       await invalidateChapter();
+      await queryClient.invalidateQueries({ queryKey: ["tags"] });
       setEditing(null);
     },
   });
@@ -145,6 +158,7 @@ export function ReaderView(): JSX.Element {
       initialMarkdown: "",
       scope: { type: "all", translations: [] },
       scopeLabel: null,
+      tags: [],
     });
 
   const openExisting = (verse: ReadVerse, annotation: ReadAnnotation) =>
@@ -159,6 +173,7 @@ export function ReaderView(): JSX.Element {
       scopeLabel: annotation.in_scope
         ? null
         : `written for ${annotation.scope_translations.join(", ")}`,
+      tags: annotation.tags,
     });
 
   return (
@@ -167,6 +182,9 @@ export function ReaderView(): JSX.Element {
         <div className="mx-auto flex max-w-3xl flex-col gap-3 p-4">
           <div className="flex flex-wrap items-center gap-3">
             <h1 className="text-2xl font-bold tracking-tight">songbird</h1>
+            <Link to="/browse" className="text-sm text-blue-700 hover:underline">
+              Browse notes
+            </Link>
             <div className="ml-auto flex items-center gap-2 text-sm">
               <label className="flex items-center gap-1">
                 <span className="text-gray-500">Book</span>
@@ -334,6 +352,11 @@ export function ReaderView(): JSX.Element {
               currentTranslation={translation}
               availableTranslations={translations}
               onChange={(scope) => setEditing({ ...editing, scope })}
+            />
+            <TagInput
+              value={editing.tags}
+              suggestions={tagsQuery.data ?? []}
+              onChange={(tags) => setEditing({ ...editing, tags })}
             />
             <NoteEditor
               key={`${editing.verse.verse}-${editing.annotationId ?? "new"}`}
