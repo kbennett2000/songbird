@@ -8,13 +8,15 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from songbird import __version__
 from songbird.api.annotations import router as annotations_router
+from songbird.api.auth import router as auth_router
 from songbird.api.concord import router as concord_router
+from songbird.api.deps import get_current_user
 from songbird.api.geography import router as geography_router
 from songbird.api.health import router as health_router
 from songbird.api.read import router as read_router
@@ -62,13 +64,19 @@ def create_app() -> FastAPI:
     app = FastAPI(title="songbird", version=__version__, lifespan=lifespan)
 
     # Routers BEFORE the SPA catch-all so API paths win.
+    # Open routes: liveness + auth itself.
     app.include_router(health_router)
-    app.include_router(concord_router)
-    app.include_router(read_router)
-    app.include_router(annotations_router)
-    app.include_router(tags_router)
-    app.include_router(geography_router)
-    app.include_router(search_router)
+    app.include_router(auth_router)
+    # Everything else requires a logged-in user (gate the whole app, Slice 8). Concord stays
+    # user-unaware; the gate is purely songbird's. Annotation/read routes additionally take the
+    # user as a value (FastAPI caches the dependency) to scope by author.
+    gated = [Depends(get_current_user)]
+    app.include_router(concord_router, dependencies=gated)
+    app.include_router(read_router, dependencies=gated)
+    app.include_router(annotations_router, dependencies=gated)
+    app.include_router(tags_router, dependencies=gated)
+    app.include_router(geography_router, dependencies=gated)
+    app.include_router(search_router, dependencies=gated)
 
     settings = get_settings()
     dist_dir = settings.frontend_dist_dir
