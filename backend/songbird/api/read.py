@@ -11,7 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from songbird.api.deps import get_concord_client, get_db
-from songbird.api.schemas import AnnotationOut, ReadChapter, ReadVerse
+from songbird.api.schemas import AnnotationOut, ReadAnnotation, ReadChapter, ReadVerse
 from songbird.concord.client import (
     ConcordClient,
     ConcordNotFoundError,
@@ -34,6 +34,15 @@ def _covers(ann: Annotation, chapter: int, verse: int) -> bool:
         chapter == ann.end_chapter and verse <= ann.end_verse
     )
     return after_start and before_end
+
+
+def _in_scope(ann: Annotation, translation: str) -> bool:
+    """Is this annotation in scope for the translation being read? 'all' is always in scope;
+    'current'/'subset' are in scope iff the translation is among their codes. (Decision B:
+    out-of-scope annotations are still shown, just marked — never hidden.)"""
+    if ann.scope_type == "all":
+        return True
+    return translation.upper() in {c.upper() for c in ann.scope_translations}
 
 
 @router.get("/books", response_model=BooksResponse)
@@ -78,13 +87,19 @@ async def read_chapter(
     )
     annotations = list(result.scalars().all())
 
+    resolved_translation = (
+        chapter_data.translations[0] if chapter_data.translations else translation
+    )
+
+    def _to_read_annotation(a: Annotation) -> ReadAnnotation:
+        base = AnnotationOut.model_validate(a)
+        return ReadAnnotation(**base.model_dump(), in_scope=_in_scope(a, resolved_translation))
+
     verses: list[ReadVerse] = []
     for v in chapter_data.verses:
         # One translation was requested, so there is exactly one text value.
         text = next(iter(v.text.values()), None)
-        overlay = [
-            AnnotationOut.model_validate(a) for a in annotations if _covers(a, v.chapter, v.verse)
-        ]
+        overlay = [_to_read_annotation(a) for a in annotations if _covers(a, v.chapter, v.verse)]
         verses.append(
             ReadVerse(
                 book=v.book,
@@ -96,9 +111,6 @@ async def read_chapter(
             )
         )
 
-    resolved_translation = (
-        chapter_data.translations[0] if chapter_data.translations else translation
-    )
     return ReadChapter(
         translation=resolved_translation,
         book=book_usfm,
