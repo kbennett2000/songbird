@@ -3,6 +3,7 @@ from logging.config import fileConfig
 
 from alembic import context
 from songbird.config import get_settings
+from songbird.db import models  # noqa: F401  (register models on Base.metadata)
 from songbird.db.base import Base
 from sqlalchemy import pool
 from sqlalchemy.engine import Connection
