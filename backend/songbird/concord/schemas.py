@@ -100,3 +100,16 @@ class PlaceVerse(BaseModel):
 
 class PlaceVersesResponse(BaseModel):
     verses: list[PlaceVerse]
+
+
+class SemanticResult(BaseModel):
+    book: str  # USFM code — canonical
+    chapter: int
+    verse: int
+    reference: str
+    score: float
+    text: str | None = None
+
+
+class SemanticSearchResponse(BaseModel):
+    results: list[SemanticResult]

@@ -227,6 +227,24 @@ async def test_get_cross_references_5xx_is_unreachable() -> None:
     await client.aclose()
 
 
+def _semantic_json() -> dict[str, object]:
+    return {
+        "query": "anxiety",
+        "translation": "KJV",
+        "count": 1,
+        "results": [
+            {
+                "book": "PRO",
+                "chapter": 12,
+                "verse": 25,
+                "reference": "Proverbs 12:25",
+                "score": 0.8952,
+                "text": "Heaviness in the heart of man...",
+            }
+        ],
+    }
+
+
 def _places_json() -> dict[str, object]:
     return {
         "reference": "Genesis 4",
@@ -245,6 +263,47 @@ def _places_json() -> dict[str, object]:
             }
         ],
     }
+
+
+async def test_semantic_search_parses() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=_semantic_json())
+
+    client = ConcordClient("http://concord.test", transport=httpx.MockTransport(handler))
+    result = await client.semantic_search("anxiety", "KJV", 1)
+    await client.aclose()
+    assert result.results[0].book == "PRO"
+    assert result.results[0].score == 0.8952
+
+
+async def test_semantic_search_404_is_not_found() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(404, json={"error": {"code": "unknown_translation"}})
+
+    client = ConcordClient("http://concord.test", transport=httpx.MockTransport(handler))
+    with pytest.raises(ConcordNotFoundError):
+        await client.semantic_search("peace", "ZZZ")
+    await client.aclose()
+
+
+async def test_semantic_search_422_is_not_found() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(422, json={"detail": "bad query"})
+
+    client = ConcordClient("http://concord.test", transport=httpx.MockTransport(handler))
+    with pytest.raises(ConcordNotFoundError):
+        await client.semantic_search("")
+    await client.aclose()
+
+
+async def test_semantic_search_5xx_is_unreachable() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(503)
+
+    client = ConcordClient("http://concord.test", transport=httpx.MockTransport(handler))
+    with pytest.raises(ConcordUnreachableError):
+        await client.semantic_search("anxiety")
+    await client.aclose()
 
 
 async def test_get_places_parses_and_preserves_nulls() -> None:

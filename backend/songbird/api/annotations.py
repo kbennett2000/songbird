@@ -93,17 +93,21 @@ async def _get_or_404(db: AsyncSession, annotation_id: int) -> Annotation:
 async def list_annotations(
     tags: str | None = None,
     match: str = "all",
+    q: str | None = None,
     db: AsyncSession = Depends(get_db),
 ) -> list[AnnotationOut]:
-    """Browse annotations, optionally filtered by tag(s). Concord-free — tags are songbird's
-    own domain. `match=all` (default) returns annotations having ALL the given tags; `any`
-    returns those having any. No tags → all annotations."""
+    """Browse / search annotations. Concord-free — annotations are songbird's own domain.
+    `tags` filters by tag (`match=all` default → all the given tags; `any` → any). `q` is a
+    case-insensitive keyword search over the note text (the honest stand-in for semantic note
+    search, which awaits a Concord embed-arbitrary-text endpoint). Filters compose."""
     stmt = select(Annotation)
     names = _normalize_tags(tags.split(",")) if tags else []
     if names:
         stmt = stmt.join(Annotation.tags).where(Tag.name.in_(names)).group_by(Annotation.id)
         if match == "all":
             stmt = stmt.having(func.count(func.distinct(Tag.id)) == len(names))
+    if q and q.strip():
+        stmt = stmt.where(Annotation.note_markdown.ilike(f"%{q.strip()}%"))
     stmt = stmt.order_by(
         Annotation.book_usfm, Annotation.start_chapter, Annotation.start_verse, Annotation.id
     )

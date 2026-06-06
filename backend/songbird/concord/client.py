@@ -17,6 +17,7 @@ from songbird.concord.schemas import (
     ConcordHealth,
     CrossRefResponse,
     PlaceVersesResponse,
+    SemanticSearchResponse,
     Translation,
     TranslationsResponse,
     VersePlacesResponse,
@@ -77,6 +78,29 @@ class ConcordClient:
     async def list_books(self) -> list[Book]:
         response = await self._get("/v1/books")
         return BooksResponse.model_validate(response.json()).books
+
+    async def semantic_search(
+        self, q: str, translation: str | None = None, limit: int = 20
+    ) -> SemanticSearchResponse:
+        """Search Scripture by meaning via Concord's embedding model — the heaviest capability
+        in the system, reached as a thin HTTP call (the 313MB model lives in Concord, never
+        here). A 400/404/422 (bad query / unknown translation) is a client error, not
+        unreachability."""
+        params: dict[str, str] = {"q": q, "include_text": "true", "limit": str(limit)}
+        if translation:
+            params["translation"] = translation
+        try:
+            response = await self._client.get("/v1/semantic-search", params=params)
+            response.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code in (400, 404, 422):
+                raise ConcordNotFoundError(
+                    f"Concord could not run that search: {exc.response.status_code}"
+                ) from exc
+            raise ConcordUnreachableError(self._base_url, exc) from exc
+        except httpx.HTTPError as exc:
+            raise ConcordUnreachableError(self._base_url, exc) from exc
+        return SemanticSearchResponse.model_validate(response.json())
 
     async def get_chapter(self, book: str, chapter: int, translation: str) -> Chapter:
         """Read one chapter in one translation. A 404 (unknown book / no such chapter) is a
