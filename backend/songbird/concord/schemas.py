@@ -52,3 +52,21 @@ class Book(BaseModel):
 
 class BooksResponse(BaseModel):
     books: list[Book]
+
+
+class CrossRefTarget(BaseModel):
+    book: str  # USFM code — canonical
+    chapter: int
+    verse_start: int
+    verse_end: int | None = None
+    reference: str
+
+
+class CrossRefEntry(BaseModel):
+    to: CrossRefTarget
+    votes: int | None = None
+    text: str | None = None  # the target's snippet (present when include_text=true)
+
+
+class CrossRefResponse(BaseModel):
+    cross_references: list[CrossRefEntry]

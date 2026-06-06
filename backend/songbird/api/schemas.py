@@ -63,6 +63,19 @@ class ReadAnnotation(AnnotationOut):
     in_scope: bool
 
 
+class CrossReference(BaseModel):
+    """A cross-reference target (from Concord) — canonical coords + the optional snippet/votes.
+    songbird stores none of this; it's a pass-through of Concord's TSK data."""
+
+    book: str  # USFM code — canonical (jump reuses navigation directly)
+    chapter: int
+    verse_start: int
+    verse_end: int | None
+    reference: str  # human-readable, e.g. "Romans 5:8" or "1 John 4:9-10"
+    votes: int | None
+    text: str | None  # the target's snippet (in the read translation), if available
+
+
 class ResolvedReference(BaseModel):
     """A raw reference resolved (by Concord) to canonical coordinates. `verse` is set only
     when the reference named a single verse (so the reader can scroll to / highlight it)."""

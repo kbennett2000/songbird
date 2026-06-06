@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from songbird.api.deps import get_concord_client, get_db
 from songbird.api.schemas import (
     AnnotationOut,
+    CrossReference,
     ReadAnnotation,
     ReadChapter,
     ReadVerse,
@@ -60,6 +61,37 @@ async def list_books(
     except ConcordUnreachableError as exc:
         raise_http(502, ErrorCode.CONCORD_UNREACHABLE, str(exc))
     return BooksResponse(books=books)
+
+
+@router.get("/cross-references/{book}/{chapter}/{verse}", response_model=list[CrossReference])
+async def cross_references(
+    book: str,
+    chapter: int,
+    verse: int,
+    translation: str | None = None,
+    concord: ConcordClient = Depends(get_concord_client),
+) -> list[CrossReference]:
+    """Cross-references (from Concord's TSK data) for a verse. songbird owns none of this —
+    pure pass-through. Targets are canonical coords, so the reader jumps to them directly."""
+    try:
+        result = await concord.get_cross_references(book, chapter, verse, translation)
+    except ConcordNotFoundError as exc:
+        raise_http(404, ErrorCode.NOT_FOUND, str(exc))
+    except ConcordUnreachableError as exc:
+        raise_http(502, ErrorCode.CONCORD_UNREACHABLE, str(exc))
+
+    return [
+        CrossReference(
+            book=entry.to.book,
+            chapter=entry.to.chapter,
+            verse_start=entry.to.verse_start,
+            verse_end=entry.to.verse_end,
+            reference=entry.to.reference,
+            votes=entry.votes,
+            text=entry.text,
+        )
+        for entry in result.cross_references
+    ]
 
 
 @router.get("/resolve", response_model=ResolvedReference)

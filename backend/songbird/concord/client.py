@@ -15,6 +15,7 @@ from songbird.concord.schemas import (
     BooksResponse,
     Chapter,
     ConcordHealth,
+    CrossRefResponse,
     Translation,
     TranslationsResponse,
 )
@@ -92,6 +93,29 @@ class ConcordClient:
         except httpx.HTTPError as exc:
             raise ConcordUnreachableError(self._base_url, exc) from exc
         return Chapter.model_validate(response.json())
+
+    async def get_cross_references(
+        self, book: str, chapter: int, verse: int, translation: str | None = None
+    ) -> CrossRefResponse:
+        """Fetch the cross-references (TSK) for a verse from Concord — songbird owns no
+        cross-reference data. `include_text=true` returns the target snippets in the same call.
+        A 400/404 (bad/unknown reference) is a not-found, not unreachability."""
+        params: dict[str, str] = {"include_text": "true", "limit": "20"}
+        if translation:
+            params["translation"] = translation
+        ref = f"{book} {chapter}:{verse}"
+        try:
+            response = await self._client.get(
+                f"/v1/cross-references/{quote(ref, safe='')}", params=params
+            )
+            response.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code in (400, 404):
+                raise ConcordNotFoundError(f"Concord could not resolve '{ref}'") from exc
+            raise ConcordUnreachableError(self._base_url, exc) from exc
+        except httpx.HTTPError as exc:
+            raise ConcordUnreachableError(self._base_url, exc) from exc
+        return CrossRefResponse.model_validate(response.json())
 
     async def resolve_reference(self, ref: str) -> Chapter:
         """Resolve a raw human reference ("John 3", "Gen 1:1", "1 Cor 13") to canonical
