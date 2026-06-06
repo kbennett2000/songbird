@@ -37,40 +37,34 @@ export const defaultHandlers = [
   http.get("/api/v1/books", () =>
     HttpResponse.json({
       books: [
-        {
-          id: "JHN",
-          name: "John",
-          testament: "NT",
-          chapter_count: 21,
-          canonical_order: 43,
-        },
+        { id: "LUK", name: "Luke", testament: "NT", chapter_count: 24, canonical_order: 42 },
+        { id: "JHN", name: "John", testament: "NT", chapter_count: 21, canonical_order: 43 },
+        { id: "ACT", name: "Acts", testament: "NT", chapter_count: 28, canonical_order: 44 },
       ],
     }),
   ),
-  http.get("/api/v1/read/:translation/:book/:chapter", () =>
-    HttpResponse.json({
-      translation: "KJV",
-      book: "JHN",
-      chapter: 3,
-      reference: "John 3",
+  // Echoes the requested book/chapter so navigation is observable in tests.
+  http.get("/api/v1/read/:translation/:book/:chapter", ({ params }) => {
+    const book = String(params.book);
+    const chapter = Number(params.chapter);
+    return HttpResponse.json({
+      translation: String(params.translation),
+      book,
+      chapter,
+      reference: `${book} ${chapter}`,
       verses: [
         {
-          book: "JHN",
-          chapter: 3,
+          book,
+          chapter,
           verse: 16,
-          reference: "John 3:16",
-          text: "For God so loved the world...",
-          annotations: [],
-        },
-        {
-          book: "JHN",
-          chapter: 3,
-          verse: 17,
-          reference: "John 3:17",
-          text: "For God sent not his Son...",
+          reference: `${book} ${chapter}:16`,
+          text: `${book} ${chapter}:16 — text`,
           annotations: [],
         },
       ],
-    }),
+    });
+  }),
+  http.get("/api/v1/resolve", () =>
+    HttpResponse.json({ reference: "John 3", book: "JHN", chapter: 3, verse: null }),
   ),
 ];

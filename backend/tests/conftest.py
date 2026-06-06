@@ -68,6 +68,12 @@ class FakeConcordClient:
         assert self._chapter is not None
         return self._chapter
 
+    async def resolve_reference(self, ref: str) -> Chapter:
+        if self._error is not None:
+            raise self._error
+        assert self._chapter is not None
+        return self._chapter
+
 
 @pytest_asyncio.fixture
 async def db_sessionmaker() -> AsyncIterator[async_sessionmaker[AsyncSession]]:
