@@ -83,14 +83,23 @@ pin); disputed shown contested. Click a place → its verses → jump. Same thin
   work via the alias resolver, same as elsewhere).
 - The side panel now renders one of three modes; `navigate()` + each open-helper close the others.
 
-### ⚠️ Live verification gap (running Concord is stale)
-The geography endpoints are **committed and shipped in Concord** (PR #22, `/v1/places*`), but the
-**running Docker image predates them** — every places route returns FastAPI's bare
-`{"detail":"Not Found"}` (an unregistered route, not Concord's `{"error":{…}}` envelope), and
-`/openapi.json` lists no `place` paths. So this slice was built against Concord's **real source
-contract** (read directly) with **airtight mocked tests**, but live geography verification needed
-a **rebuilt geography-capable Concord** (`docker compose build` in the concord repo). [Update
-this entry with the live result once verified.]
+### Live verification (done — 2026-06-06, against a rebuilt geo-capable Concord)
+The slice originally shipped mocked-only because the running Concord image predated the
+`/v1/places*` routes (every places route returned FastAPI's bare `{"detail":"Not Found"}`, not
+Concord's `{"error":{…}}` envelope). A rebuilt geo-capable Concord (`place_count: 1340`;
+`openapi.json` lists the place paths; bad place id → `{"error":{"code":"unknown_place",…}}`)
+let it be walked end-to-end through songbird's proxy. Results — **the honesty model passes
+through verbatim**:
+- **GEN 2** → 8 places: **Eden** `status=unknown`, `latitude/longitude/confidence` all **null**
+  (renders "Location unknown" — no fabricated pin), alongside **identified** places with real
+  coords (Euphrates 31.0043, 47.442, confidence high; Tigris; Assyria; Cush; Gihon; Havilah;
+  Pishon). So both the unknown and the located cases are proven, in one chapter.
+- **GEN 4** → the **land of Nod**: `status=unknown`, null coords. Honestly unlocated.
+- **Place → verses** (Euphrates) → 44 canonical verses (GEN 2:14 first) — the jump source works.
+- **Errors:** unknown book (`XXX`) → **404 NOT_FOUND**; **Concord down → 502**. Note: an
+  *out-of-range chapter* (e.g. GEN 999) returns **200 with an empty list** — songbird faithfully
+  mirrors Concord, whose places endpoint treats a valid book + no places as empty, not 404 (the
+  404 case is an *unknown book*, not an out-of-range chapter).
 
 ### How it was verified
 - Backend: Ruff + Pyright-strict clean; `pytest` 68 passed (3 `concord` live deselected). New:
@@ -98,7 +107,7 @@ this entry with the live result once verified.]
   `concord_client_test.py` (null coords preserved on parse).
 - Frontend: ESLint + `tsc` clean; Vitest 27 passed — places render with status, an unknown place
   shows *"Location unknown"*, an identified place shows coords, and jump-to-place-verse navigates.
-- Live: pending a geography-capable Concord (see the gap above).
+- Live: walked end-to-end against the rebuilt geo-capable Concord (results above).
 
 ---
 
