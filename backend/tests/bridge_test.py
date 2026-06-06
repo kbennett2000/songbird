@@ -53,6 +53,45 @@ async def test_bridge_annotation_shows_across_translations(
     assert kjv_read["translation"] == "KJV"
     assert web_read["translation"] == "WEB"
 
+    # An 'all'-scope note is in scope in every translation.
+    assert kjv_by_verse[16]["annotations"][0]["in_scope"] is True
+    assert web_by_verse[16]["annotations"][0]["in_scope"] is True
+
+
+async def test_bridge_out_of_scope_note_still_overlays_across_switch(
+    make_concord: type[FakeConcordClient],
+    client_for: Callable[[FakeConcordClient], httpx.AsyncClient],
+) -> None:
+    """Decision B across a translation switch: a note scoped to KJV still overlays the right
+    verse when read as WEB — present, but marked out-of-scope (not hidden)."""
+    from tests.helpers import DEFAULT_TRANSLATIONS
+
+    kjv = make_concord(
+        chapter=build_chapter("JHN", 3, "KJV", verses=20), translations=DEFAULT_TRANSLATIONS
+    )
+    async with client_for(kjv) as client:
+        created = await client.post(
+            "/api/v1/annotations",
+            json={**ANNOTATION_BODY, "scope_type": "current", "translations": ["KJV"]},
+        )
+        annotation_id = created.json()["id"]
+        kjv_read = (await client.get("/api/v1/read/KJV/JHN/3")).json()
+
+    web = make_concord(
+        chapter=build_chapter("JHN", 3, "WEB", verses=20), translations=DEFAULT_TRANSLATIONS
+    )
+    async with client_for(web) as client:
+        web_read = (await client.get("/api/v1/read/WEB/JHN/3")).json()
+
+    kjv16 = next(v for v in kjv_read["verses"] if v["verse"] == 16)
+    web16 = next(v for v in web_read["verses"] if v["verse"] == 16)
+    # Overlaid on the right verse in both (the bridge)...
+    assert [a["id"] for a in kjv16["annotations"]] == [annotation_id]
+    assert [a["id"] for a in web16["annotations"]] == [annotation_id]
+    # ...in scope for KJV, present-but-marked for WEB (decision B).
+    assert kjv16["annotations"][0]["in_scope"] is True
+    assert web16["annotations"][0]["in_scope"] is False
+
 
 @pytest.mark.concord
 async def test_bridge_live_against_concord(

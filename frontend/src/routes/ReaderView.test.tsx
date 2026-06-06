@@ -36,6 +36,8 @@ function annotation(overrides: Record<string, unknown> = {}) {
     note_markdown: "My note",
     color: null,
     scope_type: "all",
+    scope_translations: [] as string[],
+    in_scope: true,
     author_id: 1,
     created_at: "2026-06-05T00:00:00Z",
     updated_at: "2026-06-05T00:00:00Z",
@@ -43,9 +45,9 @@ function annotation(overrides: Record<string, unknown> = {}) {
   };
 }
 
-function readResponse(annotations: ReturnType<typeof annotation>[]) {
+function readResponse(annotations: ReturnType<typeof annotation>[], translation = "KJV") {
   return {
-    translation: "KJV",
+    translation,
     book: "JHN",
     chapter: 3,
     reference: "John 3",
@@ -55,7 +57,7 @@ function readResponse(annotations: ReturnType<typeof annotation>[]) {
         chapter: 3,
         verse: 16,
         reference: "John 3:16",
-        text: "For God so loved the world...",
+        text: `${translation} text 16`,
         annotations,
       },
     ],
@@ -73,8 +75,13 @@ function renderReader() {
 
 describe("ReaderView", () => {
   it("renders the chapter's verses from Concord (via songbird)", async () => {
+    server.use(
+      http.get("/api/v1/read/:translation/:book/:chapter", ({ params }) =>
+        HttpResponse.json(readResponse([], String(params.translation))),
+      ),
+    );
     renderReader();
-    expect(await screen.findByText(/For God so loved the world/)).toBeInTheDocument();
+    expect(await screen.findByText(/KJV text 16/)).toBeInTheDocument();
   });
 
   it("creates an annotation on a verse and shows the overlay marker", async () => {
@@ -96,23 +103,74 @@ describe("ReaderView", () => {
     expect(await screen.findByText("Note on John 3:16")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Save" }));
-    // Overlay re-renders from the (now non-empty) read response.
     expect(
       await screen.findByRole("button", { name: "View note on verse 16" }),
     ).toBeInTheDocument();
   });
 
-  it("opens an existing note prefilled with its Markdown", async () => {
+  it("switches translation, re-renders the chapter, and keeps the overlay", async () => {
+    server.use(
+      http.get("/api/v1/read/:translation/:book/:chapter", ({ params }) =>
+        HttpResponse.json(readResponse([annotation()], String(params.translation))),
+      ),
+    );
+    const user = userEvent.setup();
+    renderReader();
+
+    expect(await screen.findByText(/KJV text 16/)).toBeInTheDocument();
+    await user.selectOptions(await screen.findByLabelText("Translation"), "WEB");
+    // Re-renders in WEB, overlay still there.
+    expect(await screen.findByText(/WEB text 16/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "View note on verse 16" })).toBeInTheDocument();
+  });
+
+  it("sends the chosen scope when creating an annotation", async () => {
+    let captured: Record<string, unknown> | null = null;
     server.use(
       http.get("/api/v1/read/:translation/:book/:chapter", () =>
-        HttpResponse.json(readResponse([annotation({ id: 7, note_markdown: "existing **note**" })])),
+        HttpResponse.json(readResponse([])),
+      ),
+      http.post("/api/v1/annotations", async ({ request }) => {
+        captured = (await request.json()) as Record<string, unknown>;
+        return HttpResponse.json(annotation({ scope_type: "current", scope_translations: ["KJV"] }), {
+          status: 201,
+        });
+      }),
+    );
+
+    const user = userEvent.setup();
+    renderReader();
+
+    await user.click(await screen.findByRole("button", { name: "Annotate verse 16" }));
+    await user.click(await screen.findByRole("radio", { name: /This translation only/ }));
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    await screen.findByRole("button", { name: "Annotate verse 16" }); // panel closed → back to reader
+    expect(captured).toMatchObject({ scope_type: "current", translations: ["KJV"] });
+  });
+
+  it("renders an out-of-scope annotation as a gray marker with a panel label", async () => {
+    server.use(
+      http.get("/api/v1/read/:translation/:book/:chapter", () =>
+        HttpResponse.json(
+          readResponse(
+            [annotation({ scope_type: "current", scope_translations: ["KJV"], in_scope: false })],
+            "WEB",
+          ),
+        ),
       ),
     );
 
     const user = userEvent.setup();
     renderReader();
 
-    await user.click(await screen.findByRole("button", { name: "View note on verse 16" }));
-    expect(await screen.findByTestId("initial-markdown")).toHaveTextContent("existing **note**");
+    // Out-of-scope → gray marker, not the amber "View note" one.
+    const grayMarker = await screen.findByRole("button", {
+      name: "View out-of-scope note on verse 16",
+    });
+    expect(screen.queryByRole("button", { name: "View note on verse 16" })).not.toBeInTheDocument();
+
+    await user.click(grayMarker);
+    expect(await screen.findByText(/written for KJV/)).toBeInTheDocument();
   });
 });
