@@ -10,6 +10,8 @@ class ErrorCode(StrEnum):
     CONCORD_UNREACHABLE = "CONCORD_UNREACHABLE"
     NOT_FOUND = "NOT_FOUND"
     ANNOTATION_NOT_FOUND = "ANNOTATION_NOT_FOUND"
+    INVALID_SCOPE = "INVALID_SCOPE"
+    INVALID_TRANSLATION = "INVALID_TRANSLATION"
 
 
 def raise_http(status: int, code: ErrorCode, message: str | None = None) -> NoReturn:

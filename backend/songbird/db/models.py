@@ -7,8 +7,8 @@ id. No Bible text is stored here (invariant 5); notes are Markdown (invariant 6)
 
 from datetime import UTC, datetime
 
-from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, Text
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from songbird.db.base import Base
 
@@ -51,7 +51,8 @@ class Annotation(Base):
     note_markdown: Mapped[str] = mapped_column(Text, nullable=False)
     color: Mapped[str | None] = mapped_column(String(32), nullable=True)
 
-    # Slice 1 ships "all translations" only; the 3-tier scope + subset table are Slice 2.
+    # Three-tier scope (SPEC §2): "all" (default), "current", "subset". For "current"/"subset"
+    # the concrete translation codes live in `annotation_translations`; "all" has none.
     scope_type: Mapped[str] = mapped_column(
         String(16), nullable=False, default="all", server_default="all"
     )
@@ -64,3 +65,33 @@ class Annotation(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=_utcnow, onupdate=_utcnow
     )
+
+    translations: Mapped[list["AnnotationTranslation"]] = relationship(
+        back_populates="annotation",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+    )
+
+    @property
+    def scope_translations(self) -> list[str]:
+        """The concrete translation codes this annotation is scoped to ([] for 'all')."""
+        return [t.translation_code for t in self.translations]
+
+
+class AnnotationTranslation(Base):
+    """A translation code an annotation is scoped to (for 'current'/'subset' scope). Codes
+    match Concord's translation ids (e.g. KJV, WEB). Empty set ⇒ 'all'-scope."""
+
+    __tablename__ = "annotation_translations"
+    __table_args__ = (
+        UniqueConstraint("annotation_id", "translation_code", name="uq_annotation_translation"),
+        Index("ix_annotation_translations_annotation", "annotation_id"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    annotation_id: Mapped[int] = mapped_column(
+        ForeignKey("annotations.id", ondelete="CASCADE"), nullable=False
+    )
+    translation_code: Mapped[str] = mapped_column(String(16), nullable=False)
+
+    annotation: Mapped["Annotation"] = relationship(back_populates="translations")

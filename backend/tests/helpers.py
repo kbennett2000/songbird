@@ -1,6 +1,17 @@
 """Shared test helpers."""
 
-from songbird.concord.schemas import Chapter, ChapterVerse
+from songbird.concord.schemas import Chapter, ChapterVerse, Translation
+
+
+def translations(*codes: str) -> list[Translation]:
+    return [
+        Translation(id=c, name=c, language="en", versification="standard", attribution=None)
+        for c in codes
+    ]
+
+
+# The translation set the fake Concord validates scope codes against.
+DEFAULT_TRANSLATIONS = translations("KJV", "WEB", "ASV")
 
 
 def build_chapter(

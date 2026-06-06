@@ -4,12 +4,20 @@ interface SidePanelProps {
   open: boolean;
   title: string;
   subtitle?: string | null;
+  scopeLabel?: string | null;
   onClose: () => void;
   children: ReactNode;
 }
 
 /** A right-hand drawer that keeps the passage visible while you write (SPEC §8.2). */
-export function SidePanel({ open, title, subtitle, onClose, children }: SidePanelProps): JSX.Element | null {
+export function SidePanel({
+  open,
+  title,
+  subtitle,
+  scopeLabel,
+  onClose,
+  children,
+}: SidePanelProps): JSX.Element | null {
   if (!open) return null;
   return (
     <aside
@@ -20,6 +28,7 @@ export function SidePanel({ open, title, subtitle, onClose, children }: SidePane
         <div>
           <h2 className="text-lg font-semibold">{title}</h2>
           {subtitle && <p className="mt-1 text-sm text-gray-500">{subtitle}</p>}
+          {scopeLabel && <p className="mt-1 text-sm text-amber-700">⚠ {scopeLabel}</p>}
         </div>
         <button
           type="button"

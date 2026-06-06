@@ -3,14 +3,22 @@ import {
   type Annotation,
   type Book,
   type ReadChapter,
+  type ScopeType,
+  type Translation,
   annotationSchema,
   booksResponseSchema,
   readChapterSchema,
+  translationsResponseSchema,
 } from "@/schemas";
 
 export async function fetchBooks(): Promise<Book[]> {
   const data = await apiRequest<unknown>("GET", "/books");
   return booksResponseSchema.parse(data).books;
+}
+
+export async function fetchTranslations(): Promise<Translation[]> {
+  const data = await apiRequest<unknown>("GET", "/translations");
+  return translationsResponseSchema.parse(data).translations;
 }
 
 export async function fetchChapter(
@@ -29,6 +37,8 @@ export interface CreateAnnotationInput {
   end_chapter: number;
   end_verse: number;
   note_markdown: string;
+  scope_type: ScopeType;
+  translations: string[];
 }
 
 export async function createAnnotation(input: CreateAnnotationInput): Promise<Annotation> {
@@ -36,8 +46,17 @@ export async function createAnnotation(input: CreateAnnotationInput): Promise<An
   return annotationSchema.parse(data);
 }
 
-export async function updateAnnotation(id: number, note_markdown: string): Promise<Annotation> {
-  const data = await apiRequest<unknown>("PATCH", `/annotations/${id}`, { note_markdown });
+export interface UpdateAnnotationInput {
+  note_markdown?: string;
+  scope_type?: ScopeType;
+  translations?: string[];
+}
+
+export async function updateAnnotation(
+  id: number,
+  input: UpdateAnnotationInput,
+): Promise<Annotation> {
+  const data = await apiRequest<unknown>("PATCH", `/annotations/${id}`, input);
   return annotationSchema.parse(data);
 }
 

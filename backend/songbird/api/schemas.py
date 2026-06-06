@@ -17,11 +17,15 @@ class AnnotationCreate(BaseModel):
     note_markdown: str
     color: str | None = None
     scope_type: str = "all"
+    # Concrete translation codes for 'current' (exactly 1) / 'subset' (≥1); empty for 'all'.
+    translations: list[str] = Field(default_factory=list)
 
 
 class AnnotationUpdate(BaseModel):
     note_markdown: str | None = None
     color: str | None = None
+    scope_type: str | None = None
+    translations: list[str] | None = None
 
 
 class AnnotationOut(BaseModel):
@@ -36,9 +40,17 @@ class AnnotationOut(BaseModel):
     note_markdown: str
     color: str | None
     scope_type: str
+    scope_translations: list[str]  # resolved codes; [] for 'all'
     author_id: int
     created_at: datetime
     updated_at: datetime
+
+
+class ReadAnnotation(AnnotationOut):
+    """An overlaid annotation, with whether it is in scope for the translation being read
+    (decision B: out-of-scope annotations are shown-but-marked, never hidden)."""
+
+    in_scope: bool
 
 
 class ReadVerse(BaseModel):
@@ -47,7 +59,7 @@ class ReadVerse(BaseModel):
     verse: int
     reference: str
     text: str | None
-    annotations: list[AnnotationOut]
+    annotations: list[ReadAnnotation]
 
 
 class ReadChapter(BaseModel):
