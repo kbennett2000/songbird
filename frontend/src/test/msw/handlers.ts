@@ -69,4 +69,5 @@ export const defaultHandlers = [
   ),
   http.get("/api/v1/tags", () => HttpResponse.json([])),
   http.get("/api/v1/annotations", () => HttpResponse.json([])),
+  http.get("/api/v1/cross-references/:book/:chapter/:verse", () => HttpResponse.json([])),
 ];
