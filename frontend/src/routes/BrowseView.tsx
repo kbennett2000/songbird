@@ -3,36 +3,8 @@ import { type ChangeEvent, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { downloadExport, importNotes, readJsonFile } from "@/lib/importExport";
+import { type NoteAnchor, noteReference, notePreview, readerLink } from "@/lib/notes";
 import { browseAnnotations, browseSermonNotes, fetchBooks, fetchTags } from "@/lib/reader";
-import type { Annotation, Book } from "@/schemas";
-
-function notePreview(markdown: string): string {
-  // Strip the lightest Markdown noise for a one-line preview.
-  const plain = markdown
-    .replace(/[#*_`>-]/g, "")
-    .replace(/\s+/g, " ")
-    .trim();
-  return plain.length > 120 ? `${plain.slice(0, 120)}…` : plain;
-}
-
-// The canonical anchor fields both annotations and sermon notes carry — enough to render a
-// friendly reference. (Sermon notes also store a display `reference`, but computing it here keeps
-// the book name consistent with the annotations list.)
-type Anchor = Pick<
-  Annotation,
-  "book_usfm" | "start_chapter" | "start_verse" | "end_chapter" | "end_verse"
->;
-
-function reference(a: Anchor, booksById: Map<string, Book>): string {
-  // Concord-free: the friendly book name comes from the already-fetched books list; if it's
-  // not loaded we fall back to the USFM code songbird stores.
-  const name = booksById.get(a.book_usfm)?.name ?? a.book_usfm;
-  const span =
-    a.start_chapter === a.end_chapter && a.start_verse === a.end_verse
-      ? `${a.start_chapter}:${a.start_verse}`
-      : `${a.start_chapter}:${a.start_verse}–${a.end_chapter}:${a.end_verse}`;
-  return `${name} ${span}`;
-}
 
 function TagChips({ tags }: { tags: string[] }): JSX.Element | null {
   if (tags.length === 0) return null;
@@ -110,8 +82,7 @@ export function BrowseView(): JSX.Element {
     }
   };
 
-  const linkTo = (a: Anchor) =>
-    `/?book=${a.book_usfm}&chapter=${a.start_chapter}&verse=${a.start_verse}`;
+  const linkTo = (a: NoteAnchor) => readerLink(a);
 
   return (
     <div className="min-h-screen bg-stone-50">
@@ -142,8 +113,11 @@ export function BrowseView(): JSX.Element {
               aria-label="Import notes file"
               onChange={onFilePicked}
             />
+            <Link to="/read" className="text-blue-700 hover:underline">
+              Reader
+            </Link>
             <Link to="/" className="text-blue-700 hover:underline">
-              ← Reader
+              Home
             </Link>
           </div>
         </div>
@@ -197,7 +171,7 @@ export function BrowseView(): JSX.Element {
             {annotationsQuery.data?.map((a) => (
               <li key={a.id} className="rounded border border-gray-200 bg-white p-4">
                 <div className="flex items-center gap-3">
-                  <span className="font-semibold">{reference(a, booksById)}</span>
+                  <span className="font-semibold">{noteReference(a, booksById)}</span>
                   <Link to={linkTo(a)} className="ml-auto text-sm text-blue-700 hover:underline">
                     Open in reader
                   </Link>
@@ -224,7 +198,7 @@ export function BrowseView(): JSX.Element {
                   <span className="text-xs font-semibold uppercase tracking-wide text-emerald-700">
                     Sermon
                   </span>
-                  <span className="font-semibold">{reference(n, booksById)}</span>
+                  <span className="font-semibold">{noteReference(n, booksById)}</span>
                   <Link to={linkTo(n)} className="ml-auto text-sm text-blue-700 hover:underline">
                     Open in reader
                   </Link>

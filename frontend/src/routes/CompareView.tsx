@@ -120,8 +120,11 @@ export function CompareView(): JSX.Element {
           <div className="flex flex-wrap items-center gap-3">
             <h1 className="text-2xl font-bold tracking-tight">songbird</h1>
             <span className="text-sm text-gray-400">/ compare</span>
-            <Link to="/" className="text-sm text-blue-700 hover:underline">
+            <Link to="/read" className="text-sm text-blue-700 hover:underline">
               Reader
+            </Link>
+            <Link to="/" className="text-sm text-blue-700 hover:underline">
+              Home
             </Link>
             <Link to="/browse" className="text-sm text-blue-700 hover:underline">
               Browse notes

@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 
 import { Popover } from "@/components/Popover";
+import { readerLink } from "@/lib/notes";
 import type { ReadAnnotation } from "@/schemas";
 
 interface AnnotationPopoverProps {
@@ -24,7 +25,7 @@ export function AnnotationPopover({
   onClose,
 }: AnnotationPopoverProps): JSX.Element {
   // The canonical anchor → a reader deep-link the reader already honours (?book=&chapter=&verse=).
-  const readerHref = `/?book=${encodeURIComponent(annotation.book_usfm)}&chapter=${annotation.start_chapter}&verse=${annotation.start_verse}`;
+  const readerHref = readerLink(annotation);
   return (
     <Popover anchor={anchor} onClose={onClose} ariaLabel={`Note on ${annotation.book_usfm} ${annotation.start_chapter}:${annotation.start_verse}`}>
       <div className="mb-1 flex items-center justify-between gap-2">

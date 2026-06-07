@@ -202,7 +202,7 @@ describe("BrowseView", () => {
         <MemoryRouter initialEntries={["/browse"]}>
           <Routes>
             <Route path="/browse" element={<BrowseView />} />
-            <Route path="/" element={<Probe />} />
+            <Route path="/read" element={<Probe />} />
           </Routes>
         </MemoryRouter>
       </QueryClientProvider>,

@@ -449,7 +449,9 @@ export function ReaderView(): JSX.Element {
       <header className="border-b border-gray-200 bg-white">
         <div className="mx-auto flex max-w-3xl flex-col gap-3 p-4">
           <div className="flex flex-wrap items-center gap-3">
-            <h1 className="text-2xl font-bold tracking-tight">songbird</h1>
+            <Link to="/" className="text-2xl font-bold tracking-tight hover:opacity-80">
+              songbird
+            </Link>
             <Link to="/browse" className="text-sm text-blue-700 hover:underline">
               Browse notes
             </Link>
