@@ -59,8 +59,12 @@ async def keyword_search(
         return []  # no query → no call (Concord 422s on empty q)
     try:
         result = await concord.keyword_search(q, translation, limit=limit)
-    except ConcordNotFoundError as exc:
-        raise_http(404, ErrorCode.NOT_FOUND, str(exc))
+    except ConcordNotFoundError:
+        # Concord's keyword search is FTS5, which 400s on ordinary punctuation (apostrophes,
+        # commas, hyphens, …). That isn't an outage and isn't worth surfacing as an error —
+        # present an unrunnable (or genuinely empty) keyword query as "no results" and let the UI
+        # offer semantic search, which doesn't use FTS5 (issue #51). A real outage is still a 502.
+        return []
     except ConcordUnreachableError as exc:
         raise_http(502, ErrorCode.CONCORD_UNREACHABLE, str(exc))
     return [
