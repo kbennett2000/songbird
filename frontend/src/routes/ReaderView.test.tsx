@@ -634,6 +634,114 @@ describe("ReaderView", () => {
     expect(await screen.findByRole("button", { name: "Jerusalem" })).toBeInTheDocument();
   });
 
+  it("defaults the note-type toggle to Standard (the annotation editor)", async () => {
+    server.use(
+      http.get("/api/v1/read/:translation/:book/:chapter", () =>
+        HttpResponse.json(readResponse([])),
+      ),
+    );
+    const user = userEvent.setup();
+    renderReader();
+
+    await user.click(await screen.findByRole("button", { name: "Annotate verse 16" }));
+    // Standard is the selected tab; the annotation editor (stubbed) is what's shown.
+    expect(screen.getByRole("tab", { name: "Standard" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tab", { name: "Sermon" })).toHaveAttribute("aria-selected", "false");
+    expect(screen.getByTestId("initial-markdown")).toBeInTheDocument();
+  });
+
+  it("creates a sermon note via the type toggle and shows its marker", async () => {
+    let captured: Record<string, unknown> | null = null;
+    let created = false;
+    server.use(
+      http.get("/api/v1/read/:translation/:book/:chapter", () =>
+        HttpResponse.json(readResponse([], "KJV", created ? [sermonNote()] : [])),
+      ),
+      http.post("/api/v1/sermon-notes", async ({ request }) => {
+        captured = (await request.json()) as Record<string, unknown>;
+        created = true;
+        return HttpResponse.json(sermonNote(), { status: 201 });
+      }),
+    );
+
+    const user = userEvent.setup();
+    renderReader();
+
+    await user.click(await screen.findByRole("button", { name: "Annotate verse 16" }));
+    await user.click(screen.getByRole("tab", { name: "Sermon" }));
+
+    // The reference is prefilled from the clicked verse.
+    expect(screen.getByLabelText("Reference")).toHaveValue("John 3:16");
+    await user.type(screen.getByLabelText("Title"), "A New Sermon");
+    await user.type(screen.getByLabelText("Sermon URL"), "https://example.test/x");
+    await user.type(screen.getByLabelText("Add a tag"), "grace");
+    await user.keyboard("{Enter}");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    // The client sends the canonical anchor + tags — but NOT book_order_index (server resolves it).
+    expect(await screen.findByRole("button", { name: "Sermon on verse 16" })).toBeInTheDocument();
+    expect(captured).toMatchObject({
+      title: "A New Sermon",
+      sermon_url: "https://example.test/x",
+      reference: "John 3:16",
+      book_usfm: "JHN",
+      start_chapter: 3,
+      start_verse: 16,
+      tags: ["grace"],
+    });
+    expect(captured).not.toHaveProperty("book_order_index");
+  });
+
+  it("edits a sermon note from its popover", async () => {
+    let captured: Record<string, unknown> | null = null;
+    server.use(
+      http.get("/api/v1/read/:translation/:book/:chapter", () =>
+        HttpResponse.json(readResponse([], "KJV", [sermonNote({ title: "Old Title" })])),
+      ),
+      http.patch("/api/v1/sermon-notes/:id", async ({ request }) => {
+        captured = (await request.json()) as Record<string, unknown>;
+        return HttpResponse.json(sermonNote({ title: "New Title" }));
+      }),
+    );
+
+    const user = userEvent.setup();
+    renderReader();
+
+    await user.click(await screen.findByRole("button", { name: "Sermon on verse 16" }));
+    await user.click(await screen.findByRole("button", { name: /Edit sermon/ }));
+
+    // The edit panel is prefilled; change the title and save → PATCH.
+    const title = screen.getByLabelText("Title");
+    expect(title).toHaveValue("Old Title");
+    await user.clear(title);
+    await user.type(title, "New Title");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    await screen.findByRole("button", { name: "Sermon on verse 16" }); // panel closed → back to reader
+    expect(captured).toMatchObject({ title: "New Title", reference: "John 3:16" });
+  });
+
+  it("deletes a sermon note from its popover", async () => {
+    let deletedId: string | null = null;
+    server.use(
+      http.get("/api/v1/read/:translation/:book/:chapter", () =>
+        HttpResponse.json(readResponse([], "KJV", [sermonNote({ id: 7 })])),
+      ),
+      http.delete("/api/v1/sermon-notes/:id", ({ params }) => {
+        deletedId = String(params.id);
+        return new HttpResponse(null, { status: 204 });
+      }),
+    );
+
+    const user = userEvent.setup();
+    renderReader();
+
+    await user.click(await screen.findByRole("button", { name: "Sermon on verse 16" }));
+    await user.click(await screen.findByRole("button", { name: /Delete sermon/ }));
+
+    await vi.waitFor(() => expect(deletedId).toBe("7"));
+  });
+
   it("includes tags when saving an annotation", async () => {
     let captured: Record<string, unknown> | null = null;
     server.use(

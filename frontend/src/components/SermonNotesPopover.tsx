@@ -9,6 +9,8 @@ interface SermonNotesPopoverProps {
   notes: SermonNote[];
   anchor: HTMLElement;
   onClose: () => void;
+  onEdit?: (note: SermonNote) => void;
+  onDelete?: (note: SermonNote) => void;
 }
 
 /** Newest sermon first: event_date DESC, NULLS LAST, then created_at as a stable tiebreaker. */
@@ -27,7 +29,13 @@ function byNewest(a: SermonNote, b: SermonNote): number {
  * row reusing {@link SermonNoteFields} (title · date · external link · tags). Shares the
  * {@link Popover} shell, so a tall list scrolls inside the popover (the #18 inside-scroll fix).
  */
-export function SermonNotesPopover({ notes, anchor, onClose }: SermonNotesPopoverProps): JSX.Element {
+export function SermonNotesPopover({
+  notes,
+  anchor,
+  onClose,
+  onEdit,
+  onDelete,
+}: SermonNotesPopoverProps): JSX.Element {
   const sorted = useMemo(() => [...notes].sort(byNewest), [notes]);
   return (
     <Popover anchor={anchor} onClose={onClose} ariaLabel={`${notes.length} sermons on this verse`}>
@@ -48,7 +56,11 @@ export function SermonNotesPopover({ notes, anchor, onClose }: SermonNotesPopove
       <ul className="flex flex-col">
         {sorted.map((note) => (
           <li key={note.id} className="border-t border-gray-100 py-2 first:border-0 first:pt-0">
-            <SermonNoteFields note={note} />
+            <SermonNoteFields
+              note={note}
+              onEdit={onEdit ? () => onEdit(note) : undefined}
+              onDelete={onDelete ? () => onDelete(note) : undefined}
+            />
           </li>
         ))}
       </ul>

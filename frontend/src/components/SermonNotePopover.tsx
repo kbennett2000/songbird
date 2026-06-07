@@ -7,6 +7,8 @@ interface SermonNotePopoverProps {
   /** The tapped sermon marker the popover anchors to. */
   anchor: HTMLElement;
   onClose: () => void;
+  onEdit?: () => void;
+  onDelete?: () => void;
 }
 
 /**
@@ -14,7 +16,13 @@ interface SermonNotePopoverProps {
  * case). The per-sermon body lives in {@link SermonNoteFields}; positioning + dismissal in the
  * shared {@link Popover} shell.
  */
-export function SermonNotePopover({ note, anchor, onClose }: SermonNotePopoverProps): JSX.Element {
+export function SermonNotePopover({
+  note,
+  anchor,
+  onClose,
+  onEdit,
+  onDelete,
+}: SermonNotePopoverProps): JSX.Element {
   return (
     <Popover anchor={anchor} onClose={onClose} ariaLabel={`Sermon — ${note.title}`}>
       <div className="mb-1 flex items-start justify-between gap-2">
@@ -31,7 +39,7 @@ export function SermonNotePopover({ note, anchor, onClose }: SermonNotePopoverPr
         </button>
       </div>
 
-      <SermonNoteFields note={note} />
+      <SermonNoteFields note={note} onEdit={onEdit} onDelete={onDelete} />
     </Popover>
   );
 }

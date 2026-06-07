@@ -10,6 +10,8 @@ from fastapi import APIRouter, Depends, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from songbird.api._tags import normalize_tags as _normalize_tags
+from songbird.api._tags import resolve_tags as _resolve_tags
 from songbird.api.deps import get_concord_client, get_current_user, get_db
 from songbird.api.schemas import AnnotationCreate, AnnotationOut, AnnotationUpdate
 from songbird.concord.client import ConcordClient, ConcordUnreachableError
@@ -17,28 +19,6 @@ from songbird.core.errors import ErrorCode, raise_http
 from songbird.db.models import Annotation, AnnotationTranslation, Tag, User
 
 router = APIRouter(prefix="/api/v1/annotations", tags=["annotations"])
-
-
-def _normalize_tags(names: list[str]) -> list[str]:
-    return list(dict.fromkeys(n.strip().lower() for n in names if n.strip()))
-
-
-async def _resolve_tags(db: AsyncSession, names: list[str]) -> list[Tag]:
-    """Get-or-create Tag rows for these names (songbird-owned; no Concord)."""
-    normalized = _normalize_tags(names)
-    if not normalized:
-        return []
-    existing = (await db.execute(select(Tag).where(Tag.name.in_(normalized)))).scalars().all()
-    by_name = {t.name: t for t in existing}
-    resolved: list[Tag] = []
-    for name in normalized:
-        tag = by_name.get(name)
-        if tag is None:
-            tag = Tag(name=name)
-            db.add(tag)
-            by_name[name] = tag
-        resolved.append(tag)
-    return resolved
 
 
 async def _resolve_scope(

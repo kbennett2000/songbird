@@ -1,20 +1,34 @@
 """Sermon notes: songbird-owned, canonical-anchored, ALWAYS visible on every translation (no
-scope), overlaid on the chapter like annotations. READ-ONLY this slice — rows are inserted
-directly (no create endpoint yet). Synthetic fixtures only; never the real backup."""
+scope), overlaid on the chapter like annotations. Full CRUD — the anchor is canonical coords
+(invariant 4) and `book_order_index` is resolved server-side from Concord (never client-asserted).
+Synthetic fixtures only; never the real backup."""
 
 from collections.abc import Callable
 from datetime import UTC, date, datetime
 
 import httpx
+from songbird.concord.client import ConcordUnreachableError
+from songbird.concord.schemas import Book
 from songbird.db.models import SermonNote, Tag, User
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from tests.conftest import FakeConcordClient
 from tests.helpers import DEFAULT_TRANSLATIONS, build_chapter
 
+# Canonical book map the fake Concord serves for server-side book_order_index resolution.
+_BOOKS = [
+    Book(id="GEN", name="Genesis", testament="OT", chapter_count=50, canonical_order=1),
+    Book(id="JHN", name="John", testament="NT", chapter_count=21, canonical_order=43),
+    Book(id="ACT", name="Acts", testament="NT", chapter_count=28, canonical_order=44),
+    Book(id="REV", name="Revelation", testament="NT", chapter_count=22, canonical_order=66),
+]
+
 
 def _fake(translation: str = "KJV") -> FakeConcordClient:
     return FakeConcordClient(
-        chapter=build_chapter("JHN", 3, translation, 20), translations=DEFAULT_TRANSLATIONS
+        chapter=build_chapter("JHN", 3, translation, 20),
+        translations=DEFAULT_TRANSLATIONS,
+        books=_BOOKS,
     )
 
 
@@ -150,7 +164,7 @@ async def test_get_unknown_404(
     async with client_for(_fake()) as client:
         resp = await client.get("/api/v1/sermon-notes/999")
     assert resp.status_code == 404
-    assert resp.json()["detail"]["code"] == "NOT_FOUND"
+    assert resp.json()["detail"]["code"] == "SERMON_NOTE_NOT_FOUND"
 
 
 async def _seed_tagged_corpus(
@@ -249,3 +263,140 @@ async def test_author_scoped_out_of_overlay_and_list(
     assert _verse(read, 16)["sermon_notes"] == []
     assert listed == []
     assert by_id.status_code == 404
+
+
+# --- Create / update / delete (Slice 15) ---
+
+_CREATE_BODY = {
+    "title": "A new sermon",
+    "sermon_url": "https://example.test/new",
+    "reference": "John 3:16",
+    "book_usfm": "JHN",
+    "start_chapter": 3,
+    "start_verse": 16,
+    "end_chapter": 3,
+    "end_verse": 16,
+}
+
+
+async def test_create_persists_resolves_order_and_overlays(
+    db_sessionmaker: async_sessionmaker[AsyncSession],
+    client_for: Callable[[FakeConcordClient], httpx.AsyncClient],
+) -> None:
+    # POST creates a row; the server resolves book_order_index from Concord (client never sends
+    # it); the note then overlays the chapter by canonical coords (invariant 4).
+    async with client_for(_fake("KJV")) as client:
+        created = await client.post(
+            "/api/v1/sermon-notes", json={**_CREATE_BODY, "tags": ["Grace"]}
+        )
+        assert created.status_code == 201
+        body = created.json()
+        assert body["book_order_index"] == 43  # resolved from Concord, not from the request
+        assert body["book_usfm"] == "JHN"
+        assert body["tags"] == ["grace"]  # normalized
+
+        read = (await client.get("/api/v1/read/KJV/JHN/3")).json()
+    assert [s["id"] for s in _verse(read, 16)["sermon_notes"]] == [body["id"]]
+
+
+async def test_create_reuses_existing_tag_vocabulary(
+    db_sessionmaker: async_sessionmaker[AsyncSession],
+    client_for: Callable[[FakeConcordClient], httpx.AsyncClient],
+) -> None:
+    # An existing annotation tag is reused, not duplicated — one shared vocabulary.
+    async with db_sessionmaker() as session:
+        session.add(Tag(name="grace"))
+        await session.commit()
+    async with client_for(_fake()) as client:
+        resp = await client.post(
+            "/api/v1/sermon-notes", json={**_CREATE_BODY, "tags": ["Grace", "grace"]}
+        )
+    assert resp.status_code == 201
+    assert resp.json()["tags"] == ["grace"]
+    async with db_sessionmaker() as session:
+        rows = (await session.execute(select(Tag).where(Tag.name == "grace"))).scalars().all()
+    assert len(rows) == 1  # not duplicated
+
+
+async def test_create_unknown_book_422(
+    client_for: Callable[[FakeConcordClient], httpx.AsyncClient],
+) -> None:
+    async with client_for(_fake()) as client:
+        resp = await client.post(
+            "/api/v1/sermon-notes", json={**_CREATE_BODY, "book_usfm": "ZZZ"}
+        )
+    assert resp.status_code == 422
+    assert resp.json()["detail"]["code"] == "INVALID_BOOK"
+
+
+async def test_create_concord_unreachable_502(
+    client_for: Callable[[FakeConcordClient], httpx.AsyncClient],
+) -> None:
+    # Concord is a hard dependency: if it can't be reached to resolve the book, error (invariant 3).
+    fake = FakeConcordClient(
+        error=ConcordUnreachableError("http://concord.test", httpx.ConnectError("down"))
+    )
+    async with client_for(fake) as client:
+        resp = await client.post("/api/v1/sermon-notes", json=_CREATE_BODY)
+    assert resp.status_code == 502
+    assert resp.json()["detail"]["code"] == "CONCORD_UNREACHABLE"
+
+
+async def test_patch_updates_only_given_fields(
+    db_sessionmaker: async_sessionmaker[AsyncSession],
+    client_for: Callable[[FakeConcordClient], httpx.AsyncClient],
+) -> None:
+    note_id = await _seed_note(db_sessionmaker, title="Old", tags=["a"])
+    async with client_for(_fake()) as client:
+        resp = await client.patch(
+            f"/api/v1/sermon-notes/{note_id}", json={"title": "New", "tags": ["b", "c"]}
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["title"] == "New"
+        assert sorted(body["tags"]) == ["b", "c"]
+        # Untouched fields are preserved.
+        assert body["sermon_url"] == "https://example.test/sermon"
+        assert body["reference"] == "John 3:16"
+
+
+async def test_patch_other_author_404(
+    db_sessionmaker: async_sessionmaker[AsyncSession],
+    client_for: Callable[[FakeConcordClient], httpx.AsyncClient],
+) -> None:
+    async with db_sessionmaker() as session:
+        session.add(User(id=2, name="someone-else", created_at=datetime.now(UTC)))
+        await session.commit()
+    other_id = await _seed_note(db_sessionmaker, author_id=2)
+    async with client_for(_fake()) as client:
+        resp = await client.patch(f"/api/v1/sermon-notes/{other_id}", json={"title": "Hijack"})
+    assert resp.status_code == 404
+    assert resp.json()["detail"]["code"] == "SERMON_NOTE_NOT_FOUND"
+
+
+async def test_delete_removes(
+    db_sessionmaker: async_sessionmaker[AsyncSession],
+    client_for: Callable[[FakeConcordClient], httpx.AsyncClient],
+) -> None:
+    note_id = await _seed_note(db_sessionmaker)
+    async with client_for(_fake()) as client:
+        resp = await client.delete(f"/api/v1/sermon-notes/{note_id}")
+        assert resp.status_code == 204
+        gone = await client.get(f"/api/v1/sermon-notes/{note_id}")
+    assert gone.status_code == 404
+
+
+async def test_delete_other_author_404(
+    db_sessionmaker: async_sessionmaker[AsyncSession],
+    client_for: Callable[[FakeConcordClient], httpx.AsyncClient],
+) -> None:
+    async with db_sessionmaker() as session:
+        session.add(User(id=2, name="someone-else", created_at=datetime.now(UTC)))
+        await session.commit()
+    other_id = await _seed_note(db_sessionmaker, author_id=2)
+    async with client_for(_fake()) as client:
+        resp = await client.delete(f"/api/v1/sermon-notes/{other_id}")
+    assert resp.status_code == 404
+    # The other author's note still exists.
+    async with db_sessionmaker() as session:
+        assert await session.get(SermonNote, other_id) is not None

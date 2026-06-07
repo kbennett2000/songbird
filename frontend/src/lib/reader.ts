@@ -21,6 +21,7 @@ import {
   readChapterSchema,
   resolvedReferenceSchema,
   semanticResultsSchema,
+  sermonNoteSchema,
   sermonNotesListSchema,
   tagsListSchema,
   translationsResponseSchema,
@@ -133,6 +134,46 @@ export async function updateAnnotation(
 
 export async function deleteAnnotation(id: number): Promise<void> {
   await apiRequest<void>("DELETE", `/annotations/${id}`);
+}
+
+export interface CreateSermonNoteInput {
+  title: string;
+  sermon_url: string;
+  reference: string;
+  book_usfm: string;
+  start_chapter: number;
+  start_verse: number;
+  end_chapter: number;
+  end_verse: number;
+  event_date: string | null;
+  tags: string[];
+}
+
+/** Create a sermon note. The server resolves `book_order_index` from Concord — the client only
+ * sends the canonical anchor (invariant 4 stays server-authoritative). */
+export async function createSermonNote(input: CreateSermonNoteInput): Promise<SermonNote> {
+  const data = await apiRequest<unknown>("POST", "/sermon-notes", input);
+  return sermonNoteSchema.parse(data);
+}
+
+export interface UpdateSermonNoteInput {
+  title?: string;
+  sermon_url?: string;
+  reference?: string;
+  event_date?: string | null;
+  tags?: string[];
+}
+
+export async function updateSermonNote(
+  id: number,
+  input: UpdateSermonNoteInput,
+): Promise<SermonNote> {
+  const data = await apiRequest<unknown>("PATCH", `/sermon-notes/${id}`, input);
+  return sermonNoteSchema.parse(data);
+}
+
+export async function deleteSermonNote(id: number): Promise<void> {
+  await apiRequest<void>("DELETE", `/sermon-notes/${id}`);
 }
 
 /** All tags in songbird (for the editor's type-ahead). Concord-free. */

@@ -9,6 +9,7 @@ import { Modal } from "@/components/Modal";
 import { NoteEditor } from "@/components/NoteEditor";
 import { NotePopover } from "@/components/NotePopover";
 import { ScopePicker } from "@/components/ScopePicker";
+import { SermonNoteForm, type SermonNoteFormValues } from "@/components/SermonNoteForm";
 import { SermonNotePopover } from "@/components/SermonNotePopover";
 import { SermonNotesPopover } from "@/components/SermonNotesPopover";
 import { SidePanel } from "@/components/SidePanel";
@@ -19,7 +20,9 @@ import { ApiError } from "@/lib/api";
 import { nextChapter, prevChapter } from "@/lib/navigation";
 import {
   createAnnotation,
+  createSermonNote,
   deleteAnnotation,
+  deleteSermonNote,
   fetchBooks,
   fetchChapter,
   fetchNotes,
@@ -28,19 +31,34 @@ import {
   fetchTranslations,
   resolveReference,
   updateAnnotation,
+  updateSermonNote,
 } from "@/lib/reader";
 import type { ReadAnnotation, ReadVerse, Scope, SermonNote, TranslatorNote } from "@/schemas";
 
 const DEFAULT_TRANSLATION = "KJV";
 
+type NoteKind = "annotation" | "sermon";
+
 interface Editing {
   verse: ReadVerse;
+  kind: NoteKind;
+  // Annotation fields (kind === "annotation")
   annotationId: number | null; // null → new annotation
   initialMarkdown: string;
   scope: Scope;
   scopeLabel: string | null; // "written for KJV" when out-of-scope for the current translation
   tags: string[];
+  // Sermon fields (kind === "sermon")
+  sermonId: number | null; // null → new sermon note
+  sermon: SermonNoteFormValues;
 }
+
+const EMPTY_SERMON: SermonNoteFormValues = {
+  title: "",
+  sermon_url: "",
+  reference: "",
+  event_date: null,
+};
 
 interface XrefView {
   book: string;
@@ -67,9 +85,11 @@ export function ReaderView(): JSX.Element {
   );
   // The sermon notes covering the tapped verse, whose popover is open (separate system —
   // canonical, all-translations). One note → single popover; several → a stacked list.
-  const [openSermon, setOpenSermon] = useState<{ notes: SermonNote[]; anchor: HTMLElement } | null>(
-    null,
-  );
+  const [openSermon, setOpenSermon] = useState<{
+    notes: SermonNote[];
+    anchor: HTMLElement;
+    verse: ReadVerse;
+  } | null>(null);
   const [refInput, setRefInput] = useState("");
   const [resolveError, setResolveError] = useState<string | null>(null);
   const [highlightVerse, setHighlightVerse] = useState<number | null>(() => {
@@ -217,17 +237,64 @@ export function ReaderView(): JSX.Element {
     },
   });
 
+  const sermonSaveMutation = useMutation({
+    mutationFn: async (values: SermonNoteFormValues) => {
+      if (!editing) return;
+      if (editing.sermonId !== null) {
+        await updateSermonNote(editing.sermonId, {
+          title: values.title,
+          sermon_url: values.sermon_url,
+          reference: values.reference,
+          event_date: values.event_date,
+          tags: editing.tags,
+        });
+      } else {
+        await createSermonNote({
+          title: values.title,
+          sermon_url: values.sermon_url,
+          reference: values.reference,
+          book_usfm: chapterQuery.data?.book ?? book,
+          start_chapter: chapter,
+          start_verse: editing.verse.verse,
+          end_chapter: chapter,
+          end_verse: editing.verse.verse,
+          event_date: values.event_date,
+          tags: editing.tags,
+        });
+      }
+    },
+    onSuccess: async () => {
+      await invalidateChapter();
+      await queryClient.invalidateQueries({ queryKey: ["tags"] });
+      setEditing(null);
+    },
+  });
+
+  const sermonDeleteMutation = useMutation({
+    mutationFn: async (id: number) => {
+      await deleteSermonNote(id);
+    },
+    onSuccess: async () => {
+      await invalidateChapter();
+      setEditing(null);
+    },
+  });
+
   const openNew = (verse: ReadVerse) => {
     setXref(null);
     setGeo(false);
     setMap(false);
     setEditing({
       verse,
+      kind: "annotation",
       annotationId: null,
       initialMarkdown: "",
       scope: { type: "all", translations: [] },
       scopeLabel: null,
       tags: [],
+      sermonId: null,
+      // Default the sermon reference to the clicked verse (the user can refine it).
+      sermon: { ...EMPTY_SERMON, reference: verse.reference },
     });
   };
 
@@ -237,6 +304,7 @@ export function ReaderView(): JSX.Element {
     setMap(false);
     setEditing({
       verse,
+      kind: "annotation",
       annotationId: annotation.id,
       initialMarkdown: annotation.note_markdown,
       scope: {
@@ -247,6 +315,31 @@ export function ReaderView(): JSX.Element {
         ? null
         : `written for ${annotation.scope_translations.join(", ")}`,
       tags: annotation.tags,
+      sermonId: null,
+      sermon: { ...EMPTY_SERMON, reference: verse.reference },
+    });
+  };
+
+  const openSermonEdit = (verse: ReadVerse, note: SermonNote) => {
+    setOpenSermon(null);
+    setXref(null);
+    setGeo(false);
+    setMap(false);
+    setEditing({
+      verse,
+      kind: "sermon",
+      annotationId: null,
+      initialMarkdown: "",
+      scope: { type: "all", translations: [] },
+      scopeLabel: null,
+      tags: note.tags,
+      sermonId: note.id,
+      sermon: {
+        title: note.title,
+        sermon_url: note.sermon_url,
+        reference: note.reference,
+        event_date: note.event_date,
+      },
     });
   };
 
@@ -490,7 +583,11 @@ export function ReaderView(): JSX.Element {
                       type="button"
                       className="ml-2 align-middle text-emerald-600 hover:text-emerald-800"
                       onClick={(e) =>
-                        setOpenSermon({ notes: v.sermon_notes, anchor: e.currentTarget })
+                        setOpenSermon({
+                          notes: v.sermon_notes,
+                          anchor: e.currentTarget,
+                          verse: v,
+                        })
                       }
                       aria-label={
                         v.sermon_notes.length === 1
@@ -527,7 +624,9 @@ export function ReaderView(): JSX.Element {
         open={editing !== null || xref !== null || geo}
         title={
           editing
-            ? `Note on ${editing.verse.reference}`
+            ? editing.kind === "sermon"
+              ? `${editing.sermonId !== null ? "Edit sermon" : "Sermon"} on ${editing.verse.reference}`
+              : `Note on ${editing.verse.reference}`
             : xref
               ? `Cross-references — ${xref.reference}`
               : geo
@@ -540,29 +639,75 @@ export function ReaderView(): JSX.Element {
       >
         {editing && (
           <div className="flex flex-col gap-4">
-            <ScopePicker
-              value={editing.scope}
-              currentTranslation={translation}
-              availableTranslations={translations}
-              onChange={(scope) => setEditing({ ...editing, scope })}
-            />
-            <TagInput
-              value={editing.tags}
-              suggestions={tagsQuery.data ?? []}
-              onChange={(tags) => setEditing({ ...editing, tags })}
-            />
-            <NoteEditor
-              key={`${editing.verse.verse}-${editing.annotationId ?? "new"}`}
-              initialMarkdown={editing.initialMarkdown}
-              saving={saveMutation.isPending}
-              onSave={(markdown) => saveMutation.mutate(markdown)}
-              onCancel={() => setEditing(null)}
-              onDelete={
-                editing.annotationId !== null
-                  ? () => deleteMutation.mutate(editing.annotationId as number)
-                  : undefined
-              }
-            />
+            {/* Type toggle — only for a brand-new note (an existing note's kind is fixed). */}
+            {editing.annotationId === null && editing.sermonId === null && (
+              <div className="flex gap-1 rounded-lg bg-gray-100 p-1" role="tablist">
+                {(["annotation", "sermon"] as const).map((k) => (
+                  <button
+                    key={k}
+                    type="button"
+                    role="tab"
+                    aria-selected={editing.kind === k}
+                    className={`flex-1 rounded-md px-3 py-1 text-sm font-medium ${
+                      editing.kind === k
+                        ? "bg-white text-gray-900 shadow"
+                        : "text-gray-500 hover:text-gray-700"
+                    }`}
+                    onClick={() => setEditing({ ...editing, kind: k })}
+                  >
+                    {k === "annotation" ? "Standard" : "Sermon"}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {editing.kind === "annotation" ? (
+              <>
+                <ScopePicker
+                  value={editing.scope}
+                  currentTranslation={translation}
+                  availableTranslations={translations}
+                  onChange={(scope) => setEditing({ ...editing, scope })}
+                />
+                <TagInput
+                  value={editing.tags}
+                  suggestions={tagsQuery.data ?? []}
+                  onChange={(tags) => setEditing({ ...editing, tags })}
+                />
+                <NoteEditor
+                  key={`${editing.verse.verse}-${editing.annotationId ?? "new"}`}
+                  initialMarkdown={editing.initialMarkdown}
+                  saving={saveMutation.isPending}
+                  onSave={(markdown) => saveMutation.mutate(markdown)}
+                  onCancel={() => setEditing(null)}
+                  onDelete={
+                    editing.annotationId !== null
+                      ? () => deleteMutation.mutate(editing.annotationId as number)
+                      : undefined
+                  }
+                />
+              </>
+            ) : (
+              <>
+                <TagInput
+                  value={editing.tags}
+                  suggestions={tagsQuery.data ?? []}
+                  onChange={(tags) => setEditing({ ...editing, tags })}
+                />
+                <SermonNoteForm
+                  key={`sermon-${editing.verse.verse}-${editing.sermonId ?? "new"}`}
+                  initial={editing.sermon}
+                  saving={sermonSaveMutation.isPending}
+                  onSave={(values) => sermonSaveMutation.mutate(values)}
+                  onCancel={() => setEditing(null)}
+                  onDelete={
+                    editing.sermonId !== null
+                      ? () => sermonDeleteMutation.mutate(editing.sermonId as number)
+                      : undefined
+                  }
+                />
+              </>
+            )}
           </div>
         )}
         {xref && (
@@ -606,12 +751,22 @@ export function ReaderView(): JSX.Element {
             note={openSermon.notes[0]!}
             anchor={openSermon.anchor}
             onClose={() => setOpenSermon(null)}
+            onEdit={() => openSermonEdit(openSermon.verse, openSermon.notes[0]!)}
+            onDelete={() => {
+              setOpenSermon(null);
+              sermonDeleteMutation.mutate(openSermon.notes[0]!.id);
+            }}
           />
         ) : (
           <SermonNotesPopover
             notes={openSermon.notes}
             anchor={openSermon.anchor}
             onClose={() => setOpenSermon(null)}
+            onEdit={(note) => openSermonEdit(openSermon.verse, note)}
+            onDelete={(note) => {
+              setOpenSermon(null);
+              sermonDeleteMutation.mutate(note.id);
+            }}
           />
         ))}
     </div>
