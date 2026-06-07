@@ -46,11 +46,14 @@ RUN sed -i 's/\r$//' /usr/local/bin/docker-entrypoint.sh \
 
 RUN mkdir -p /data && chown songbird:songbird /data
 
+# COOKIE_SECURE=false suits the default LAN-HTTP deploy; set it to 1/true when TLS
+# fronts songbird, so the session cookie carries the Secure flag (see docs/SECURITY.md).
 ENV DATA_DIR=/data \
     FRONTEND_DIST_DIR=/app/frontend-dist \
     CONCORD_BASE_URL=http://localhost:8000 \
     PORT=8077 \
-    BIND_HOST=0.0.0.0
+    BIND_HOST=0.0.0.0 \
+    COOKIE_SECURE=false
 
 EXPOSE 8077
 

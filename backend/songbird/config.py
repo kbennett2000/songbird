@@ -30,6 +30,10 @@ class Settings(BaseSettings):
     concord_base_url: str = "http://localhost:8000"
     concord_timeout: float = 5.0
 
+    # Session cookie `Secure` flag. Default False suits the LAN-HTTP single-unit deploy; set
+    # COOKIE_SECURE=1 the moment songbird is fronted with TLS (see docs/SECURITY.md).
+    cookie_secure: bool = False
+
     # Set in production (by the Docker image) to the built SPA's dist dir.
     frontend_dist_dir: Path | None = None
 
