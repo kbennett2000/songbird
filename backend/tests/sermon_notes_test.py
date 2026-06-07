@@ -1,0 +1,173 @@
+"""Sermon notes: songbird-owned, canonical-anchored, ALWAYS visible on every translation (no
+scope), overlaid on the chapter like annotations. READ-ONLY this slice — rows are inserted
+directly (no create endpoint yet). Synthetic fixtures only; never the real backup."""
+
+from collections.abc import Callable
+from datetime import UTC, date, datetime
+
+import httpx
+from songbird.db.models import SermonNote, Tag, User
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+from tests.conftest import FakeConcordClient
+from tests.helpers import DEFAULT_TRANSLATIONS, build_chapter
+
+
+def _fake(translation: str = "KJV") -> FakeConcordClient:
+    return FakeConcordClient(
+        chapter=build_chapter("JHN", 3, translation, 20), translations=DEFAULT_TRANSLATIONS
+    )
+
+
+async def _seed_note(
+    sessionmaker: async_sessionmaker[AsyncSession],
+    *,
+    book_usfm: str = "JHN",
+    book_order_index: int = 43,
+    start_chapter: int = 3,
+    start_verse: int = 16,
+    end_chapter: int = 3,
+    end_verse: int = 16,
+    reference: str = "John 3:16",
+    title: str = "A sermon",
+    sermon_url: str = "https://example.test/sermon",
+    event_date: date | None = None,
+    tags: list[str] | None = None,
+    author_id: int = 1,
+) -> int:
+    async with sessionmaker() as session:
+        note = SermonNote(
+            title=title,
+            sermon_url=sermon_url,
+            reference=reference,
+            book_usfm=book_usfm,
+            book_order_index=book_order_index,
+            start_chapter=start_chapter,
+            start_verse=start_verse,
+            end_chapter=end_chapter,
+            end_verse=end_verse,
+            event_date=event_date,
+            author_id=author_id,
+            tags=[Tag(name=t) for t in (tags or [])],
+        )
+        session.add(note)
+        await session.commit()
+        return note.id
+
+
+def _verse(read_json: dict[str, object], verse: int) -> dict[str, object]:
+    verses = read_json["verses"]
+    assert isinstance(verses, list)
+    return next(v for v in verses if v["verse"] == verse)
+
+
+async def test_overlay_attaches_to_every_covered_verse(
+    db_sessionmaker: async_sessionmaker[AsyncSession],
+    client_for: Callable[[FakeConcordClient], httpx.AsyncClient],
+) -> None:
+    # A multi-verse note (JHN 3:14-17) rides every covered verse, and only those.
+    note_id = await _seed_note(
+        db_sessionmaker, start_verse=14, end_verse=17, reference="John 3:14-17"
+    )
+    async with client_for(_fake("KJV")) as client:
+        body = (await client.get("/api/v1/read/KJV/JHN/3")).json()
+
+    for v in (14, 15, 16, 17):
+        ids = [s["id"] for s in _verse(body, v)["sermon_notes"]]
+        assert ids == [note_id], f"verse {v} should carry the sermon note"
+    for v in (13, 18):
+        assert _verse(body, v)["sermon_notes"] == [], f"verse {v} should NOT carry it"
+
+
+async def test_visible_on_every_translation_and_persists_across_switch(
+    db_sessionmaker: async_sessionmaker[AsyncSession],
+    client_for: Callable[[FakeConcordClient], httpx.AsyncClient],
+) -> None:
+    # No scope concept: the same note shows in translation A AND B (the reader re-reads per
+    # translation, so switching never clears it).
+    note_id = await _seed_note(db_sessionmaker)
+    async with client_for(_fake("KJV")) as client:
+        kjv = _verse((await client.get("/api/v1/read/KJV/JHN/3")).json(), 16)
+    async with client_for(_fake("WEB")) as client:
+        web = _verse((await client.get("/api/v1/read/WEB/JHN/3")).json(), 16)
+
+    assert [s["id"] for s in kjv["sermon_notes"]] == [note_id]
+    assert [s["id"] for s in web["sermon_notes"]] == [note_id]
+    # No in_scope field — sermon notes are unconditionally visible.
+    assert "in_scope" not in kjv["sermon_notes"][0]
+
+
+async def test_list_is_in_canonical_book_order(
+    db_sessionmaker: async_sessionmaker[AsyncSession],
+    client_for: Callable[[FakeConcordClient], httpx.AsyncClient],
+) -> None:
+    # Seed out of canonical order (Revelation before Genesis); the list returns canonical order.
+    await _seed_note(
+        db_sessionmaker, book_usfm="REV", book_order_index=66, reference="Revelation 1:1"
+    )
+    await _seed_note(
+        db_sessionmaker, book_usfm="GEN", book_order_index=1, reference="Genesis 1:1"
+    )
+    async with client_for(_fake()) as client:
+        rows = (await client.get("/api/v1/sermon-notes")).json()
+    assert [r["book_usfm"] for r in rows] == ["GEN", "REV"]
+
+
+async def test_serialization_tags_date_reference(
+    db_sessionmaker: async_sessionmaker[AsyncSession],
+    client_for: Callable[[FakeConcordClient], httpx.AsyncClient],
+) -> None:
+    note_id = await _seed_note(
+        db_sessionmaker,
+        title="Devoted to the Apostles' Teaching",
+        sermon_url="https://youtu.be/abc123",
+        reference="Acts 2:42-47",
+        event_date=date(2026, 1, 5),
+        tags=["acts", "church"],
+    )
+    async with client_for(_fake()) as client:
+        note = (await client.get(f"/api/v1/sermon-notes/{note_id}")).json()
+
+    assert note["title"] == "Devoted to the Apostles' Teaching"
+    assert note["sermon_url"] == "https://youtu.be/abc123"
+    assert note["reference"] == "Acts 2:42-47"
+    assert note["event_date"] == "2026-01-05"
+    assert sorted(note["tags"]) == ["acts", "church"]
+
+
+async def test_null_event_date_serializes_null(
+    db_sessionmaker: async_sessionmaker[AsyncSession],
+    client_for: Callable[[FakeConcordClient], httpx.AsyncClient],
+) -> None:
+    note_id = await _seed_note(db_sessionmaker, event_date=None)
+    async with client_for(_fake()) as client:
+        note = (await client.get(f"/api/v1/sermon-notes/{note_id}")).json()
+    assert note["event_date"] is None
+
+
+async def test_get_unknown_404(
+    client_for: Callable[[FakeConcordClient], httpx.AsyncClient],
+) -> None:
+    async with client_for(_fake()) as client:
+        resp = await client.get("/api/v1/sermon-notes/999")
+    assert resp.status_code == 404
+    assert resp.json()["detail"]["code"] == "NOT_FOUND"
+
+
+async def test_author_scoped_out_of_overlay_and_list(
+    db_sessionmaker: async_sessionmaker[AsyncSession],
+    client_for: Callable[[FakeConcordClient], httpx.AsyncClient],
+) -> None:
+    # A note owned by another author is invisible to user 1 (overlay, list, and by-id).
+    async with db_sessionmaker() as session:
+        session.add(User(id=2, name="someone-else", created_at=datetime.now(UTC)))
+        await session.commit()
+    other_id = await _seed_note(db_sessionmaker, author_id=2)
+
+    async with client_for(_fake("KJV")) as client:
+        read = (await client.get("/api/v1/read/KJV/JHN/3")).json()
+        listed = (await client.get("/api/v1/sermon-notes")).json()
+        by_id = await client.get(f"/api/v1/sermon-notes/{other_id}")
+
+    assert _verse(read, 16)["sermon_notes"] == []
+    assert listed == []
+    assert by_id.status_code == 404

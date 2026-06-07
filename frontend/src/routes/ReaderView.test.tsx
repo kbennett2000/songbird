@@ -47,7 +47,11 @@ function annotation(overrides: Record<string, unknown> = {}) {
   };
 }
 
-function readResponse(annotations: ReturnType<typeof annotation>[], translation = "KJV") {
+function readResponse(
+  annotations: ReturnType<typeof annotation>[],
+  translation = "KJV",
+  sermonNotes: ReturnType<typeof sermonNote>[] = [],
+) {
   return {
     translation,
     book: "JHN",
@@ -61,8 +65,30 @@ function readResponse(annotations: ReturnType<typeof annotation>[], translation 
         reference: "John 3:16",
         text: `${translation} text 16`,
         annotations,
+        sermon_notes: sermonNotes,
       },
     ],
+  };
+}
+
+function sermonNote(overrides: Record<string, unknown> = {}) {
+  return {
+    id: 1,
+    title: "Devoted to the Apostles' Teaching",
+    sermon_url: "https://youtu.be/abc123",
+    reference: "John 3:16",
+    book_usfm: "JHN",
+    book_order_index: 43,
+    start_chapter: 3,
+    start_verse: 16,
+    end_chapter: 3,
+    end_verse: 16,
+    event_date: "2026-01-05",
+    tags: ["faith"] as string[],
+    author_id: 1,
+    created_at: "2026-06-05T00:00:00Z",
+    updated_at: "2026-06-05T00:00:00Z",
+    ...overrides,
   };
 }
 
@@ -185,6 +211,68 @@ describe("ReaderView", () => {
     expect(screen.queryByRole("button", { name: "Translator's note 1" })).not.toBeInTheDocument();
   });
 
+  it("shows all three overlays on one verse without collision, and opens the sermon popover", async () => {
+    const tnote = {
+      book: "JHN",
+      chapter: 3,
+      verse: 16,
+      reference: "John 3:16",
+      type: "tn",
+      text: "A translator's note",
+      char_offset: 4,
+      marker: "1",
+      ordinal: 0,
+      cross_references: [],
+    };
+    server.use(
+      // A canonical annotation (amber ●) + a sermon note (emerald ▶) on verse 16…
+      http.get("/api/v1/read/:translation/:book/:chapter", ({ params }) =>
+        HttpResponse.json(
+          readResponse([annotation()], String(params.translation), [sermonNote()]),
+        ),
+      ),
+      // …plus a slice-11 translator note (violet inline marker) for NET.
+      http.get("/api/v1/notes/:translation/:book/:chapter", ({ params }) =>
+        HttpResponse.json(String(params.translation) === "WEB" ? [tnote] : []),
+      ),
+    );
+    const user = userEvent.setup();
+    renderReader();
+    // Wait for the chapter (and the translations dropdown) to load before switching to NET/WEB.
+    await screen.findByRole("button", { name: "Sermon on verse 16" });
+    await user.selectOptions(await screen.findByLabelText("Translation"), "WEB");
+
+    // The three systems coexist as distinct affordances on the same verse.
+    expect(await screen.findByRole("button", { name: "View note on verse 16" })).toBeInTheDocument(); // amber ●
+    expect(screen.getByRole("button", { name: "Translator's note 1" })).toBeInTheDocument(); // violet superscript
+    const sermonMarker = screen.getByRole("button", { name: "Sermon on verse 16" }); // emerald ▶
+    expect(sermonMarker).toBeInTheDocument();
+
+    // The sermon marker opens its own popover with the external link.
+    await user.click(sermonMarker);
+    expect(await screen.findByText("Devoted to the Apostles' Teaching")).toBeInTheDocument();
+    const link = screen.getByRole("link", { name: /Watch the sermon/ });
+    expect(link).toHaveAttribute("target", "_blank");
+    expect(link).toHaveAttribute("rel", "noopener noreferrer");
+  });
+
+  it("keeps the sermon marker across a translation switch (all-translations, no scope)", async () => {
+    server.use(
+      http.get("/api/v1/read/:translation/:book/:chapter", ({ params }) =>
+        HttpResponse.json(readResponse([], String(params.translation), [sermonNote()])),
+      ),
+    );
+    const user = userEvent.setup();
+    renderReader();
+
+    // Present in the default translation…
+    expect(await screen.findByRole("button", { name: "Sermon on verse 16" })).toBeInTheDocument();
+    // …and still present after switching (sermon notes are not translation-specific).
+    await user.selectOptions(await screen.findByLabelText("Translation"), "WEB");
+    expect(await screen.findByText(/WEB text 16/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Sermon on verse 16" })).toBeInTheDocument();
+  });
+
   it("sends the chosen scope when creating an annotation", async () => {
     let captured: Record<string, unknown> | null = null;
     server.use(
@@ -293,6 +381,7 @@ describe("ReaderView", () => {
               reference: `${book} ${chapter}:16`,
               text: `${book} ${chapter}:16 — text`,
               annotations: [annotation()],
+              sermon_notes: [],
             },
           ],
         });

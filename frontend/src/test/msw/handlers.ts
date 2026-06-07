@@ -70,6 +70,7 @@ export const defaultHandlers = [
           reference: `${book} ${chapter}:16`,
           text: `${book} ${chapter}:16 — text`,
           annotations: [],
+          sermon_notes: [],
         },
       ],
     });
