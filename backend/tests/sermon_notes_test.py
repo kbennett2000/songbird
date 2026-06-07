@@ -153,6 +153,84 @@ async def test_get_unknown_404(
     assert resp.json()["detail"]["code"] == "NOT_FOUND"
 
 
+async def _seed_tagged_corpus(
+    sessionmaker: async_sessionmaker[AsyncSession],
+) -> None:
+    """Three notes sharing a tag vocabulary (Tag.name is unique, so the rows are reused):
+    JHN 3:16 {grace, faith}, JHN 3:17 {grace}, JHN 3:18 untagged."""
+    async with sessionmaker() as session:
+        by_name = {name: Tag(name=name) for name in ("grace", "faith")}
+
+        def note(verse: int, tags: list[str]) -> SermonNote:
+            return SermonNote(
+                title=f"Sermon {verse}",
+                sermon_url="https://example.test/sermon",
+                reference=f"John 3:{verse}",
+                book_usfm="JHN",
+                book_order_index=43,
+                start_chapter=3,
+                start_verse=verse,
+                end_chapter=3,
+                end_verse=verse,
+                author_id=1,
+                tags=[by_name[t] for t in tags],
+            )
+
+        session.add_all(
+            [note(16, ["grace", "faith"]), note(17, ["grace"]), note(18, [])]
+        )
+        await session.commit()
+
+
+def _start_verses(rows: list[dict[str, object]]) -> list[int]:
+    return sorted(r["start_verse"] for r in rows)
+
+
+async def test_list_filter_single_tag(
+    db_sessionmaker: async_sessionmaker[AsyncSession],
+    client_for: Callable[[FakeConcordClient], httpx.AsyncClient],
+) -> None:
+    await _seed_tagged_corpus(db_sessionmaker)
+    async with client_for(_fake()) as client:
+        rows = (await client.get("/api/v1/sermon-notes", params={"tags": "grace"})).json()
+    assert _start_verses(rows) == [16, 17]
+
+
+async def test_list_filter_multiple_tags_AND(
+    db_sessionmaker: async_sessionmaker[AsyncSession],
+    client_for: Callable[[FakeConcordClient], httpx.AsyncClient],
+) -> None:
+    await _seed_tagged_corpus(db_sessionmaker)
+    async with client_for(_fake()) as client:
+        rows = (await client.get("/api/v1/sermon-notes", params={"tags": "grace,faith"})).json()
+    # Only JHN 3:16 carries BOTH.
+    assert _start_verses(rows) == [16]
+
+
+async def test_list_filter_match_any(
+    db_sessionmaker: async_sessionmaker[AsyncSession],
+    client_for: Callable[[FakeConcordClient], httpx.AsyncClient],
+) -> None:
+    await _seed_tagged_corpus(db_sessionmaker)
+    async with client_for(_fake()) as client:
+        rows = (
+            await client.get(
+                "/api/v1/sermon-notes", params={"tags": "faith,nope", "match": "any"}
+            )
+        ).json()
+    assert _start_verses(rows) == [16]
+
+
+async def test_list_filter_unrelated_tag_excludes_all(
+    db_sessionmaker: async_sessionmaker[AsyncSession],
+    client_for: Callable[[FakeConcordClient], httpx.AsyncClient],
+) -> None:
+    await _seed_tagged_corpus(db_sessionmaker)
+    async with client_for(_fake()) as client:
+        rows = (await client.get("/api/v1/sermon-notes", params={"tags": "nope"})).json()
+    assert rows == []
+
+
 async def test_author_scoped_out_of_overlay_and_list(
     db_sessionmaker: async_sessionmaker[AsyncSession],
     client_for: Callable[[FakeConcordClient], httpx.AsyncClient],
