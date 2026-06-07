@@ -2,6 +2,7 @@ import { createBrowserRouter, RouterProvider } from "react-router-dom";
 
 import { RequireAuth } from "@/components/RequireAuth";
 import { BrowseView } from "@/routes/BrowseView";
+import { CompareView } from "@/routes/CompareView";
 import { LoginPage } from "@/routes/LoginPage";
 import { ReaderView } from "@/routes/ReaderView";
 import { SearchView } from "@/routes/SearchView";
@@ -22,6 +23,14 @@ const router = createBrowserRouter([
     element: (
       <RequireAuth>
         <BrowseView />
+      </RequireAuth>
+    ),
+  },
+  {
+    path: "/compare",
+    element: (
+      <RequireAuth>
+        <CompareView />
       </RequireAuth>
     ),
   },

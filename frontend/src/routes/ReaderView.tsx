@@ -456,6 +456,12 @@ export function ReaderView(): JSX.Element {
             <Link to="/search" className="text-sm text-blue-700 hover:underline">
               Search
             </Link>
+            <Link
+              to={`/compare?translation=${encodeURIComponent(translation)}&book=${encodeURIComponent(book)}&chapter=${chapter}`}
+              className="text-sm text-blue-700 hover:underline"
+            >
+              Compare
+            </Link>
             {user && (
               <span className="flex items-center gap-2 text-sm text-gray-500">
                 <span title={user.is_admin ? "Admin" : undefined}>{user.username}</span>
