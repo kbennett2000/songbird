@@ -1,0 +1,52 @@
+# The ONLY thing that runs songbird's live-Concord contract test (backend/tests/live_concord_test.py,
+# marked `concord` and excluded from the PR gate). It stands up the pinned Concord image as a
+# service container and runs `pytest -m concord` against it, so contract drift between songbird's
+# wire schemas and Concord's responses fails here nightly instead of surfacing at runtime.
+#
+# The Concord image is public on GHCR (the same one `docker compose up` pulls), so no registry
+# auth is needed. If it is ever made private, add a docker/login-action step with a GHCR token.
+#
+# Concord version: pinned literally below. Slice 2 unifies this with docker-compose.yml's pin so
+# there is one named value across the repo.
+
+name: Nightly Concord contract
+
+on:
+  schedule:
+    - cron: "0 7 * * *" # 07:00 UTC daily
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  contract:
+    name: live Concord contract test
+    runs-on: ubuntu-latest
+    services:
+      concord:
+        image: ghcr.io/kbennett2000/concord:v1.0.2
+        ports:
+          - 8000:8000
+        options: >-
+          --health-cmd "python -c 'import urllib.request,sys; sys.exit(0 if urllib.request.urlopen(\"http://127.0.0.1:8000/healthz\").status==200 else 1)'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 12
+          --health-start-period 40s
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements*.txt
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt
+      - name: Run live Concord contract tests
+        env:
+          CONCORD_BASE_URL: http://localhost:8000
+        run: pytest -m concord
