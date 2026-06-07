@@ -92,6 +92,34 @@ class ReadAnnotation(AnnotationOut):
     in_scope: bool
 
 
+class SermonNoteCreate(BaseModel):
+    """Author a sermon note. The anchor is canonical coordinates (invariant 4); the client
+    does NOT send `book_order_index` — the server resolves it from Concord so canonical order
+    stays server-authoritative (and a client can't assert a wrong one)."""
+
+    title: str = Field(min_length=1)
+    sermon_url: str = Field(min_length=1)
+    reference: str = Field(min_length=1, max_length=128)
+    book_usfm: str = Field(min_length=1, max_length=3)
+    start_chapter: int = Field(ge=1)
+    start_verse: int = Field(ge=1)
+    end_chapter: int = Field(ge=1)
+    end_verse: int = Field(ge=1)
+    event_date: date | None = None
+    tags: list[str] = Field(default_factory=list)
+
+
+class SermonNoteUpdate(BaseModel):
+    """Edit a sermon note. The canonical anchor is intentionally NOT editable here
+    (re-anchoring = delete + recreate), keeping the coordinate logic in one place."""
+
+    title: str | None = Field(default=None, min_length=1)
+    sermon_url: str | None = Field(default=None, min_length=1)
+    reference: str | None = Field(default=None, min_length=1, max_length=128)
+    event_date: date | None = None
+    tags: list[str] | None = None
+
+
 class SermonNoteOut(BaseModel):
     """A sermon note (songbird-owned). Canonical anchor + a stored display `reference`; the body
     is an external sermon URL. Always visible on every translation — there is no scope/in_scope
