@@ -6,8 +6,10 @@
 # The Concord image is public on GHCR (the same one `docker compose up` pulls), so no registry
 # auth is needed. If it is ever made private, add a docker/login-action step with a GHCR token.
 #
-# Concord version: pinned literally below. Slice 2 unifies this with docker-compose.yml's pin so
-# there is one named value across the repo.
+# Concord version: pinned literally below, mirroring CONCORD_VERSION in .env.example (the single
+# source of truth for docker-compose.yml). GitHub creates service containers before any step runs,
+# so the image tag can't read that file or a step-set env at container-create time — keep this tag
+# in step with .env.example's CONCORD_VERSION by hand when bumping.
 
 name: Nightly Concord contract
 
