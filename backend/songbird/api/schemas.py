@@ -32,13 +32,20 @@ class UserResponse(BaseModel):
     username: str | None
     is_admin: bool
     last_translation: str | None
+    last_book: str | None
+    last_chapter: int | None
     created_at: datetime
 
 
 class UserUpdate(BaseModel):
-    """Per-profile preference patch. Currently just the reader's default translation."""
+    """Per-profile reading-position patch — translation + book + chapter. All optional so one
+    PATCH can save the whole position; only the fields the client sent are applied (partial
+    update via `model_fields_set`). No Concord round-trip — a preference write must not fail
+    when Concord blips."""
 
-    last_translation: str = Field(min_length=1, max_length=16)
+    last_translation: str | None = Field(default=None, min_length=1, max_length=16)
+    last_book: str | None = Field(default=None, min_length=1, max_length=3)
+    last_chapter: int | None = Field(default=None, ge=1)
 
 
 class AuthEnvelope(BaseModel):

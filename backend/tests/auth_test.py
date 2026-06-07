@@ -162,6 +162,67 @@ async def test_patch_me_without_cookie_401(
     assert resp.json()["detail"]["code"] == "NOT_AUTHENTICATED"
 
 
+async def test_me_last_position_defaults_null(
+    make_concord: type[FakeConcordClient],
+    unauth_client: Callable[[FakeConcordClient], httpx.AsyncClient],
+) -> None:
+    # A fresh user has no remembered position — the reader falls back to its default chapter.
+    async with unauth_client(make_concord()) as client:
+        await client.post("/api/v1/auth/register", json=CREDS)
+        me = await client.get("/api/v1/auth/me")
+    body = me.json()["user"]
+    assert body["last_book"] is None
+    assert body["last_chapter"] is None
+
+
+async def test_patch_me_sets_full_position(
+    make_concord: type[FakeConcordClient],
+    unauth_client: Callable[[FakeConcordClient], httpx.AsyncClient],
+) -> None:
+    async with unauth_client(make_concord()) as client:
+        await client.post("/api/v1/auth/register", json=CREDS)
+        # Whole position in one PATCH; codes normalize upper-case (canonical like "WEB"/"GEN").
+        patch = await client.patch(
+            "/api/v1/auth/me",
+            json={"last_translation": "web", "last_book": "gen", "last_chapter": 5},
+        )
+        assert patch.status_code == 200
+        assert patch.json()["user"]["last_translation"] == "WEB"
+        assert patch.json()["user"]["last_book"] == "GEN"
+        assert patch.json()["user"]["last_chapter"] == 5
+        # Persisted across a round-trip.
+        me = await client.get("/api/v1/auth/me")
+    user = me.json()["user"]
+    assert (user["last_translation"], user["last_book"], user["last_chapter"]) == ("WEB", "GEN", 5)
+
+
+async def test_patch_me_partial_only_applies_provided(
+    make_concord: type[FakeConcordClient],
+    unauth_client: Callable[[FakeConcordClient], httpx.AsyncClient],
+) -> None:
+    # A partial patch must not clobber unsent fields — saving the chapter alone keeps the rest.
+    async with unauth_client(make_concord()) as client:
+        await client.post("/api/v1/auth/register", json=CREDS)
+        await client.patch(
+            "/api/v1/auth/me",
+            json={"last_translation": "WEB", "last_book": "JHN", "last_chapter": 3},
+        )
+        patch = await client.patch("/api/v1/auth/me", json={"last_chapter": 7})
+        assert patch.status_code == 200
+        user = patch.json()["user"]
+    assert (user["last_translation"], user["last_book"], user["last_chapter"]) == ("WEB", "JHN", 7)
+
+
+async def test_patch_me_rejects_chapter_below_one(
+    make_concord: type[FakeConcordClient],
+    unauth_client: Callable[[FakeConcordClient], httpx.AsyncClient],
+) -> None:
+    async with unauth_client(make_concord()) as client:
+        await client.post("/api/v1/auth/register", json=CREDS)
+        resp = await client.patch("/api/v1/auth/me", json={"last_chapter": 0})
+    assert resp.status_code == 422
+
+
 def test_argon2_hash_verifies() -> None:
     hashed = hash_password("supersecret")
     assert hashed != "supersecret"
