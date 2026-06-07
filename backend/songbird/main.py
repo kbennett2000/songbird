@@ -26,6 +26,8 @@ from songbird.api.sermon_notes import router as sermon_notes_router
 from songbird.api.tags import router as tags_router
 from songbird.concord.client import ConcordClient
 from songbird.config import get_settings
+from songbird.core.sessions import cleanup_all_expired_sessions
+from songbird.db.session import async_session_factory
 
 logger = logging.getLogger("songbird")
 
@@ -36,6 +38,15 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     settings.data_dir.mkdir(parents=True, exist_ok=True)
     app.state.concord = ConcordClient(settings.concord_base_url, settings.concord_timeout)
     logger.info("songbird %s starting; Concord at %s", __version__, settings.concord_base_url)
+    # Hygiene: sweep dead session rows for users who never return (per-user cleanup only runs on
+    # that user's next login). Best-effort — it must never block boot, so failures are logged.
+    try:
+        async with async_session_factory() as db:
+            swept = await cleanup_all_expired_sessions(db)
+        if swept:
+            logger.info("swept %d expired session(s) at startup", swept)
+    except Exception:
+        logger.warning("startup session sweep skipped", exc_info=True)
     try:
         yield
     finally:
