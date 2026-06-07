@@ -4,7 +4,7 @@ cookie; the session row is the source of truth, so logout is a real server-side 
 import secrets
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from songbird.db.models import UserSession
@@ -61,3 +61,15 @@ async def cleanup_expired_sessions(db: AsyncSession, user_id: int) -> None:
         )
     )
     await db.commit()
+
+
+async def cleanup_all_expired_sessions(db: AsyncSession) -> int:
+    """Sweep EVERY user's expired sessions, not just one user's. The per-user cleanup above only
+    runs on a user's next login, so rows for users who never return would otherwise accumulate.
+    Returns the number swept. Hygiene only — expiry is already enforced on read (`get_session`)."""
+    expired = UserSession.expires_at <= _utcnow()
+    count: int = await db.scalar(select(func.count()).select_from(UserSession).where(expired)) or 0
+    if count:
+        await db.execute(delete(UserSession).where(expired))
+        await db.commit()
+    return count
