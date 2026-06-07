@@ -7,16 +7,27 @@ const DEFAULT_USER = {
   username: "tester",
   is_admin: true,
   last_translation: null,
+  last_book: null,
+  last_chapter: null,
   created_at: "2026-01-01T00:00:00Z",
 };
 
 export const defaultHandlers = [
   http.get("/api/v1/auth/me", () => HttpResponse.json({ user: DEFAULT_USER })),
-  // Echo the patched preference back as the updated user (preference-specific tests override).
+  // Echo the patched reading position back as the updated user (position-specific tests override).
   http.patch("/api/v1/auth/me", async ({ request }) => {
-    const body = (await request.json()) as { last_translation?: string };
+    const body = (await request.json()) as {
+      last_translation?: string;
+      last_book?: string;
+      last_chapter?: number;
+    };
     return HttpResponse.json({
-      user: { ...DEFAULT_USER, last_translation: body.last_translation ?? null },
+      user: {
+        ...DEFAULT_USER,
+        last_translation: body.last_translation ?? null,
+        last_book: body.last_book ?? null,
+        last_chapter: body.last_chapter ?? null,
+      },
     });
   }),
   http.post("/api/v1/auth/login", () => HttpResponse.json({ user: DEFAULT_USER })),

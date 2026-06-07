@@ -12,6 +12,8 @@ const USER = {
   username: "kris",
   is_admin: true,
   last_translation: null,
+  last_book: null,
+  last_chapter: null,
   created_at: "2026-01-01T00:00:00Z",
 };
 
