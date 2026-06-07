@@ -297,8 +297,10 @@ holds server-side sessions keyed by an httponly cookie. The first person to regi
 default user / becomes owner. Every endpoint except `/healthz` and register/login is gated, and
 annotations and sermon notes are **author-scoped** — you only see your own.
 
-**Per-profile default translation.** `users.last_translation` plus `PATCH /api/v1/auth/me`
-remembers each profile's translation; the reader opens to it.
+**Per-profile reading position.** `users.last_translation`, `last_book`, and `last_chapter`
+(migration `0008`) plus `PATCH /api/v1/auth/me` remember where each profile last read; the
+reader reopens to that book/chapter/translation and the home page offers to resume it. Stored as
+three independent nullable columns, not validated on write — the reader self-heals a stale value.
 
 **Sermon notes (a second annotation type).** A `sermon_notes` table pins a sermon — `title`,
 `sermon_url`, `reference`, `event_date` — to a canonical verse span (same USFM coordinates as
@@ -311,13 +313,44 @@ always visible.
 
 **Translator's notes.** A pass-through to Concord's per-chapter translator's-notes endpoint,
 rendered as inline footnote markers with a popover in the reader. Pure proxy — no songbird data.
+_Caveat (a real finding):_ these footnotes come from **NET**, which Concord v1.0.0 doesn't ship,
+so against the default 13-translation stack the endpoint 404s and the reader shows an
+"unavailable" notice on every chapter. The feature is built and correct — it lights up when a
+Concord build includes NET. (Softening that notice so "no notes here" ≠ "Concord is down" is open
+work; tracked in dev-notes.)
+
+**Keyword Scripture search.** Alongside semantic search, a **keyword/semantic toggle** on the
+Search screen. Keyword search proxies Concord's `/v1/search` (`GET /api/v1/keyword-search`) for
+exact word/phrase matches with highlighted snippets; semantic search finds by meaning. When a
+keyword query can't run (Concord's FTS5 rejects punctuation) it returns *no results* rather than
+an error, and the UI offers to retry by meaning. Note search stays keyword-only until Concord
+exposes a semantic note endpoint.
+
+**Side-by-side compare.** A `/compare` view reads **up to three translations** in parallel
+columns, aligned by canonical verse number (the union of verses across columns; a verse a
+translation lacks shows an em-dash, never a guess). Annotations overlay per column using the same
+in-scope (filled ●) / out-of-scope (hollow ○) distinction as the reader. Reuses the existing
+`GET /api/v1/read/...` path — no new endpoint.
+
+**Export / import.** `GET /api/v1/export` and `POST /api/v1/import` move a profile's annotations
++ sermon notes as portable JSON (anchors, Markdown, scope, tags — no Bible text, no DB IDs or
+timestamps). Import is idempotent: it skips any note whose natural identity (anchor + content +
+scope + tags) already exists, validates translation/book codes against Concord once, and reports
+imported / skipped / failed. Controls live in the Browse view.
+
+**Welcome / home page.** The app now opens at `/` (the reader moved to `/read`) with a personal
+greeting, library counts (notes, sermons, tags), a "pick up where you left off" card from the
+saved reading position, a recent-notes feed, and quick links to Browse / Search / Compare.
 
 **Concord consumer contract test.** A test validates songbird's hand-written Concord types
 against Concord's pinned OpenAPI schema, catching drift between the two services.
 
-**Map view (v1.1).** Documented separately in `docs/v1.1/MAP-SPEC.md` and ADR 0001 — an offline
-bundled basemap with honest pin placement.
+**Specs for shipped features.** The map view (v1.1) is specified in `docs/v1.1/MAP-SPEC.md` +
+ADR 0001 (offline bundled basemap, honest pin placement); sermon notes in
+`docs/v1.2/SERMON-NOTES-SPEC.md`.
 
-**The data model, restated.** songbird's database now holds: `users`, `sessions`, `annotations`,
-`annotation_translations`, `tags` (+ `annotation_tags`, `sermon_note_tags` joins), and
-`sermon_notes` — seven Alembic migrations. Still **no Bible text** (invariant 5 intact).
+**The data model, restated.** songbird's database holds: `users` (now with `last_translation`,
+`last_book`, `last_chapter`), `sessions`, `annotations`, `annotation_translations`, `tags`
+(+ `annotation_tags`, `sermon_note_tags` joins), and `sermon_notes` — **eight** Alembic
+migrations. Keyword search, compare, export/import, and the home page added **no new tables**
+(they proxy Concord or reuse existing models). Still **no Bible text** (invariant 5 intact).

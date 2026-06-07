@@ -4,6 +4,49 @@ A running log of per-slice decisions, gotchas, and how each slice was verified. 
 
 ---
 
+## Docs reconcile #2 — newest features + SPEC §12 / CLAUDE.md / housekeeping
+
+- **Date:** 2026-06-07
+- **Branch:** `slice/docs-reconcile-features`
+- **Scope:** docs only — **no feature/behavior/Concord change.**
+
+### Why
+A second docs-audit pass (the first overlapped with the `docs/audit-...` work below and was
+reconciled against it on merge). Two gaps remained after that work landed:
+1. The founding spec (`docs/v1/SPEC.md`) had never been reconciled — it still read as pre-auth,
+   pre-sermon-notes, with §9/§11 unresolved.
+2. A run of features shipped to `main` *after* the first audit and were documented nowhere:
+   **last reading position** (#38), **side-by-side compare** (#40), **export/import** (#41),
+   **welcome/home page** (#43), and **keyword Scripture search** (#46, #49, #51).
+
+### What changed
+- **`docs/v1/SPEC.md`** — added a status banner; marked §9 roadmap complete; resolved §11's five
+  open questions with the answers reality chose; added **§12 "Implemented since v1"** — now
+  covering auth, reading position (`last_book`/`last_chapter`, migration 0008), sermon notes,
+  translator's notes, **keyword search**, **compare**, **export/import**, the **welcome page**,
+  the contract test, the spec pointers, and a restated data model (eight migrations, no new tables
+  for the latest features). Inline auth-as-future language in §2/§5 corrected.
+- **`README.md`** — "Using songbird" now also covers the keyword/semantic search toggle,
+  side-by-side **Compare**, **export/import** ("back up your notes"), and reopening to the last
+  reading position; the onboarding step notes the new home page. (Kept the `docs/audit-...`
+  Concord-prominence + sermon content from `main`.)
+- **`CLAUDE.md`** — "Out of scope: Mobile" reworded to "a native mobile app" (responsive web is in
+  scope, matching the mobile fix #29 + the mobile-first map modal); committed the documentation
+  charter; trimmed stray blank lines.
+- **`.gitignore`** — ignore `seed-trimmed.json` / `seed-*.json` (local sermon-seed input).
+
+### Gotcha carried forward (not fixed here)
+Translator's notes are **dormant without NET** in Concord v1.0.0 — the endpoint 404s on all 13
+shipped translations and the reader shows a misleading "unavailable (is Concord reachable?)"
+notice. Recorded in SPEC §12 as a known caveat / open work, same finding as the `docs/audit-...`
+entry below. Softening the notice is a code change, deferred.
+
+### Verify
+`grep` confirmed the new feature names land in README + SPEC; `git diff --stat` confirmed the pass
+is docs-only; no tests touched.
+
+---
+
 ## Documentation audit — Concord prominence, sermon-notes docs, refreshed screenshots
 
 - **Date:** 2026-06-07
