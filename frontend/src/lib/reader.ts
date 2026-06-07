@@ -22,6 +22,7 @@ import {
   resolvedReferenceSchema,
   semanticResultsSchema,
   sermonNoteSchema,
+  sermonNotesListSchema,
   tagsListSchema,
   translationsResponseSchema,
   translatorNotesSchema,
@@ -189,6 +190,17 @@ export async function browseAnnotations(
   const qs = tags.length > 0 ? `?tags=${encodeURIComponent(tags.join(","))}&match=${match}` : "";
   const data = await apiRequest<unknown>("GET", `/annotations${qs}`);
   return annotationsListSchema.parse(data);
+}
+
+/** Browse sermon notes, optionally narrowed by tags (AND). Shares the tag vocabulary with
+ * annotations so the same filter narrows both. Concord-free. */
+export async function browseSermonNotes(
+  tags: string[],
+  match: "all" | "any" = "all",
+): Promise<SermonNote[]> {
+  const qs = tags.length > 0 ? `?tags=${encodeURIComponent(tags.join(","))}&match=${match}` : "";
+  const data = await apiRequest<unknown>("GET", `/sermon-notes${qs}`);
+  return sermonNotesListSchema.parse(data);
 }
 
 /** Search Scripture by meaning — via Concord's semantic search (songbird runs no ML). */

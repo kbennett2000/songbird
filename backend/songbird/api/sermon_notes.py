@@ -4,15 +4,15 @@ lack). Author-scoped (Slice 8). Full CRUD: the anchor is canonical coordinates o
 and `book_order_index` is resolved from Concord at write time (never asserted by the client)."""
 
 from fastapi import APIRouter, Depends, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from songbird.api._tags import resolve_tags
+from songbird.api._tags import normalize_tags, resolve_tags
 from songbird.api.deps import get_concord_client, get_current_user, get_db
 from songbird.api.schemas import SermonNoteCreate, SermonNoteOut, SermonNoteUpdate
 from songbird.concord.client import ConcordClient, ConcordUnreachableError
 from songbird.core.errors import ErrorCode, raise_http
-from songbird.db.models import SermonNote, User
+from songbird.db.models import SermonNote, Tag, User
 
 router = APIRouter(prefix="/api/v1/sermon-notes", tags=["sermon-notes"])
 
@@ -47,19 +47,25 @@ async def _get_or_404(db: AsyncSession, sermon_note_id: int, author_id: int) -> 
 
 @router.get("", response_model=list[SermonNoteOut])
 async def list_sermon_notes(
+    tags: str | None = None,
+    match: str = "all",
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> list[SermonNoteOut]:
-    """The current user's sermon notes, in canonical book order (then chapter/verse)."""
-    stmt = (
-        select(SermonNote)
-        .where(SermonNote.author_id == user.id)
-        .order_by(
-            SermonNote.book_order_index,
-            SermonNote.start_chapter,
-            SermonNote.start_verse,
-            SermonNote.id,
-        )
+    """The current user's sermon notes, in canonical book order (then chapter/verse). `tags`
+    filters by tag (`match=all` default → all the given tags; `any` → any), mirroring the
+    annotations browse so the shared tag vocabulary narrows both note kinds together."""
+    stmt = select(SermonNote).where(SermonNote.author_id == user.id)
+    names = normalize_tags(tags.split(",")) if tags else []
+    if names:
+        stmt = stmt.join(SermonNote.tags).where(Tag.name.in_(names)).group_by(SermonNote.id)
+        if match == "all":
+            stmt = stmt.having(func.count(func.distinct(Tag.id)) == len(names))
+    stmt = stmt.order_by(
+        SermonNote.book_order_index,
+        SermonNote.start_chapter,
+        SermonNote.start_verse,
+        SermonNote.id,
     )
     notes = (await db.execute(stmt)).scalars().unique().all()
     return [SermonNoteOut.model_validate(n) for n in notes]

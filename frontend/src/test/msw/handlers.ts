@@ -80,6 +80,7 @@ export const defaultHandlers = [
   ),
   http.get("/api/v1/tags", () => HttpResponse.json([])),
   http.get("/api/v1/annotations", () => HttpResponse.json([])),
+  http.get("/api/v1/sermon-notes", () => HttpResponse.json([])),
   http.get("/api/v1/cross-references/:book/:chapter/:verse", () => HttpResponse.json([])),
   // Notes default to empty — most translations (and the public image) ship none, so the reader
   // shows no markers; notes-specific tests override per-case via server.use().
