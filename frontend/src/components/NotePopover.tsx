@@ -44,7 +44,7 @@ export function NotePopover({ note, anchor, onClose, onJump }: NotePopoverProps)
           ✕
         </button>
       </div>
-      <p className="whitespace-pre-wrap text-gray-800">{note.text}</p>
+      <p className="whitespace-pre-wrap break-words text-gray-800">{note.text}</p>
       {note.cross_references.length > 0 && (
         <ul className="mt-2 flex flex-col gap-1 border-t border-gray-100 pt-2">
           {note.cross_references.map((ref) => (

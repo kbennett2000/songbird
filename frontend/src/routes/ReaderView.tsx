@@ -425,7 +425,7 @@ export function ReaderView(): JSX.Element {
                 </button>
               </span>
             )}
-            <div className="ml-auto flex items-center gap-2 text-sm">
+            <div className="ml-auto flex flex-wrap items-center gap-2 text-sm">
               <label className="flex items-center gap-1">
                 <span className="text-gray-500">Book</span>
                 <select
@@ -478,14 +478,14 @@ export function ReaderView(): JSX.Element {
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
-            <form onSubmit={submitRef} className="flex items-center gap-2">
+            <form onSubmit={submitRef} className="flex w-full items-center gap-2 sm:w-auto">
               <input
                 type="text"
                 value={refInput}
                 onChange={(e) => setRefInput(e.target.value)}
                 placeholder="Jump to… e.g. John 3, Gen 1:1"
                 aria-label="Jump to reference"
-                className="w-56 rounded border border-gray-300 px-2 py-1 text-sm"
+                className="min-w-0 flex-1 rounded border border-gray-300 px-2 py-1 text-sm sm:w-56 sm:flex-none"
               />
               <button
                 type="submit"

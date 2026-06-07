@@ -2,6 +2,14 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Safety net: never let a stray over-wide element produce a horizontal scrollbar (the page is
+   a single-column reader — vertical scrolling only). Layout fits the viewport on its own; this
+   just guards against the occasional long token or wide control on narrow phones. */
+html,
+body {
+  overflow-x: hidden;
+}
+
 /* TipTap / ProseMirror note editor */
 .ProseMirror {
   min-height: 8rem;
