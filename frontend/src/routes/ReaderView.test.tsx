@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
 import { MemoryRouter } from "react-router-dom";
@@ -152,6 +152,47 @@ describe("ReaderView", () => {
     // Re-renders in WEB, overlay still there.
     expect(await screen.findByText(/WEB text 16/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "View note on verse 16" })).toBeInTheDocument();
+  });
+
+  it("opens to the profile's last-used translation and remembers a switch (issue #20)", async () => {
+    const profile = (last_translation: string | null) => ({
+      id: 1,
+      username: "tester",
+      is_admin: true,
+      last_translation,
+      created_at: "x",
+    });
+    let patched: string | null = null;
+    server.use(
+      http.get("/api/v1/auth/me", () => HttpResponse.json({ user: profile("WEB") })),
+      http.patch("/api/v1/auth/me", async ({ request }) => {
+        patched = ((await request.json()) as { last_translation?: string }).last_translation ?? null;
+        return HttpResponse.json({ user: profile(patched) });
+      }),
+      http.get("/api/v1/read/:translation/:book/:chapter", ({ params }) =>
+        HttpResponse.json(readResponse([], String(params.translation))),
+      ),
+    );
+
+    // Mirror production: RequireAuth has already loaded the user into cache before the reader mounts.
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    client.setQueryData(["auth", "me"], profile("WEB"));
+    const user = userEvent.setup();
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter>
+          <ReaderView />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    // Opens in WEB (the profile's last-used), not the hardcoded KJV default.
+    expect(await screen.findByText(/WEB text 16/)).toBeInTheDocument();
+
+    // Switching persists the new choice back to the profile.
+    await user.selectOptions(await screen.findByLabelText("Translation"), "KJV");
+    expect(await screen.findByText(/KJV text 16/)).toBeInTheDocument();
+    await waitFor(() => expect(patched).toBe("KJV"));
   });
 
   it("overlays NET's translator's notes (separate from canonical annotations) and clears them on translation switch", async () => {

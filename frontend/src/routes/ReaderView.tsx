@@ -17,6 +17,7 @@ import { TagInput } from "@/components/TagInput";
 import { VerseText } from "@/components/VerseText";
 import { useAuth } from "@/hooks/useAuth";
 import { ApiError } from "@/lib/api";
+import { updateLastTranslation } from "@/lib/auth";
 import { nextChapter, prevChapter } from "@/lib/navigation";
 import {
   createAnnotation,
@@ -72,7 +73,9 @@ export function ReaderView(): JSX.Element {
   const { user, logout } = useAuth();
   // A jump-from-browse arrives as ?book=&chapter=&verse=; seed the initial location from it.
   const [searchParams] = useSearchParams();
-  const [translation, setTranslation] = useState(DEFAULT_TRANSLATION);
+  // Open to the translation this profile last read in (RequireAuth guarantees `user` is loaded by
+  // the time the reader mounts); fall back to the default the very first time.
+  const [translation, setTranslation] = useState(() => user?.last_translation ?? DEFAULT_TRANSLATION);
   const [book, setBook] = useState(() => searchParams.get("book") ?? "JHN");
   const [chapter, setChapter] = useState(() => Number(searchParams.get("chapter") ?? 3));
   const [editing, setEditing] = useState<Editing | null>(null);
@@ -135,6 +138,29 @@ export function ReaderView(): JSX.Element {
 
   const translations = useMemo(() => translationsQuery.data ?? [], [translationsQuery.data]);
   const books = useMemo(() => booksQuery.data ?? [], [booksQuery.data]);
+
+  // Remember the reader's translation on the profile so it's the default next time. Fire-and-forget;
+  // updates the cached user so /auth/me stays consistent without a refetch.
+  const rememberTranslation = useMutation({
+    mutationFn: updateLastTranslation,
+    onSuccess: (updated) => queryClient.setQueryData(["auth", "me"], updated),
+  });
+
+  const changeTranslation = (code: string) => {
+    // Notes are translation-specific; close any open note popover whose marker is about to be
+    // refetched away (the canonical annotation overlay is untouched).
+    setOpenNote(null);
+    setTranslation(code);
+    rememberTranslation.mutate(code);
+  };
+
+  // If the stored default is a code Concord no longer offers, fall back so the reader isn't stuck
+  // fetching a missing translation.
+  useEffect(() => {
+    if (translations.length > 0 && !translations.some((t) => t.id === translation)) {
+      setTranslation(DEFAULT_TRANSLATION);
+    }
+  }, [translations, translation]);
 
   const selectedBook = useMemo(() => books.find((b) => b.id === book), [books, book]);
   const chapterOptions = useMemo(() => {
@@ -435,12 +461,7 @@ export function ReaderView(): JSX.Element {
                 <select
                   className="rounded border border-gray-300 px-2 py-1"
                   value={translation}
-                  onChange={(e) => {
-                    // Notes are translation-specific; close any open note popover whose marker is
-                    // about to be refetched away (the canonical annotation overlay is untouched).
-                    setOpenNote(null);
-                    setTranslation(e.target.value);
-                  }}
+                  onChange={(e) => changeTranslation(e.target.value)}
                   aria-label="Translation"
                 >
                   {(translations.length > 0

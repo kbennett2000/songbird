@@ -25,3 +25,10 @@ export async function register(creds: Credentials): Promise<User> {
 export async function logout(): Promise<void> {
   await apiRequest<void>("POST", "/auth/logout");
 }
+
+/** Remember the reader's translation on the user's profile (per-profile default). Returns the
+ * updated user so the auth cache can be refreshed. */
+export async function updateLastTranslation(code: string): Promise<User> {
+  const data = await apiRequest<unknown>("PATCH", "/auth/me", { last_translation: code });
+  return authEnvelopeSchema.parse(data).user;
+}

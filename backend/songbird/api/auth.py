@@ -10,7 +10,13 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from songbird.api.deps import get_current_user, get_db
-from songbird.api.schemas import AuthEnvelope, LoginRequest, RegisterRequest, UserResponse
+from songbird.api.schemas import (
+    AuthEnvelope,
+    LoginRequest,
+    RegisterRequest,
+    UserResponse,
+    UserUpdate,
+)
 from songbird.core.cookies import COOKIE_NAME, clear_session_cookie, set_session_cookie
 from songbird.core.errors import ErrorCode, raise_http
 from songbird.core.passwords import hash_password, verify_password
@@ -109,4 +115,19 @@ async def logout(
 
 @router.get("/me", response_model=AuthEnvelope)
 async def me(user: User = Depends(get_current_user)) -> AuthEnvelope:
+    return AuthEnvelope(user=UserResponse.model_validate(user))
+
+
+@router.patch("/me", response_model=AuthEnvelope)
+async def update_me(
+    body: UserUpdate,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> AuthEnvelope:
+    """Update the current user's per-profile preferences. `last_translation` is the reader's
+    default translation — stored as a normalized code (no Concord round-trip; a preference write
+    shouldn't fail just because Concord is down). The frontend only submits offered codes, and the
+    reader falls back if a stored code is stale."""
+    user.last_translation = body.last_translation.strip().upper()
+    await db.commit()
     return AuthEnvelope(user=UserResponse.model_validate(user))

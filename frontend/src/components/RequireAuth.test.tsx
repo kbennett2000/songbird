@@ -32,7 +32,9 @@ describe("RequireAuth", () => {
   it("renders children when authenticated", async () => {
     server.use(
       http.get("/api/v1/auth/me", () =>
-        HttpResponse.json({ user: { id: 1, username: "kris", is_admin: true, created_at: "x" } }),
+        HttpResponse.json({
+          user: { id: 1, username: "kris", is_admin: true, last_translation: null, created_at: "x" },
+        }),
       ),
     );
     renderGated();

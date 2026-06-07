@@ -31,7 +31,14 @@ class UserResponse(BaseModel):
     id: int
     username: str | None
     is_admin: bool
+    last_translation: str | None
     created_at: datetime
+
+
+class UserUpdate(BaseModel):
+    """Per-profile preference patch. Currently just the reader's default translation."""
+
+    last_translation: str = Field(min_length=1, max_length=16)
 
 
 class AuthEnvelope(BaseModel):

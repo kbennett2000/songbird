@@ -7,7 +7,13 @@ import { describe, expect, it } from "vitest";
 import { useAuth } from "@/hooks/useAuth";
 import { server } from "@/test/msw/server";
 
-const USER = { id: 1, username: "kris", is_admin: true, created_at: "2026-01-01T00:00:00Z" };
+const USER = {
+  id: 1,
+  username: "kris",
+  is_admin: true,
+  last_translation: null,
+  created_at: "2026-01-01T00:00:00Z",
+};
 
 function wrapper() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
