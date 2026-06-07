@@ -62,18 +62,19 @@ async def test_keyword_search_empty_query_makes_no_call(
     assert resp.json() == []
 
 
-async def test_keyword_search_unknown_translation_404(
+async def test_keyword_search_unrunnable_query_is_no_results(
     make_concord: type[FakeConcordClient],
     client_for: Callable[[FakeConcordClient], httpx.AsyncClient],
 ) -> None:
+    # Concord's FTS5 keyword search 400s on ordinary punctuation (e.g. "God's love"), which the
+    # client surfaces as ConcordNotFoundError. That's not an outage — present it as "no results"
+    # (issue #51), so the UI shows a lack of matches and offers semantic, not a scary error.
     async with client_for(
-        make_concord(error=ConcordNotFoundError("unknown translation"))
+        make_concord(error=ConcordNotFoundError("Concord could not run that search: 400"))
     ) as client:
-        resp = await client.get(
-            "/api/v1/keyword-search", params={"q": "wept", "translation": "ZZZ"}
-        )
-    assert resp.status_code == 404
-    assert resp.json()["detail"]["code"] == "NOT_FOUND"
+        resp = await client.get("/api/v1/keyword-search", params={"q": "God's love"})
+    assert resp.status_code == 200
+    assert resp.json() == []
 
 
 async def test_keyword_search_unreachable_502(

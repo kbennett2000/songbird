@@ -35,6 +35,7 @@ export function SearchView(): JSX.Element {
     enabled: mode === "keyword" && query.length > 0,
   });
   const scripture = mode === "semantic" ? semantic : keyword;
+  const otherMode: Mode = mode === "keyword" ? "semantic" : "keyword";
   const notes = useQuery({
     queryKey: ["note-search", query],
     queryFn: () => searchAnnotations(query),
@@ -127,7 +128,20 @@ export function SearchView(): JSX.Element {
                 <p className="text-red-600">Couldn&rsquo;t search (is Concord reachable?).</p>
               )}
               {scripture.data && scriptureResults.length === 0 && (
-                <p className="text-gray-500">No matching verses.</p>
+                <div className="text-gray-500">
+                  <p>No matching verses.</p>
+                  {/* A keyword query Concord can't run (FTS5 punctuation) comes back empty; offer the
+                      same text in the other mode — semantic doesn't use FTS5 (issue #51). */}
+                  <button
+                    type="button"
+                    onClick={() => setMode(otherMode)}
+                    className="mt-1 text-sm text-blue-700 hover:underline"
+                  >
+                    {mode === "keyword"
+                      ? `Search “${query}” by meaning instead →`
+                      : `Search “${query}” for the exact phrase instead →`}
+                  </button>
+                </div>
               )}
               <ul className="flex flex-col gap-3">
                 {scriptureResults.map((r) => (
