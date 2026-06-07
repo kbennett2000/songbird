@@ -4,6 +4,25 @@ A running log of per-slice decisions, gotchas, and how each slice was verified. 
 
 ---
 
+## Concord pin → v1.0.2 (single source of truth)
+
+- **Date:** 2026-06-07
+- **Branch:** `slice/concord-pin-v1.0.2`
+
+### What changed
+- Bumped the Concord image from `v1.0.0` to **`v1.0.2`**. The functional delta is the
+  `Vary: Origin` cross-origin cache-poisoning fix on Concord's side.
+- The version is now **one named value**: `CONCORD_VERSION` in `.env`/`.env.example`, consumed by
+  `docker-compose.yml` via `${CONCORD_VERSION:-v1.0.2}`. No more literal buried in the compose file.
+
+### Gotcha
+The CI nightly contract job (`.github/workflows/nightly-concord.yml`) pins the **same** tag, but as
+a literal: GitHub Actions creates service containers *before* any step runs, so the service `image:`
+can't read `.env.example` or a step-computed env at container-create time. The two are kept in step
+by hand — both call out the other in a comment.
+
+---
+
 ## v1.1.0 — Map view documented + released
 
 - **Date:** 2026-06-06
