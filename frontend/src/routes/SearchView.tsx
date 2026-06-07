@@ -2,23 +2,10 @@ import { useQuery } from "@tanstack/react-query";
 import { type FormEvent, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 
+import { noteReference, notePreview, readerLink } from "@/lib/notes";
 import { fetchBooks, searchAnnotations, semanticSearch } from "@/lib/reader";
-import type { Annotation, Book } from "@/schemas";
 
 const SEARCH_TRANSLATION = "KJV"; // the translation results are shown in (first cut)
-
-function notePreview(markdown: string): string {
-  const plain = markdown
-    .replace(/[#*_`>-]/g, "")
-    .replace(/\s+/g, " ")
-    .trim();
-  return plain.length > 120 ? `${plain.slice(0, 120)}…` : plain;
-}
-
-function reference(a: Annotation, booksById: Map<string, Book>): string {
-  const name = booksById.get(a.book_usfm)?.name ?? a.book_usfm;
-  return `${name} ${a.start_chapter}:${a.start_verse}`;
-}
 
 export function SearchView(): JSX.Element {
   const [draft, setDraft] = useState("");
@@ -51,9 +38,14 @@ export function SearchView(): JSX.Element {
       <header className="border-b border-gray-200 bg-white">
         <div className="mx-auto flex max-w-3xl items-center gap-3 p-4">
           <h1 className="text-2xl font-bold tracking-tight">Search</h1>
-          <Link to="/" className="ml-auto text-sm text-blue-700 hover:underline">
-            ← Reader
-          </Link>
+          <div className="ml-auto flex items-center gap-3 text-sm">
+            <Link to="/read" className="text-blue-700 hover:underline">
+              Reader
+            </Link>
+            <Link to="/" className="text-blue-700 hover:underline">
+              Home
+            </Link>
+          </div>
         </div>
       </header>
 
@@ -103,7 +95,7 @@ export function SearchView(): JSX.Element {
                       <span className="font-semibold">{r.reference}</span>
                       <span className="text-xs text-gray-400">score {r.score.toFixed(3)}</span>
                       <Link
-                        to={`/?book=${r.book}&chapter=${r.chapter}&verse=${r.verse}`}
+                        to={`/read?book=${r.book}&chapter=${r.chapter}&verse=${r.verse}`}
                         className="ml-auto text-sm text-blue-700 hover:underline"
                       >
                         Open
@@ -132,9 +124,9 @@ export function SearchView(): JSX.Element {
                 {notes.data?.map((a) => (
                   <li key={a.id} className="rounded border border-gray-200 bg-white p-4">
                     <div className="flex items-center gap-3">
-                      <span className="font-semibold">{reference(a, booksById)}</span>
+                      <span className="font-semibold">{noteReference(a, booksById)}</span>
                       <Link
-                        to={`/?book=${a.book_usfm}&chapter=${a.start_chapter}&verse=${a.start_verse}`}
+                        to={readerLink(a)}
                         className="ml-auto text-sm text-blue-700 hover:underline"
                       >
                         Open in reader
