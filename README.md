@@ -85,7 +85,7 @@ The first time, this downloads the Scripture engine and builds songbird. **It ta
 
 **4. Open songbird in your browser:** go to **[http://localhost:8077](http://localhost:8077)**
 
-**5. Create your account.** The first person to sign up is the owner. Pick a username and password — they stay on your computer.
+**5. Create your account.** The first person to sign up is the owner. Pick a username and password — they stay on your computer. Anyone else you share the computer with can make their own account too, and each person’s notes are private to them.
 
 **6. Start reading.** Open a chapter, click a verse, and write your first note. You’re in. 🎉
 
@@ -102,9 +102,10 @@ In the terminal, press **Ctrl + C**, then run `docker compose down`. Your notes 
 ## Using songbird
 
 - **Write a note** — click any verse number; a notepad opens beside it. Notes can have **bold**, *italics*, links, and lists.
-- **Switch translations** — pick a different translation up top; your notes stay anchored to the right verses. A note you wrote in one translation is gently marked when you read another.
-- **Tag and find** — add tags to a note, then use the **browse** view to find notes by tag, or **search** to find Scripture by meaning.
-- **Go deeper** — hover a verse for its **cross-references**, or tap the **globe** to see a passage’s places on a map, when their locations are known.
+- **Save a sermon** — pin a sermon to the passage it’s about: give it a title, paste the link, and it waits there in the margin for next time. They show up in **browse** alongside your notes.
+- **Switch translations** — pick a different translation up top; your notes stay anchored to the right verses. A note you wrote in one translation is gently marked when you read another. songbird also reopens to the translation you read last.
+- **Tag and find** — add tags to a note or a saved sermon, then use the **browse** view to find them by tag, or **search** to find Scripture by meaning.
+- **Go deeper** — hover a verse for its **cross-references**, watch for small **translator’s-note** markers that explain a word or phrase (click one to read it), or tap the **globe** to see a passage’s places on a map, when their locations are known.
 
 <br>
 

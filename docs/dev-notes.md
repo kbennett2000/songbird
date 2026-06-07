@@ -4,6 +4,48 @@ A running log of per-slice decisions, gotchas, and how each slice was verified. 
 
 ---
 
+## Post-v1.1 — reconciliation backfill (translator's notes, sermon notes, profiles)
+
+- **Date:** 2026-06-07
+- **Branch:** `slice/docs-reconcile-features`
+- **Scope:** docs only. This is a **backfill** — the slices below shipped after the v1.1.0 entry
+  and were merged via their own PRs, but the log skipped them. Summarized here from `git log`
+  rather than reconstructed per-slice; the source PRs hold the blow-by-blow.
+
+### What shipped since v1.1.0 (in merge order)
+- **Translator's notes** (slice 11, PR #17). A backend pass-through to Concord's per-chapter
+  translator's-notes endpoint, surfaced as inline footnote markers + a popover in the reader.
+  Pure proxy — no songbird data. (Plus a follow-up fix, PR #18: keep the note popover open while
+  scrolling its content.)
+- **Sermon notes** (slices 12–15, PRs #21–#26) — a **second annotation type**, pinned to the same
+  canonical USFM coordinates as annotations so the bridge invariant (§4) covers it for free:
+  - *12* — model + migration + chapter overlay; reader markers + popover.
+  - *13* — count badge + newest-first stacked popover when several sermons land on one verse.
+  - *14* — one-time seed importer (soap-journal backup → sermon notes) with transform guards so
+    it never touches the real backup; popover sorted newest-first.
+  - *15* — full create/edit/delete from the reader, backend write endpoints + tests.
+- **Browse sermon notes** (PR #24/#27) — sermon notes appear in the Browse view; the sermon-note
+  list endpoint takes a tag filter (shared tag vocabulary with annotations).
+- **Per-profile default translation** (slice 20, PR #20/#28) — `users.last_translation` +
+  `PATCH /api/v1/auth/me`; the reader opens to the profile's last translation.
+- **Mobile horizontal-scroll fix** (PR #29) — stop the reader scrolling sideways on phones.
+  (Note: native mobile remains out of scope; responsive web is in — see CLAUDE.md.)
+- **Concord consumer contract test** — validates songbird's hand-written Concord types against
+  Concord's pinned OpenAPI schema, catching drift between the two services.
+
+### Docs reconciled in this pass
+- `docs/v1/SPEC.md` — added a status banner, annotated §9/§11 as resolved, and added **§12
+  "Implemented since v1"** (auth-as-mandatory, sermon notes, translator's notes, default
+  translation, the restated data model).
+- `README.md` — "Using songbird" now covers saved sermons + translator's-note markers; the
+  account step notes that others get their own private accounts.
+- `CLAUDE.md` — "Out of scope: Mobile" reworded to "native mobile app (responsive web is in
+  scope)"; committed the documentation charter; trimmed stray blank lines.
+- `.gitignore` — ignore `seed-trimmed.json` / `seed-*.json` (local sermon-seed input, never
+  committed).
+
+---
+
 ## v1.1.0 — Map view documented + released
 
 - **Date:** 2026-06-06
