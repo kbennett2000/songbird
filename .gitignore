@@ -23,6 +23,10 @@ data/*.db
 .env.*
 !.env.example
 
+# Local seed input (sermon-note backup, trimmed) — never commit personal data
+seed-trimmed.json
+seed-*.json
+
 # Local / tooling
 .claude/
 .DS_Store

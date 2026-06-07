@@ -13,6 +13,14 @@ This is the founding spec. The **domain model and architecture are settled decis
 (§1–§7); the **UX/interaction design is presented as options with recommendations** (§8) —
 taste calls for the product owner to make when ready.
 
+> **Status — what reality added.** This document is the *founding* design; it has held up
+> well, but the app has shipped past it. Auth landed and is now mandatory (not the "if/when"
+> of §9), and two feature families the original plan never named — **sermon notes** and
+> **translator's notes** — plus **per-profile default translation** are now shipped. The
+> founding sections below are left intact as the original reasoning; **§12 records what
+> shipped beyond them**, and §9/§11 are annotated with how the roadmap and open questions
+> actually resolved. Per the project rule, reality wins: read §12 for current truth.
+
 **Built to last, built small.** soap-journal was the learning exercise; Concord is the
 foundation; songbird is the app meant to grow. "Built to last" means clean bones, named
 boundaries, spec-first, smallest-slice-first — not big on day one. Ambition lives in the
@@ -49,7 +57,7 @@ An **annotation** is:
   (a checklist). Scope is independent of the anchor — the anchor is *which verse*, the scope
   is *in which translations the note shows*.
 - **Metadata** — created date, updated date, and **author** (schema multi-user-ready from
-  line one, though there is one user today).
+  line one; auth has since shipped, so `author` is now a real account — §12).
 - **Tags** — free-form semantic tags for retrieval; the on-ramp to semantic search (§7).
 - **Color** — an optional highlight color (one default color is fine for v1).
 
@@ -146,8 +154,10 @@ SQLAlchemy async models, Alembic-migrated. Sketch (refine in slice 1):
 
 **`tags`** — `id`, `name` (unique). **`annotation_tags`** — `annotation_id`, `tag_id`.
 
-**`users`** — `id`, `name`, plus Argon2 auth fields **when auth lands**. Multi-user-ready
-from the start (every annotation has `author_id`); a single default user until auth is built.
+**`users`** — `id`, `name`, plus Argon2 auth fields. Multi-user-ready from the start (every
+annotation has `author_id`). _Shipped since:_ auth now exists and is mandatory — `username`
+(unique), `password_hash`, `is_admin`, and `last_translation` columns, with a `sessions` table
+for cookie-session auth, and a `sermon_notes` table alongside `annotations` (see §12).
 
 Indexes for the hot path: annotations by anchor (fetch "all notes for this chapter" fast) and
 by author. Translation codes match Concord's translation codes.
@@ -212,8 +222,14 @@ We iterate on these as the reading view becomes real — seeing it beats arguing
 ## 9. Slice plan
 
 Smallest reviewable, load-bearing unit; spec-first; PR-per-slice; never break a shipped
-slice. **Slice 1 firmly defined; the rest a roadmap.** Each slice is a thin vertical cut, not
-a horizontal layer.
+slice. Each slice is a thin vertical cut, not a horizontal layer.
+
+> **Roadmap complete (and then some).** This S0–S8 plan has all shipped — and the real history
+> went past it with slices the founding plan never named: the **map view** (v1.1),
+> **translator's notes**, **sermon notes** (model → overlay → count badge → seed import → full
+> CRUD), and **per-profile default translation**. The actual shipped order also differed from
+> the list below (auth landed mid-stream, not last). The list is preserved as the original
+> roadmap; **§12 is the current inventory.**
 
 - **Slice 0 — skeleton & boot.** Repo skeleton in the soap-journal stack shape (FastAPI
   backend + React/Vite frontend, single-unit dev + Dockerfile), tooling
@@ -236,8 +252,9 @@ a horizontal layer.
 - **Slice 6 — geography.** Surface Concord places for the passage (and, per taste, a map).
 - **Slice 7 — semantic search.** Call Concord's `/v1/semantic-search`; combine with
   annotation search to find Scripture and notes by meaning.
-- **Slice 8 — auth / multi-user.** Argon2 cookie-session (soap-journal pattern) — *if/when*
-  wanted; deferred while single-user.
+- **Slice 8 — auth / multi-user.** Argon2 cookie-session (soap-journal pattern). _Shipped, and
+  no longer optional:_ every route except the health probe and register/login is gated; data is
+  author-scoped per user.
 - **Ongoing — deploy + polish.** Single-unit Docker.
 
 ## 10. Out of scope / deferred
@@ -251,18 +268,89 @@ a horizontal layer.
 - Cloud / multi-tenant hosting.
 - Replacing soap-journal.
 
-## 11. Open questions (resolve as slices reach them)
+## 11. Open questions (resolved)
+
+All five have been settled by implementation:
 
 1. **Frontend reads Scripture via songbird's backend proxy, or directly from Concord?**
-   (Lean: through songbird's backend, so songbird owns one API surface and can attach
-   annotations to reading responses.) Resolve in slice 0/1.
-2. **`scope_type = current` modeling** — store literal "current" + resolve at display, or
-   resolve-at-creation into a one-translation subset? (Lean: resolve to a concrete subset.)
-3. **Markdown ↔ TipTap wiring** — confirm the Markdown extension covers links + images + the
-   formatting set; settle the round-trip in slice 1.
-4. **Concord response caching** — none to start (call through every time); revisit only if
-   performance warrants. Not a data-ownership change if added.
-5. **The UX choices in §8** — yours to settle as the reading view becomes real.
+   → **Through songbird's backend.** The SPA talks only to songbird; songbird talks to Concord
+   via one `ConcordClient`, and the reader response carries annotations + sermon notes already
+   overlaid.
+2. **`scope_type = current` modeling** → kept as the literal `current` (alongside `all` and
+   `subset`), resolved against the active translation at display time; `annotation_translations`
+   holds the explicit list only for `subset`.
+3. **Markdown ↔ TipTap wiring** → settled; TipTap reads/writes Markdown and notes are stored as
+   Markdown (invariant 6).
+4. **Concord response caching** → **none.** Every read calls through; no cache added.
+5. **The UX choices in §8** → settled as the reader became real (verse-number-as-button, side
+   panel editor, highlight + marker, type-ahead tags, default-All scope) — all shipped.
 
-None block starting. Slice 0 stands up the stack + the Concord HTTP client; slice 1 is the
-core loop.
+## 12. Implemented since v1 — what shipped beyond this spec
+
+The founding spec above is preserved as written. This section is the **current inventory** of
+what the app actually does, where it grew past the original plan. (Per-slice detail lives in
+`docs/dev-notes.md`.)
+
+**Auth & profiles (shipped, mandatory).** Argon2 cookie-session auth. `users` carries
+`username` (unique), `password_hash`, `is_admin`, and `last_translation`; a `sessions` table
+holds server-side sessions keyed by an httponly cookie. The first person to register claims the
+default user / becomes owner. Every endpoint except `/healthz` and register/login is gated, and
+annotations and sermon notes are **author-scoped** — you only see your own.
+
+**Per-profile reading position.** `users.last_translation`, `last_book`, and `last_chapter`
+(migration `0008`) plus `PATCH /api/v1/auth/me` remember where each profile last read; the
+reader reopens to that book/chapter/translation and the home page offers to resume it. Stored as
+three independent nullable columns, not validated on write — the reader self-heals a stale value.
+
+**Sermon notes (a second annotation type).** A `sermon_notes` table pins a sermon — `title`,
+`sermon_url`, `reference`, `event_date` — to a canonical verse span (same USFM coordinates as
+annotations, so the bridge invariant §4 applies equally). They overlay in the reader (markers,
+a count badge, and a newest-first stacked popover when several land on one verse), appear in the
+Browse view, are taggable from the **shared** tag vocabulary, and have full CRUD. A one-time
+**seed importer** transforms a soap-journal backup into sermon notes (with guards so it never
+mutates the real backup). Unlike annotations, sermon notes have no translation scope — they're
+always visible.
+
+**Translator's notes.** A pass-through to Concord's per-chapter translator's-notes endpoint,
+rendered as inline footnote markers with a popover in the reader. Pure proxy — no songbird data.
+_Caveat (a real finding):_ these footnotes come from **NET**, which Concord v1.0.0 doesn't ship,
+so against the default 13-translation stack the endpoint 404s and the reader shows an
+"unavailable" notice on every chapter. The feature is built and correct — it lights up when a
+Concord build includes NET. (Softening that notice so "no notes here" ≠ "Concord is down" is open
+work; tracked in dev-notes.)
+
+**Keyword Scripture search.** Alongside semantic search, a **keyword/semantic toggle** on the
+Search screen. Keyword search proxies Concord's `/v1/search` (`GET /api/v1/keyword-search`) for
+exact word/phrase matches with highlighted snippets; semantic search finds by meaning. When a
+keyword query can't run (Concord's FTS5 rejects punctuation) it returns *no results* rather than
+an error, and the UI offers to retry by meaning. Note search stays keyword-only until Concord
+exposes a semantic note endpoint.
+
+**Side-by-side compare.** A `/compare` view reads **up to three translations** in parallel
+columns, aligned by canonical verse number (the union of verses across columns; a verse a
+translation lacks shows an em-dash, never a guess). Annotations overlay per column using the same
+in-scope (filled ●) / out-of-scope (hollow ○) distinction as the reader. Reuses the existing
+`GET /api/v1/read/...` path — no new endpoint.
+
+**Export / import.** `GET /api/v1/export` and `POST /api/v1/import` move a profile's annotations
++ sermon notes as portable JSON (anchors, Markdown, scope, tags — no Bible text, no DB IDs or
+timestamps). Import is idempotent: it skips any note whose natural identity (anchor + content +
+scope + tags) already exists, validates translation/book codes against Concord once, and reports
+imported / skipped / failed. Controls live in the Browse view.
+
+**Welcome / home page.** The app now opens at `/` (the reader moved to `/read`) with a personal
+greeting, library counts (notes, sermons, tags), a "pick up where you left off" card from the
+saved reading position, a recent-notes feed, and quick links to Browse / Search / Compare.
+
+**Concord consumer contract test.** A test validates songbird's hand-written Concord types
+against Concord's pinned OpenAPI schema, catching drift between the two services.
+
+**Specs for shipped features.** The map view (v1.1) is specified in `docs/v1.1/MAP-SPEC.md` +
+ADR 0001 (offline bundled basemap, honest pin placement); sermon notes in
+`docs/v1.2/SERMON-NOTES-SPEC.md`.
+
+**The data model, restated.** songbird's database holds: `users` (now with `last_translation`,
+`last_book`, `last_chapter`), `sessions`, `annotations`, `annotation_translations`, `tags`
+(+ `annotation_tags`, `sermon_note_tags` joins), and `sermon_notes` — **eight** Alembic
+migrations. Keyword search, compare, export/import, and the home page added **no new tables**
+(they proxy Concord or reuse existing models). Still **no Bible text** (invariant 5 intact).

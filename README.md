@@ -91,9 +91,9 @@ The first time, this downloads the Scripture engine and builds songbird. **It ta
 
 **4. Open songbird in your browser:** go to **[http://localhost:8077](http://localhost:8077)**
 
-**5. Create your account.** The first person to sign up is the owner. Pick a username and password — they stay on your computer.
+**5. Create your account.** The first person to sign up is the owner. Pick a username and password — they stay on your computer. Anyone else you share the computer with can make their own account too, and each person’s notes are private to them.
 
-**6. Start reading.** Open a chapter, click a verse, and write your first note. You’re in. 🎉
+**6. Start reading.** You’ll land on a home page that greets you and — once you’ve read a little — offers to pick up where you left off. Open a chapter, click a verse, and write your first note. You’re in. 🎉
 
 <details>
 <summary>When you’re done — how to stop songbird.</summary>
@@ -108,9 +108,12 @@ In the terminal, press **Ctrl + C**, then run `docker compose down`. Your notes 
 ## Using songbird
 
 - **Write a note** — click any verse number; a notepad opens beside it. Notes can have **bold**, *italics*, links, and lists.
-- **Switch translations** — pick a different translation up top; your notes stay anchored to the right verses. A note you wrote in one translation is gently marked when you read another.
 - **Link a sermon** — anchor a sermon to the passage it preaches on; a ▶ marker appears in the margin, opening the sermon’s title, date, tags, and a link to watch. The marker shows in every translation.
-- **Tag and find** — add tags to a note, then use the **browse** view to find notes by tag, or **search** to find Scripture by meaning.
+- **Switch translations** — pick a different translation up top; your notes stay anchored to the right verses. A note you wrote in one translation is gently marked when you read another. songbird reopens right where you left off — same book, chapter, and translation.
+- **Compare side by side** — open **Compare** to read up to three translations in parallel columns, lined up verse for verse; your notes show in each column they apply to.
+- **Tag and find** — add tags to a note or a sermon, then use the **browse** view to find them by tag.
+- **Search** — find Scripture by **meaning** (“verses about anxiety”) or by an **exact word or phrase** — your choice, with a toggle on the search screen.
+- **Back up your notes** — from **browse**, **export** all your notes and sermons to a single file, then **import** it back on another computer; importing skips anything you already have.
 - **Go deeper** — hover a verse for its **cross-references**, or tap the **globe** to see a passage’s places on a map, when their locations are known.
 
 <br>
