@@ -10,6 +10,7 @@ import { NoteEditor } from "@/components/NoteEditor";
 import { NotePopover } from "@/components/NotePopover";
 import { ScopePicker } from "@/components/ScopePicker";
 import { SermonNotePopover } from "@/components/SermonNotePopover";
+import { SermonNotesPopover } from "@/components/SermonNotesPopover";
 import { SidePanel } from "@/components/SidePanel";
 import { TagInput } from "@/components/TagInput";
 import { VerseText } from "@/components/VerseText";
@@ -64,8 +65,9 @@ export function ReaderView(): JSX.Element {
   const [openNote, setOpenNote] = useState<{ note: TranslatorNote; anchor: HTMLElement } | null>(
     null,
   );
-  // The sermon note whose popover is open (separate system — canonical, all-translations).
-  const [openSermon, setOpenSermon] = useState<{ note: SermonNote; anchor: HTMLElement } | null>(
+  // The sermon notes covering the tapped verse, whose popover is open (separate system —
+  // canonical, all-translations). One note → single popover; several → a stacked list.
+  const [openSermon, setOpenSermon] = useState<{ notes: SermonNote[]; anchor: HTMLElement } | null>(
     null,
   );
   const [refInput, setRefInput] = useState("");
@@ -488,12 +490,21 @@ export function ReaderView(): JSX.Element {
                       type="button"
                       className="ml-2 align-middle text-emerald-600 hover:text-emerald-800"
                       onClick={(e) =>
-                        setOpenSermon({ note: v.sermon_notes[0]!, anchor: e.currentTarget })
+                        setOpenSermon({ notes: v.sermon_notes, anchor: e.currentTarget })
                       }
-                      aria-label={`Sermon on verse ${v.verse}`}
-                      title="Sermon"
+                      aria-label={
+                        v.sermon_notes.length === 1
+                          ? `Sermon on verse ${v.verse}`
+                          : `${v.sermon_notes.length} sermons on verse ${v.verse}`
+                      }
+                      title={v.sermon_notes.length === 1 ? "Sermon" : "Sermons"}
                     >
                       ▶
+                      {v.sermon_notes.length > 1 && (
+                        <span className="ml-0.5 rounded-full bg-emerald-100 px-1 text-[0.7em] font-semibold text-emerald-700">
+                          {v.sermon_notes.length}
+                        </span>
+                      )}
                     </button>
                   )}
                   <button
@@ -589,13 +600,20 @@ export function ReaderView(): JSX.Element {
         />
       )}
 
-      {openSermon && (
-        <SermonNotePopover
-          note={openSermon.note}
-          anchor={openSermon.anchor}
-          onClose={() => setOpenSermon(null)}
-        />
-      )}
+      {openSermon &&
+        (openSermon.notes.length === 1 ? (
+          <SermonNotePopover
+            note={openSermon.notes[0]!}
+            anchor={openSermon.anchor}
+            onClose={() => setOpenSermon(null)}
+          />
+        ) : (
+          <SermonNotesPopover
+            notes={openSermon.notes}
+            anchor={openSermon.anchor}
+            onClose={() => setOpenSermon(null)}
+          />
+        ))}
     </div>
   );
 }
