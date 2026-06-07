@@ -5,11 +5,12 @@ coordinates** — USFM book code + chapter + verse, as a range — never a trans
 id. No Bible text is stored here (invariant 5); notes are Markdown (invariant 6).
 """
 
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 
 from sqlalchemy import (
     Boolean,
     Column,
+    Date,
     DateTime,
     ForeignKey,
     Index,
@@ -36,6 +37,21 @@ annotation_tags = Table(
     ),
     Column("tag_id", Integer, ForeignKey("tags.id", ondelete="CASCADE"), primary_key=True),
     Index("ix_annotation_tags_tag", "tag_id"),
+)
+
+# Many-to-many join between sermon notes and the SAME songbird-owned tags (mirrors
+# annotation_tags — one shared tag vocabulary across both note kinds).
+sermon_note_tags = Table(
+    "sermon_note_tags",
+    Base.metadata,
+    Column(
+        "sermon_note_id",
+        Integer,
+        ForeignKey("sermon_notes.id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+    Column("tag_id", Integer, ForeignKey("tags.id", ondelete="CASCADE"), primary_key=True),
+    Index("ix_sermon_note_tags_tag", "tag_id"),
 )
 
 
@@ -156,3 +172,47 @@ class AnnotationTranslation(Base):
     translation_code: Mapped[str] = mapped_column(String(16), nullable=False)
 
     annotation: Mapped["Annotation"] = relationship(back_populates="translations")
+
+
+class SermonNote(Base):
+    """A sermon pinned to a canonical verse span (single verse → start == end). songbird-owned,
+    like an annotation, and overlaid on the chapter the same way — but ALWAYS visible on every
+    translation (no scope concept) and bodied by a sermon URL, not Markdown. Stores no Scripture
+    text (invariant 5); the anchor is canonical coordinates (invariant 4)."""
+
+    __tablename__ = "sermon_notes"
+    __table_args__ = (
+        # Hot path: "all sermon notes for this book+chapter" (the chapter overlay).
+        Index("ix_sermon_notes_anchor", "book_usfm", "start_chapter", "end_chapter"),
+        # Canonical-order listing (the ordering annotations lack).
+        Index("ix_sermon_notes_order", "book_order_index"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+
+    title: Mapped[str] = mapped_column(Text, nullable=False)
+    sermon_url: Mapped[str] = mapped_column(Text, nullable=False)  # the body — an external link
+    reference: Mapped[str] = mapped_column(String(128), nullable=False)  # e.g. "Acts 2:42-47"
+
+    # The canonical anchor — never a translation-specific id (invariant 4). `book_usfm` is the
+    # overlay match key (the USFM code Concord returns per chapter); `book_order_index` is
+    # Concord's canonical_order, kept purely for canonical-order listing.
+    book_usfm: Mapped[str] = mapped_column(String(3), nullable=False)
+    book_order_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    start_chapter: Mapped[int] = mapped_column(Integer, nullable=False)
+    start_verse: Mapped[int] = mapped_column(Integer, nullable=False)
+    end_chapter: Mapped[int] = mapped_column(Integer, nullable=False)
+    end_verse: Mapped[int] = mapped_column(Integer, nullable=False)
+
+    event_date: Mapped[date | None] = mapped_column(Date, nullable=True)  # the sermon's date
+
+    author_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=_utcnow
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=_utcnow, onupdate=_utcnow
+    )
+
+    tags: Mapped[list["Tag"]] = relationship(secondary=sermon_note_tags, lazy="selectin")

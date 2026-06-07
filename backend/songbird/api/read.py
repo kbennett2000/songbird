@@ -18,6 +18,7 @@ from songbird.api.schemas import (
     ReadChapter,
     ReadVerse,
     ResolvedReference,
+    SermonNoteOut,
 )
 from songbird.concord.client import (
     ConcordClient,
@@ -26,21 +27,27 @@ from songbird.concord.client import (
 )
 from songbird.concord.schemas import BooksResponse
 from songbird.core.errors import ErrorCode, raise_http
-from songbird.db.models import Annotation, User
+from songbird.db.models import Annotation, SermonNote, User
 
 router = APIRouter(prefix="/api/v1", tags=["read"])
 
 
-def _covers(ann: Annotation, chapter: int, verse: int) -> bool:
-    """Does this annotation's canonical span cover (chapter, verse)? Range-ready; for a
-    single-verse anchor this reduces to an exact (chapter, verse) match."""
-    after_start = chapter > ann.start_chapter or (
-        chapter == ann.start_chapter and verse >= ann.start_verse
-    )
-    before_end = chapter < ann.end_chapter or (
-        chapter == ann.end_chapter and verse <= ann.end_verse
-    )
+def _covers_span(
+    start_chapter: int, start_verse: int, end_chapter: int, end_verse: int, chapter: int, verse: int
+) -> bool:
+    """Does a canonical span (start..end chapter/verse) cover (chapter, verse)? Range-ready; for
+    a single-verse anchor this reduces to an exact match. Shared by the annotation and sermon-note
+    chapter overlays."""
+    after_start = chapter > start_chapter or (chapter == start_chapter and verse >= start_verse)
+    before_end = chapter < end_chapter or (chapter == end_chapter and verse <= end_verse)
     return after_start and before_end
+
+
+def _covers(ann: Annotation, chapter: int, verse: int) -> bool:
+    """Does this annotation's canonical span cover (chapter, verse)?"""
+    return _covers_span(
+        ann.start_chapter, ann.start_verse, ann.end_chapter, ann.end_verse, chapter, verse
+    )
 
 
 def _in_scope(ann: Annotation, translation: str) -> bool:
@@ -154,6 +161,18 @@ async def read_chapter(
     )
     annotations = list(result.scalars().all())
 
+    # Sermon notes overlay the same way, but with NO scope/translation filter — they are always
+    # visible on every translation (so they never clear on a translation switch).
+    sermon_result = await db.execute(
+        select(SermonNote).where(
+            SermonNote.author_id == user.id,
+            SermonNote.book_usfm == book_usfm,
+            SermonNote.start_chapter <= chapter,
+            SermonNote.end_chapter >= chapter,
+        )
+    )
+    sermon_notes = list(sermon_result.scalars().all())
+
     resolved_translation = (
         chapter_data.translations[0] if chapter_data.translations else translation
     )
@@ -162,11 +181,21 @@ async def read_chapter(
         base = AnnotationOut.model_validate(a)
         return ReadAnnotation(**base.model_dump(), in_scope=_in_scope(a, resolved_translation))
 
+    def _covers_sermon(s: SermonNote, chapter: int, verse: int) -> bool:
+        return _covers_span(
+            s.start_chapter, s.start_verse, s.end_chapter, s.end_verse, chapter, verse
+        )
+
     verses: list[ReadVerse] = []
     for v in chapter_data.verses:
         # One translation was requested, so there is exactly one text value.
         text = next(iter(v.text.values()), None)
         overlay = [_to_read_annotation(a) for a in annotations if _covers(a, v.chapter, v.verse)]
+        sermon_overlay = [
+            SermonNoteOut.model_validate(s)
+            for s in sermon_notes
+            if _covers_sermon(s, v.chapter, v.verse)
+        ]
         verses.append(
             ReadVerse(
                 book=v.book,
@@ -175,6 +204,7 @@ async def read_chapter(
                 reference=v.reference,
                 text=text,
                 annotations=overlay,
+                sermon_notes=sermon_overlay,
             )
         )
 
