@@ -164,6 +164,65 @@ class SermonNoteOut(BaseModel):
         return [getattr(t, "name", t) for t in value]
 
 
+# --- Import / Export (issue #41) ---
+
+
+class AnnotationExport(BaseModel):
+    """A portable annotation — canonical anchor + scope + tags + Markdown body, carried verbatim
+    (invariant 6). No id/author/timestamps, so an export drops cleanly into any account."""
+
+    book_usfm: str = Field(min_length=1, max_length=3)
+    start_chapter: int = Field(ge=1)
+    start_verse: int = Field(ge=1)
+    end_chapter: int = Field(ge=1)
+    end_verse: int = Field(ge=1)
+    note_markdown: str
+    color: str | None = None
+    scope_type: str = "all"
+    scope_translations: list[str] = Field(default_factory=list)
+    tags: list[str] = Field(default_factory=list)
+
+
+class SermonNoteExport(BaseModel):
+    """A portable sermon note — no id/author/timestamps, and no `book_order_index` (re-resolved
+    from Concord on import so canonical order stays server-authoritative)."""
+
+    title: str = Field(min_length=1)
+    sermon_url: str = Field(min_length=1)
+    reference: str = Field(min_length=1, max_length=128)
+    book_usfm: str = Field(min_length=1, max_length=3)
+    start_chapter: int = Field(ge=1)
+    start_verse: int = Field(ge=1)
+    end_chapter: int = Field(ge=1)
+    end_verse: int = Field(ge=1)
+    event_date: date | None = None
+    tags: list[str] = Field(default_factory=list)
+
+
+class ExportDocument(BaseModel):
+    """The whole portable bundle of a user's songbird-owned notes. `version` lets a future import
+    adapt older files; `exported_at` is informational (ignored on import)."""
+
+    version: int = 1
+    exported_at: datetime | None = None
+    annotations: list[AnnotationExport] = Field(default_factory=list)
+    sermon_notes: list[SermonNoteExport] = Field(default_factory=list)
+
+
+class ImportOutcome(BaseModel):
+    """Per-kind tally for one import run."""
+
+    created: int = 0
+    skipped: int = 0  # an exact duplicate of something already present (this run is idempotent)
+    failed: int = 0  # rejected (e.g. unknown book / translation) — see ImportSummary.errors
+
+
+class ImportSummary(BaseModel):
+    annotations: ImportOutcome = Field(default_factory=ImportOutcome)
+    sermon_notes: ImportOutcome = Field(default_factory=ImportOutcome)
+    errors: list[str] = Field(default_factory=list)  # a few human-readable reasons for failures
+
+
 class CrossReference(BaseModel):
     """A cross-reference target (from Concord) — canonical coords + the optional snippet/votes.
     songbird stores none of this; it's a pass-through of Concord's TSK data."""

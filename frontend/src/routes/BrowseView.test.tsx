@@ -1,9 +1,9 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { BrowseView } from "@/routes/BrowseView";
 import { server } from "@/test/msw/server";
@@ -123,6 +123,73 @@ describe("BrowseView", () => {
     await user.click(screen.getByRole("button", { name: "faith" }));
     expect(await screen.findByText("faith note")).toBeInTheDocument();
     expect(screen.queryByText("The Prodigal Son")).not.toBeInTheDocument();
+  });
+
+  it("imports a notes file, shows a summary, and refreshes the lists (issue #41)", async () => {
+    let imported = false;
+    server.use(
+      http.get("/api/v1/tags", () => HttpResponse.json([])),
+      http.get("/api/v1/annotations", () => HttpResponse.json(imported ? [GRACE] : [])),
+      http.get("/api/v1/sermon-notes", () => HttpResponse.json([])),
+      http.post("/api/v1/import", () => {
+        imported = true;
+        return HttpResponse.json({
+          annotations: { created: 1, skipped: 2, failed: 0 },
+          sermon_notes: { created: 0, skipped: 0, failed: 0 },
+          errors: [],
+        });
+      }),
+    );
+    const user = userEvent.setup();
+    renderBrowse();
+
+    expect(await screen.findByText("No notes match.")).toBeInTheDocument();
+
+    const file = new File(
+      [JSON.stringify({ version: 1, annotations: [], sermon_notes: [] })],
+      "songbird-notes.json",
+      { type: "application/json" },
+    );
+    await user.upload(screen.getByLabelText("Import notes file"), file);
+
+    // Summary reflects the server tally; the (now non-empty) list has refetched.
+    expect(await screen.findByText("Imported 1 · skipped 2")).toBeInTheDocument();
+    expect(await screen.findByText("grace note")).toBeInTheDocument();
+  });
+
+  it("exports notes to a downloaded JSON file (issue #41)", async () => {
+    let exportHit = false;
+    server.use(
+      http.get("/api/v1/tags", () => HttpResponse.json([])),
+      http.get("/api/v1/export", () => {
+        exportHit = true;
+        return HttpResponse.json({
+          version: 1,
+          exported_at: null,
+          annotations: [],
+          sermon_notes: [],
+        });
+      }),
+    );
+    const origCreate = URL.createObjectURL;
+    const origRevoke = URL.revokeObjectURL;
+    URL.createObjectURL = vi.fn(() => "blob:test");
+    URL.revokeObjectURL = vi.fn();
+    const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+
+    try {
+      const user = userEvent.setup();
+      renderBrowse();
+      await user.click(await screen.findByRole("button", { name: "Export" }));
+
+      await waitFor(() => expect(exportHit).toBe(true));
+      expect(click).toHaveBeenCalled();
+      expect(URL.createObjectURL).toHaveBeenCalled();
+    } finally {
+      URL.createObjectURL = origCreate;
+      URL.revokeObjectURL = origRevoke;
+      click.mockRestore();
+    }
   });
 
   it("jumps to the verse in the reader", async () => {

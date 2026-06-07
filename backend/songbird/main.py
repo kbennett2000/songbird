@@ -19,6 +19,7 @@ from songbird.api.concord import router as concord_router
 from songbird.api.deps import get_current_user
 from songbird.api.geography import router as geography_router
 from songbird.api.health import router as health_router
+from songbird.api.import_export import router as import_export_router
 from songbird.api.notes import router as notes_router
 from songbird.api.read import router as read_router
 from songbird.api.search import router as search_router
@@ -92,6 +93,7 @@ def create_app() -> FastAPI:
     app.include_router(notes_router, dependencies=gated)
     app.include_router(sermon_notes_router, dependencies=gated)
     app.include_router(search_router, dependencies=gated)
+    app.include_router(import_export_router, dependencies=gated)
 
     settings = get_settings()
     dist_dir = settings.frontend_dist_dir
