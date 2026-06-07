@@ -273,6 +273,107 @@ describe("ReaderView", () => {
     expect(screen.getByRole("button", { name: "Sermon on verse 16" })).toBeInTheDocument();
   });
 
+  it("counts multiple sermons on a verse and lists ALL of them (none hidden behind [0])", async () => {
+    const sermons = [
+      sermonNote({ id: 1, title: "First Sermon" }),
+      sermonNote({ id: 2, title: "Second Sermon" }),
+      sermonNote({ id: 3, title: "Third Sermon" }),
+      sermonNote({ id: 4, title: "Fourth Sermon" }),
+    ];
+    server.use(
+      http.get("/api/v1/read/:translation/:book/:chapter", ({ params }) =>
+        HttpResponse.json(readResponse([], String(params.translation), sermons)),
+      ),
+    );
+    const user = userEvent.setup();
+    renderReader();
+
+    // Counted ▶ (not the single-sermon label), and the count is visible.
+    const marker = await screen.findByRole("button", { name: "4 sermons on verse 16" });
+    expect(marker).toHaveTextContent("4");
+    expect(screen.queryByRole("button", { name: "Sermon on verse 16" })).not.toBeInTheDocument();
+
+    // Tapping lists every sermon — all four reachable, none hidden.
+    await user.click(marker);
+    expect(await screen.findByText("Sermons · 4")).toBeInTheDocument();
+    for (const title of ["First Sermon", "Second Sermon", "Third Sermon", "Fourth Sermon"]) {
+      expect(screen.getByText(title)).toBeInTheDocument();
+    }
+  });
+
+  it("opens the single-sermon popover (unchanged) for a verse with exactly one sermon", async () => {
+    server.use(
+      http.get("/api/v1/read/:translation/:book/:chapter", ({ params }) =>
+        HttpResponse.json(readResponse([], String(params.translation), [sermonNote()])),
+      ),
+    );
+    const user = userEvent.setup();
+    renderReader();
+
+    const marker = await screen.findByRole("button", { name: "Sermon on verse 16" });
+    await user.click(marker);
+    // The single-note popover header ("Sermon"), not the list header ("Sermons · n").
+    expect(await screen.findByText("Devoted to the Apostles' Teaching")).toBeInTheDocument();
+    expect(screen.queryByText(/Sermons ·/)).not.toBeInTheDocument();
+  });
+
+  it("keeps three overlays distinct on one verse even with multiple sermons (counted ▶)", async () => {
+    const tnote = {
+      book: "JHN",
+      chapter: 3,
+      verse: 16,
+      reference: "John 3:16",
+      type: "tn",
+      text: "A translator's note",
+      char_offset: 4,
+      marker: "1",
+      ordinal: 0,
+      cross_references: [],
+    };
+    server.use(
+      http.get("/api/v1/read/:translation/:book/:chapter", ({ params }) =>
+        HttpResponse.json(
+          readResponse([annotation()], String(params.translation), [
+            sermonNote({ id: 1, title: "Sermon A" }),
+            sermonNote({ id: 2, title: "Sermon B" }),
+          ]),
+        ),
+      ),
+      http.get("/api/v1/notes/:translation/:book/:chapter", ({ params }) =>
+        HttpResponse.json(String(params.translation) === "WEB" ? [tnote] : []),
+      ),
+    );
+    const user = userEvent.setup();
+    renderReader();
+    await screen.findByRole("button", { name: "2 sermons on verse 16" });
+    await user.selectOptions(await screen.findByLabelText("Translation"), "WEB");
+
+    // All three systems coexist; the sermon affordance is the counted ▶.
+    expect(await screen.findByRole("button", { name: "View note on verse 16" })).toBeInTheDocument(); // amber ●
+    expect(screen.getByRole("button", { name: "Translator's note 1" })).toBeInTheDocument(); // violet superscript
+    expect(screen.getByRole("button", { name: "2 sermons on verse 16" })).toBeInTheDocument(); // emerald counted ▶
+  });
+
+  it("keeps the counted ▶ across a translation switch", async () => {
+    server.use(
+      http.get("/api/v1/read/:translation/:book/:chapter", ({ params }) =>
+        HttpResponse.json(
+          readResponse([], String(params.translation), [
+            sermonNote({ id: 1 }),
+            sermonNote({ id: 2 }),
+          ]),
+        ),
+      ),
+    );
+    const user = userEvent.setup();
+    renderReader();
+
+    expect(await screen.findByRole("button", { name: "2 sermons on verse 16" })).toBeInTheDocument();
+    await user.selectOptions(await screen.findByLabelText("Translation"), "WEB");
+    expect(await screen.findByText(/WEB text 16/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "2 sermons on verse 16" })).toBeInTheDocument();
+  });
+
   it("sends the chosen scope when creating an annotation", async () => {
     let captured: Record<string, unknown> | null = null;
     server.use(
