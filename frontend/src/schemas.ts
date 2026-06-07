@@ -205,6 +205,8 @@ export const userSchema = z.object({
   id: z.number(),
   username: z.string().nullable(),
   is_admin: z.boolean(),
+  // The translation this profile last read in — the reader opens to it. Null until first set.
+  last_translation: z.string().nullable(),
   created_at: z.string(),
 });
 export const authEnvelopeSchema = z.object({
