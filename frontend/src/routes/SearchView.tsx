@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { type FormEvent, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 
+import { markSegments } from "@/lib/highlight";
 import { noteReference, notePreview, readerLink } from "@/lib/notes";
 import { fetchBooks, keywordSearch, searchAnnotations, semanticSearch } from "@/lib/reader";
 import type { KeywordResult, SemanticResult } from "@/schemas";
@@ -146,7 +147,21 @@ export function SearchView(): JSX.Element {
                         Open
                       </Link>
                     </div>
-                    {r.text && <p className="mt-1 font-serif text-gray-700">{r.text}</p>}
+                    {"snippet" in r
+                      ? r.snippet && (
+                          <p className="mt-1 font-serif text-gray-700">
+                            {markSegments(r.snippet).map((s) =>
+                              s.mark ? (
+                                <mark key={s.key} className="rounded bg-yellow-200">
+                                  {s.text}
+                                </mark>
+                              ) : (
+                                <span key={s.key}>{s.text}</span>
+                              ),
+                            )}
+                          </p>
+                        )
+                      : r.text && <p className="mt-1 font-serif text-gray-700">{r.text}</p>}
                   </li>
                 ))}
               </ul>

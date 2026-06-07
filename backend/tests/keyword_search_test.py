@@ -11,20 +11,20 @@ from tests.conftest import FakeConcordClient
 
 def _results() -> KeywordSearchResponse:
     return KeywordSearchResponse(
-        results=[
+        hits=[
             KeywordResult(
                 book="JHN",
                 chapter=11,
                 verse=35,
                 reference="John 11:35",
-                text="Jesus wept.",
+                snippet="Jesus <mark>wept</mark>.",
             ),
             KeywordResult(
                 book="LUK",
                 chapter=19,
                 verse=41,
                 reference="Luke 19:41",
-                text="And when he was come near, he beheld the city, and wept over it,",
+                snippet="...he beheld the city, and <mark>wept</mark> over it,",
             ),
         ]
     )
@@ -38,15 +38,16 @@ async def test_keyword_search_returns_matches(
         resp = await client.get("/api/v1/keyword-search", params={"q": "wept", "limit": 2})
     assert resp.status_code == 200
     rows = resp.json()
-    # Exact-match rows carry the canonical anchor + text, and crucially NO score (keyword ≠ ranked).
+    # Exact-match rows carry the canonical anchor + the highlight snippet, and NO score/text fields
+    # (keyword ≠ ranked; the verse arrives as `snippet` with <mark> around the match).
     assert rows[0] == {
         "book": "JHN",
         "chapter": 11,
         "verse": 35,
         "reference": "John 11:35",
-        "text": "Jesus wept.",
+        "snippet": "Jesus <mark>wept</mark>.",
     }
-    assert all("score" not in r for r in rows)
+    assert all("score" not in r and "text" not in r for r in rows)
 
 
 async def test_keyword_search_empty_query_makes_no_call(

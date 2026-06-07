@@ -85,7 +85,7 @@ describe("SearchView", () => {
     ).toBeInTheDocument();
   });
 
-  it("runs keyword Scripture search when toggled — no score, and jumps (issue #46)", async () => {
+  it("runs keyword search when toggled — highlights the match, no score, and jumps (#46/#49)", async () => {
     let semanticCalled = false;
     server.use(
       http.get("/api/v1/semantic-search", () => {
@@ -94,7 +94,13 @@ describe("SearchView", () => {
       }),
       http.get("/api/v1/keyword-search", () =>
         HttpResponse.json([
-          { book: "JHN", chapter: 11, verse: 35, reference: "John 11:35", text: "Jesus wept." },
+          {
+            book: "JHN",
+            chapter: 11,
+            verse: 35,
+            reference: "John 11:35",
+            snippet: "Jesus <mark>wept</mark>.",
+          },
         ]),
       ),
       http.get("/api/v1/annotations", () => HttpResponse.json([])),
@@ -106,11 +112,15 @@ describe("SearchView", () => {
     await user.type(screen.getByLabelText("Search query"), "wept");
     await user.click(screen.getByRole("button", { name: "Search" }));
 
-    // Exact match renders with its text, and NO score (keyword ≠ ranked).
     expect(await screen.findByText("John 11:35")).toBeInTheDocument();
-    expect(screen.getByText("Jesus wept.")).toBeInTheDocument();
+    // The matched term renders inside a <mark>; the full snippet text is present (minus tags).
+    const mark = screen.getByText("wept");
+    expect(mark.tagName).toBe("MARK");
+    expect(
+      screen.getByText((_, el) => el?.tagName === "P" && el.textContent === "Jesus wept."),
+    ).toBeInTheDocument();
+    // No score (keyword ≠ ranked), and the heavy semantic endpoint is never hit in keyword mode.
     expect(screen.queryByText(/score/)).not.toBeInTheDocument();
-    // The heavy semantic endpoint is never hit in keyword mode.
     expect(semanticCalled).toBe(false);
 
     // The result jumps into the reader at the verse.

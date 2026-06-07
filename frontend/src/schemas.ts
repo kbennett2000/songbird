@@ -199,14 +199,15 @@ export const semanticResultSchema = z.object({
 export const semanticResultsSchema = z.array(semanticResultSchema);
 export type SemanticResult = z.infer<typeof semanticResultSchema>;
 
-// An exact word/phrase match from Concord's keyword search — same canonical coords, but no score
-// (keyword matches aren't ranked).
+// An exact word/phrase match from Concord's keyword search — same canonical coords, no score
+// (keyword matches aren't ranked). `snippet` is the verse text with the matched term(s) wrapped in
+// <mark>…</mark>; the UI renders the highlight by splitting on the tags (never as raw HTML).
 export const keywordResultSchema = z.object({
   book: z.string(),
   chapter: z.number(),
   verse: z.number(),
   reference: z.string(),
-  text: z.string().nullable(),
+  snippet: z.string().nullable(),
 });
 export const keywordResultsSchema = z.array(keywordResultSchema);
 export type KeywordResult = z.infer<typeof keywordResultSchema>;

@@ -273,14 +273,15 @@ class SemanticResult(BaseModel):
 
 class KeywordResult(BaseModel):
     """An exact word/phrase match from Concord's keyword search. Canonical coords → jump reuses
-    navigation. No `score` — a keyword match is literal, not ranked (we expose only what the mode
-    actually means)."""
+    navigation. `snippet` is the verse text with the matched term(s) wrapped in `<mark>…</mark>`
+    (the client renders the highlight by splitting on the tags — never as raw HTML). No `score`:
+    a keyword match is literal, not ranked."""
 
     book: str  # USFM code — canonical
     chapter: int
     verse: int
     reference: str
-    text: str | None
+    snippet: str | None
 
 
 class NoteCrossReference(BaseModel):
