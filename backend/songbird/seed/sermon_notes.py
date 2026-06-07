@@ -25,6 +25,7 @@ def normalize_tags(names: Sequence[str]) -> list[str]:
     vocabulary rather than creating a parallel one."""
     return list(dict.fromkeys(n.strip().lower() for n in names if n.strip()))
 
+
 # Known canonical_order → USFM anchors; the book map must agree or it's wrong (wrong map lands
 # notes on the wrong book silently).
 _MAP_TRIPWIRE = {1: "GEN", 44: "ACT", 66: "REV"}
@@ -119,9 +120,7 @@ def split_runs(verses: Sequence[Mapping[str, Any]]) -> list[list[tuple[int, int,
     return runs
 
 
-def transform_entry(
-    entry: Mapping[str, Any], book_map: Mapping[int, str]
-) -> list[SermonNoteRow]:
+def transform_entry(entry: Mapping[str, Any], book_map: Mapping[int, str]) -> list[SermonNoteRow]:
     """One source entry → one ``SermonNoteRow`` per per-chapter run. All rows share the entry's
     title / sermon_url / event_date / tags, and the verbatim ``scripture_ref`` as ``reference``
     (so the popover shows the full true span even when an entry is split or multi-book)."""
