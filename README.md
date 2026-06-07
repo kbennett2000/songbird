@@ -6,9 +6,11 @@
 
 ---
 
-songbird lets you **read the Bible, highlight a verse, and write a note behind it** — like marking up a study Bible, but yours, private, and on your own machine. Switch between translations and your notes stay put. Tag them, search them, see a passage’s places on a map, and follow the cross-references behind each verse.
+songbird lets you **read the Bible, highlight a verse, and write a note behind it** — like marking up a study Bible, but yours, private, and on your own machine. Switch between translations and your notes stay put. Tag them, search them, link a sermon to a passage, see a passage’s places on a map, and follow the cross-references behind each verse.
 
 It’s **self-hosted**: it runs on your computer, your notes never leave it, and it works without an internet connection once it’s set up.
+
+The Bible text, search, and maps come from **[Concord](https://github.com/kbennett2000/concord)** — a companion Scripture engine that songbird is built on and runs alongside. The one command below starts both for you; songbird keeps only *your* notes, Concord provides the Scripture.
 
 <br>
 
@@ -17,6 +19,10 @@ It’s **self-hosted**: it runs on your computer, your notes never leave it, and
 **Read and annotate.** Click a verse, write a note in the side panel, and it’s saved — right there in the margin.
 
 ![The reader, with a verse highlighted and a note open beside it](docs/screenshots/reader.png)
+
+**Link a sermon to the passage.** Anchor a sermon to the verses it preaches on; a ▶ marker in the margin opens its details and a link to watch.
+
+![A sermon linked to Psalm 23, its details open in the reader](docs/screenshots/sermon.png)
 
 **Search by meaning.** Ask for “verses about anxiety” and find the right passages — even ones that don’t contain the word.
 
@@ -103,6 +109,7 @@ In the terminal, press **Ctrl + C**, then run `docker compose down`. Your notes 
 
 - **Write a note** — click any verse number; a notepad opens beside it. Notes can have **bold**, *italics*, links, and lists.
 - **Switch translations** — pick a different translation up top; your notes stay anchored to the right verses. A note you wrote in one translation is gently marked when you read another.
+- **Link a sermon** — anchor a sermon to the passage it preaches on; a ▶ marker appears in the margin, opening the sermon’s title, date, tags, and a link to watch. The marker shows in every translation.
 - **Tag and find** — add tags to a note, then use the **browse** view to find notes by tag, or **search** to find Scripture by meaning.
 - **Go deeper** — hover a verse for its **cross-references**, or tap the **globe** to see a passage’s places on a map, when their locations are known.
 
@@ -110,7 +117,7 @@ In the terminal, press **Ctrl + C**, then run `docker compose down`. Your notes 
 
 ## How it works (for the curious)
 
-songbird is the app you use. The Scripture itself — the text, the search, the places — comes from **[Concord](https://github.com/kbennett2000/concord)**, a companion Scripture engine that runs alongside songbird. The single command above starts both for you. songbird keeps only *your* notes; Concord provides the Bible. If you’re technically inclined, [the design notes are here](docs/v1/SPEC.md), and the **map view** (added in v1.1) is described [here](docs/v1.1/MAP-SPEC.md).
+songbird is the app you use; **[Concord](https://github.com/kbennett2000/concord)** is the Scripture engine it’s built on — the text, the search, the places, and the cross-references all come from Concord over the network, and the single command above starts both for you. songbird keeps only *your* notes; Concord provides the Bible. If you’re technically inclined, [the design notes are here](docs/v1/SPEC.md); the **map view** (v1.1) is described [here](docs/v1.1/MAP-SPEC.md), and **sermon notes** [here](docs/v1.2/SERMON-NOTES-SPEC.md).
 
 <br>
 

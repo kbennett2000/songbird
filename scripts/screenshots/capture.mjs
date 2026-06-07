@@ -1,4 +1,4 @@
-// Capture the three README screenshots against a running songbird stack.
+// Capture the README screenshots (reader, sermon, search, places, map) against a running stack.
 //
 //   1. start the stack:   docker compose up        (songbird at http://localhost:8077)
 //   2. install once:      cd scripts/screenshots && npm install && npx playwright install chromium
@@ -45,6 +45,24 @@ const NOTES = [
   },
 ];
 
+// Sermon notes anchor like annotations (canonical USFM + chapter/verse range) but always show on
+// every translation and link out to the sermon instead of holding Markdown. One seeded note on
+// Acts 2:42–47 lets the reader shot show the emerald ▶ sermon marker + its popover.
+const SERMON_NOTES = [
+  {
+    title: "The Lord Is My Shepherd",
+    sermon_url: "https://www.youtube.com/watch?v=ON9bop1Lcc0",
+    reference: "Psalm 23",
+    book_usfm: "PSA",
+    start_chapter: 23,
+    start_verse: 1,
+    end_chapter: 23,
+    end_verse: 6,
+    event_date: "2026-05-18",
+    tags: ["comfort", "trust"],
+  },
+];
+
 async function ensureSignedIn(page) {
   await page.goto(`${BASE}/login`, { waitUntil: "networkidle" });
   // Register the first (owner) account. If it already exists, fall back to signing in.
@@ -79,6 +97,25 @@ async function seedNotes(page) {
   }
 }
 
+async function seedSermonNotes(page) {
+  // Sermon notes have no uniqueness constraint (a verse legitimately carries many), so guard the
+  // POST ourselves — otherwise re-running capture piles up duplicates and the single-sermon shot
+  // turns into a "Sermons · N" stack.
+  const existing = await page.request
+    .get(`${BASE}/api/v1/sermon-notes`)
+    .then((r) => (r.ok() ? r.json() : []));
+  for (const note of SERMON_NOTES) {
+    const already = existing.some(
+      (e) => e.title === note.title && e.reference === note.reference,
+    );
+    if (already) continue;
+    const res = await page.request.post(`${BASE}/api/v1/sermon-notes`, { data: note });
+    if (!res.ok()) {
+      throw new Error(`sermon seed failed (${res.status()}): ${await res.text()}`);
+    }
+  }
+}
+
 // Viewport-framed shots (1440×900) read far better in the README than tall full-page strips.
 async function captureReader(page) {
   await page.goto(`${BASE}/?book=JHN&chapter=3`, { waitUntil: "networkidle" });
@@ -91,6 +128,47 @@ async function captureReader(page) {
   await page.waitForTimeout(600);
   await page.screenshot({ path: `${OUT}/reader.png` });
   console.log("✓ reader.png");
+}
+
+// Sermon notes: open the seeded Psalm 23 sermon (a chapter-top passage, so no scroll is needed —
+// the floating popover dismisses on any scroll) and frame the passage column with its popover.
+// We clip to the reading column (the top toolbar carries a translator's-notes notice that only
+// applies when Concord serves NET, which the default v1.0.0 image does not — out of frame here).
+async function captureSermon(page) {
+  await page.goto(`${BASE}/?book=PSA&chapter=23`, { waitUntil: "networkidle" });
+  // The verse 1 sermon marker (▶) sits in the initial viewport — wait for it, then open in place.
+  const marker = page.getByRole("button", { name: "Sermon on verse 1" });
+  await marker.waitFor({ state: "visible", timeout: 15000 });
+  await marker.click();
+  // The popover shows the external sermon link — wait for it before framing the shot.
+  await page.getByRole("link", { name: "▶ Watch the sermon" }).waitFor({ state: "visible" });
+  await page.waitForTimeout(400);
+  // Clip to the reading column: from just above verse 1 through the bottom of the popover, and
+  // below the toolbar's translator's-notes notice (only meaningful when Concord serves NET, which
+  // the default v1.0.0 image doesn't) so the sermon popover is the subject.
+  const verseBox = await page.locator("#v-1").boundingBox();
+  const lastBox = await page.locator('[id^="v-"]').last().boundingBox();
+  const popBox = await page.getByRole("dialog").boundingBox();
+  // The notice is always present in the default stack (Concord v1.0.0 has no NET) — wait for it so
+  // its box is measured reliably, then start the clip just below it. Tolerate its absence (a future
+  // Concord that serves NET) by falling back to just above verse 1.
+  const notice = page.getByText("Translator", { exact: false }).first();
+  const noticeVisible = await notice
+    .waitFor({ state: "visible", timeout: 3000 })
+    .then(() => true)
+    .catch(() => false);
+  const noticeBox = noticeVisible ? await notice.boundingBox() : null;
+  const top = Math.max(0, noticeBox ? noticeBox.y + noticeBox.height + 10 : verseBox.y - 20);
+  // Extend through the whole (short) psalm and the popover so the shot is a full passage, not a strip.
+  const bottom = Math.min(
+    900,
+    Math.max(lastBox.y + lastBox.height, popBox.y + popBox.height) + 24,
+  );
+  await page.screenshot({
+    path: `${OUT}/sermon.png`,
+    clip: { x: 0, y: top, width: 1440, height: bottom - top },
+  });
+  console.log("✓ sermon.png");
 }
 
 async function captureSearch(page) {
@@ -232,7 +310,9 @@ async function main() {
     await ensureSignedIn(page);
     if (!mapOnly) {
       await seedNotes(page);
+      await seedSermonNotes(page);
       await captureReader(page);
+      await captureSermon(page);
       await captureSearch(page);
       await capturePlaces(page);
     }

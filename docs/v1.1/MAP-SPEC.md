@@ -1,5 +1,8 @@
 # songbird — Map View (v1.1 feature spec)
 
+> songbird is built on **[Concord](https://github.com/kbennett2000/concord)**, which provides
+> the places data this feature renders. See [the design spec](../v1/SPEC.md) for that relationship.
+
 The places data Concord provides comes to life on a **map**, not a list. This adds a small
 **globe icon** in the reader that, when a passage has mappable places, opens a **map of those
 places** — plotted on a bundled, offline Bible-world atlas, honest about confidence and about
