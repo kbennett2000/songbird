@@ -68,6 +68,26 @@ export const readAnnotationSchema = annotationSchema.extend({
   in_scope: z.boolean(),
 });
 
+// A sermon note (songbird-owned). Canonical anchor + a stored display `reference`; the body is
+// an external sermon URL. Always visible on every translation — no scope / in_scope concept.
+export const sermonNoteSchema = z.object({
+  id: z.number(),
+  title: z.string(),
+  sermon_url: z.string(),
+  reference: z.string(),
+  book_usfm: z.string(),
+  book_order_index: z.number(),
+  start_chapter: z.number(),
+  start_verse: z.number(),
+  end_chapter: z.number(),
+  end_verse: z.number(),
+  event_date: z.string().nullable(),
+  tags: z.array(z.string()),
+  author_id: z.number(),
+  created_at: z.string(),
+  updated_at: z.string(),
+});
+
 export const readVerseSchema = z.object({
   book: z.string(),
   chapter: z.number(),
@@ -75,6 +95,7 @@ export const readVerseSchema = z.object({
   reference: z.string(),
   text: z.string().nullable(),
   annotations: z.array(readAnnotationSchema),
+  sermon_notes: z.array(sermonNoteSchema),
 });
 
 export const readChapterSchema = z.object({
@@ -154,6 +175,7 @@ export const placeVersesSchema = z.array(placeVerseSchema);
 export type Book = z.infer<typeof bookSchema>;
 export type Annotation = z.infer<typeof annotationSchema>;
 export type ReadAnnotation = z.infer<typeof readAnnotationSchema>;
+export type SermonNote = z.infer<typeof sermonNoteSchema>;
 export type ReadVerse = z.infer<typeof readVerseSchema>;
 export type ReadChapter = z.infer<typeof readChapterSchema>;
 export type ResolvedReference = z.infer<typeof resolvedReferenceSchema>;
