@@ -84,4 +84,57 @@ describe("SearchView", () => {
       screen.getByText(/Enter a query to search Scripture/),
     ).toBeInTheDocument();
   });
+
+  it("runs keyword Scripture search when toggled — no score, and jumps (issue #46)", async () => {
+    let semanticCalled = false;
+    server.use(
+      http.get("/api/v1/semantic-search", () => {
+        semanticCalled = true;
+        return HttpResponse.json([]);
+      }),
+      http.get("/api/v1/keyword-search", () =>
+        HttpResponse.json([
+          { book: "JHN", chapter: 11, verse: 35, reference: "John 11:35", text: "Jesus wept." },
+        ]),
+      ),
+      http.get("/api/v1/annotations", () => HttpResponse.json([])),
+    );
+    const user = userEvent.setup();
+    renderSearch();
+
+    await user.click(screen.getByRole("tab", { name: "Keyword" }));
+    await user.type(screen.getByLabelText("Search query"), "wept");
+    await user.click(screen.getByRole("button", { name: "Search" }));
+
+    // Exact match renders with its text, and NO score (keyword ≠ ranked).
+    expect(await screen.findByText("John 11:35")).toBeInTheDocument();
+    expect(screen.getByText("Jesus wept.")).toBeInTheDocument();
+    expect(screen.queryByText(/score/)).not.toBeInTheDocument();
+    // The heavy semantic endpoint is never hit in keyword mode.
+    expect(semanticCalled).toBe(false);
+
+    // The result jumps into the reader at the verse.
+    await user.click(screen.getByRole("link", { name: "Open" }));
+    expect(await screen.findByText(/book=JHN&chapter=11&verse=35/)).toBeInTheDocument();
+  });
+
+  it("does not run keyword search while in Semantic mode (issue #46)", async () => {
+    let keywordCalled = false;
+    server.use(
+      http.get("/api/v1/semantic-search", () => HttpResponse.json([])),
+      http.get("/api/v1/keyword-search", () => {
+        keywordCalled = true;
+        return HttpResponse.json([]);
+      }),
+      http.get("/api/v1/annotations", () => HttpResponse.json([])),
+    );
+    const user = userEvent.setup();
+    renderSearch();
+
+    await user.type(screen.getByLabelText("Search query"), "anxiety");
+    await user.click(screen.getByRole("button", { name: "Search" }));
+
+    expect(await screen.findByText("No matching verses.")).toBeInTheDocument();
+    expect(keywordCalled).toBe(false);
+  });
 });

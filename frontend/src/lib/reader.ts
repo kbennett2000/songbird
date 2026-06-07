@@ -8,6 +8,7 @@ import {
   type ReadChapter,
   type ResolvedReference,
   type ScopeType,
+  type KeywordResult,
   type SemanticResult,
   type SermonNote,
   type Translation,
@@ -20,6 +21,7 @@ import {
   placesSchema,
   readChapterSchema,
   resolvedReferenceSchema,
+  keywordResultsSchema,
   semanticResultsSchema,
   sermonNoteSchema,
   sermonNotesListSchema,
@@ -215,6 +217,20 @@ export async function semanticSearch(
     `/semantic-search?q=${encodeURIComponent(q)}&limit=${limit}${t}`,
   );
   return semanticResultsSchema.parse(data);
+}
+
+/** Search Scripture for an exact word/phrase — via Concord's keyword search (issue #46). */
+export async function keywordSearch(
+  q: string,
+  translation: string,
+  limit = 20,
+): Promise<KeywordResult[]> {
+  const t = translation ? `&translation=${encodeURIComponent(translation)}` : "";
+  const data = await apiRequest<unknown>(
+    "GET",
+    `/keyword-search?q=${encodeURIComponent(q)}&limit=${limit}${t}`,
+  );
+  return keywordResultsSchema.parse(data);
 }
 
 /** Keyword search over the user's notes (Concord-free). Semantic note search awaits a Concord

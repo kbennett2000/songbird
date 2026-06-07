@@ -199,6 +199,18 @@ export const semanticResultSchema = z.object({
 export const semanticResultsSchema = z.array(semanticResultSchema);
 export type SemanticResult = z.infer<typeof semanticResultSchema>;
 
+// An exact word/phrase match from Concord's keyword search — same canonical coords, but no score
+// (keyword matches aren't ranked).
+export const keywordResultSchema = z.object({
+  book: z.string(),
+  chapter: z.number(),
+  verse: z.number(),
+  reference: z.string(),
+  text: z.string().nullable(),
+});
+export const keywordResultsSchema = z.array(keywordResultSchema);
+export type KeywordResult = z.infer<typeof keywordResultSchema>;
+
 // --- Import / Export (issue #41) ---
 
 // Portable, account-agnostic shapes (no id/author/timestamps) — the round-trippable export file.

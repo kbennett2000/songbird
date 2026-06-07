@@ -7,7 +7,7 @@ doesn't exist — so notes use keyword search; see the annotations browse `q` pa
 from fastapi import APIRouter, Depends
 
 from songbird.api.deps import get_concord_client
-from songbird.api.schemas import SemanticResult
+from songbird.api.schemas import KeywordResult, SemanticResult
 from songbird.concord.client import (
     ConcordClient,
     ConcordNotFoundError,
@@ -40,6 +40,35 @@ async def semantic_search(
             verse=r.verse,
             reference=r.reference,
             score=r.score,
+            text=r.text,
+        )
+        for r in result.results
+    ]
+
+
+@router.get("/keyword-search", response_model=list[KeywordResult])
+async def keyword_search(
+    q: str,
+    translation: str | None = None,
+    limit: int = 20,
+    concord: ConcordClient = Depends(get_concord_client),
+) -> list[KeywordResult]:
+    """Exact word/phrase Scripture search — a thin proxy of Concord's `/v1/search`. The literal
+    counterpart to semantic search; no embedding model involved (issue #46)."""
+    if not q.strip():
+        return []  # no query → no call (Concord 422s on empty q)
+    try:
+        result = await concord.keyword_search(q, translation, limit=limit)
+    except ConcordNotFoundError as exc:
+        raise_http(404, ErrorCode.NOT_FOUND, str(exc))
+    except ConcordUnreachableError as exc:
+        raise_http(502, ErrorCode.CONCORD_UNREACHABLE, str(exc))
+    return [
+        KeywordResult(
+            book=r.book,
+            chapter=r.chapter,
+            verse=r.verse,
+            reference=r.reference,
             text=r.text,
         )
         for r in result.results
