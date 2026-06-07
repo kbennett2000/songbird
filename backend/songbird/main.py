@@ -19,6 +19,7 @@ from songbird.api.concord import router as concord_router
 from songbird.api.deps import get_current_user
 from songbird.api.geography import router as geography_router
 from songbird.api.health import router as health_router
+from songbird.api.import_export import router as import_export_router
 from songbird.api.notes import router as notes_router
 from songbird.api.read import router as read_router
 from songbird.api.search import router as search_router
@@ -26,6 +27,8 @@ from songbird.api.sermon_notes import router as sermon_notes_router
 from songbird.api.tags import router as tags_router
 from songbird.concord.client import ConcordClient
 from songbird.config import get_settings
+from songbird.core.sessions import cleanup_all_expired_sessions
+from songbird.db.session import async_session_factory
 
 logger = logging.getLogger("songbird")
 
@@ -36,6 +39,15 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     settings.data_dir.mkdir(parents=True, exist_ok=True)
     app.state.concord = ConcordClient(settings.concord_base_url, settings.concord_timeout)
     logger.info("songbird %s starting; Concord at %s", __version__, settings.concord_base_url)
+    # Hygiene: sweep dead session rows for users who never return (per-user cleanup only runs on
+    # that user's next login). Best-effort — it must never block boot, so failures are logged.
+    try:
+        async with async_session_factory() as db:
+            swept = await cleanup_all_expired_sessions(db)
+        if swept:
+            logger.info("swept %d expired session(s) at startup", swept)
+    except Exception:
+        logger.warning("startup session sweep skipped", exc_info=True)
     try:
         yield
     finally:
@@ -81,6 +93,7 @@ def create_app() -> FastAPI:
     app.include_router(notes_router, dependencies=gated)
     app.include_router(sermon_notes_router, dependencies=gated)
     app.include_router(search_router, dependencies=gated)
+    app.include_router(import_export_router, dependencies=gated)
 
     settings = get_settings()
     dist_dir = settings.frontend_dist_dir

@@ -16,6 +16,7 @@ from songbird.concord.schemas import (
     Chapter,
     ConcordHealth,
     CrossRefResponse,
+    KeywordSearchResponse,
     NotesResponse,
     PlaceVersesResponse,
     SemanticSearchResponse,
@@ -102,6 +103,34 @@ class ConcordClient:
         except httpx.HTTPError as exc:
             raise ConcordUnreachableError(self._base_url, exc) from exc
         return SemanticSearchResponse.model_validate(response.json())
+
+    async def keyword_search(
+        self,
+        q: str,
+        translation: str | None = None,
+        book: str | None = None,
+        limit: int = 20,
+    ) -> KeywordSearchResponse:
+        """Search Scripture for an exact word/phrase via Concord's `/v1/search` — the literal-text
+        counterpart to semantic search (no embedding model involved). A 400/404/422 (bad query /
+        unknown translation or book) is a client error, not unreachability."""
+        params: dict[str, str] = {"q": q, "limit": str(limit)}
+        if translation:
+            params["translation"] = translation
+        if book:
+            params["book"] = book
+        try:
+            response = await self._client.get("/v1/search", params=params)
+            response.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code in (400, 404, 422):
+                raise ConcordNotFoundError(
+                    f"Concord could not run that search: {exc.response.status_code}"
+                ) from exc
+            raise ConcordUnreachableError(self._base_url, exc) from exc
+        except httpx.HTTPError as exc:
+            raise ConcordUnreachableError(self._base_url, exc) from exc
+        return KeywordSearchResponse.model_validate(response.json())
 
     async def get_chapter(self, book: str, chapter: int, translation: str) -> Chapter:
         """Read one chapter in one translation. A 404 (unknown book / no such chapter) is a

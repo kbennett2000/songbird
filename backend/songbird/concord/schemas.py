@@ -115,6 +115,22 @@ class SemanticSearchResponse(BaseModel):
     results: list[SemanticResult]
 
 
+class KeywordResult(BaseModel):
+    """One exact word/phrase match from Concord's `/v1/search`. Concord returns the verse as a
+    `snippet` with the matched term(s) wrapped in `<mark>…</mark>` for highlighting; there is no
+    relevance score (a keyword match is literal, not ranked)."""
+
+    book: str  # USFM code — canonical
+    chapter: int
+    verse: int
+    reference: str
+    snippet: str | None = None  # verse text with <mark>…</mark> around the matched term(s)
+
+
+class KeywordSearchResponse(BaseModel):
+    hits: list[KeywordResult]
+
+
 class NoteCrossReference(BaseModel):
     """A cross-reference carried by a translator's note → a target verse or range. Canonical
     coordinates (so the popover reuses songbird's coordinate navigation)."""

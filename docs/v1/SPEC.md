@@ -3,7 +3,7 @@
 **songbird** is a personal, self-hosted app for **annotating Scripture**: read a translation,
 highlight a verse, attach a rich note behind it, find it again later by tag or by meaning.
 
-**songbird is built on top of Concord.** Concord runs on the network and exposes its REST
+**songbird is built on top of [Concord](https://github.com/kbennett2000/concord).** Concord runs on the network and exposes its REST
 endpoints; **songbird is a separate app that consumes those endpoints** to read Scripture,
 search, and look up geography. Concord is the foundation and the data/API provider; songbird
 is the annotation app that sits on top of it and delivers the experience to the end user.

@@ -2,27 +2,21 @@ import { useQuery } from "@tanstack/react-query";
 import { type FormEvent, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 
-import { fetchBooks, searchAnnotations, semanticSearch } from "@/lib/reader";
-import type { Annotation, Book } from "@/schemas";
+import { markSegments } from "@/lib/highlight";
+import { noteReference, notePreview, readerLink } from "@/lib/notes";
+import { fetchBooks, keywordSearch, searchAnnotations, semanticSearch } from "@/lib/reader";
+import type { KeywordResult, SemanticResult } from "@/schemas";
 
 const SEARCH_TRANSLATION = "KJV"; // the translation results are shown in (first cut)
 
-function notePreview(markdown: string): string {
-  const plain = markdown
-    .replace(/[#*_`>-]/g, "")
-    .replace(/\s+/g, " ")
-    .trim();
-  return plain.length > 120 ? `${plain.slice(0, 120)}…` : plain;
-}
-
-function reference(a: Annotation, booksById: Map<string, Book>): string {
-  const name = booksById.get(a.book_usfm)?.name ?? a.book_usfm;
-  return `${name} ${a.start_chapter}:${a.start_verse}`;
-}
+type Mode = "semantic" | "keyword";
 
 export function SearchView(): JSX.Element {
   const [draft, setDraft] = useState("");
   const [query, setQuery] = useState("");
+  // Which Scripture search to run. Only the active mode's query fires — a keyword search never
+  // spins up Concord's heavy embedding model (issue #46).
+  const [mode, setMode] = useState<Mode>("semantic");
 
   const booksQuery = useQuery({ queryKey: ["books"], queryFn: fetchBooks });
   const booksById = useMemo(
@@ -30,11 +24,18 @@ export function SearchView(): JSX.Element {
     [booksQuery.data],
   );
 
-  const scripture = useQuery({
+  const semantic = useQuery({
     queryKey: ["semantic-search", query],
     queryFn: () => semanticSearch(query, SEARCH_TRANSLATION),
-    enabled: query.length > 0,
+    enabled: mode === "semantic" && query.length > 0,
   });
+  const keyword = useQuery({
+    queryKey: ["keyword-search", query],
+    queryFn: () => keywordSearch(query, SEARCH_TRANSLATION),
+    enabled: mode === "keyword" && query.length > 0,
+  });
+  const scripture = mode === "semantic" ? semantic : keyword;
+  const otherMode: Mode = mode === "keyword" ? "semantic" : "keyword";
   const notes = useQuery({
     queryKey: ["note-search", query],
     queryFn: () => searchAnnotations(query),
@@ -46,24 +47,54 @@ export function SearchView(): JSX.Element {
     setQuery(draft.trim());
   };
 
+  // The active mode's results, widened to the common shape so one list renders either kind; the
+  // score is shown only when present (semantic).
+  const scriptureResults: Array<SemanticResult | KeywordResult> = scripture.data ?? [];
+
   return (
     <div className="min-h-screen bg-stone-50">
       <header className="border-b border-gray-200 bg-white">
         <div className="mx-auto flex max-w-3xl items-center gap-3 p-4">
           <h1 className="text-2xl font-bold tracking-tight">Search</h1>
-          <Link to="/" className="ml-auto text-sm text-blue-700 hover:underline">
-            ← Reader
-          </Link>
+          <div className="ml-auto flex items-center gap-3 text-sm">
+            <Link to="/read" className="text-blue-700 hover:underline">
+              Reader
+            </Link>
+            <Link to="/" className="text-blue-700 hover:underline">
+              Home
+            </Link>
+          </div>
         </div>
       </header>
 
       <main className="mx-auto max-w-3xl p-6">
+        <div className="mb-3 flex w-full gap-1 rounded-lg bg-gray-100 p-1 sm:w-72" role="tablist">
+          {(["semantic", "keyword"] as const).map((m) => (
+            <button
+              key={m}
+              type="button"
+              role="tab"
+              aria-selected={mode === m}
+              className={`flex-1 rounded-md px-3 py-1 text-sm font-medium ${
+                mode === m ? "bg-white text-gray-900 shadow" : "text-gray-500 hover:text-gray-700"
+              }`}
+              onClick={() => setMode(m)}
+            >
+              {m === "semantic" ? "Semantic" : "Keyword"}
+            </button>
+          ))}
+        </div>
+
         <form onSubmit={submit} className="mb-6 flex gap-2">
           <input
             type="text"
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
-            placeholder="Search by meaning… e.g. anxiety, the good shepherd"
+            placeholder={
+              mode === "semantic"
+                ? "Search by meaning… e.g. anxiety, the good shepherd"
+                : "Search for an exact word or phrase… e.g. living water"
+            }
             aria-label="Search query"
             className="flex-1 rounded border border-gray-300 px-3 py-2"
           />
@@ -76,40 +107,75 @@ export function SearchView(): JSX.Element {
         </form>
 
         {query.length === 0 && (
-          <p className="text-gray-500">Enter a query to search Scripture (by meaning) and your notes.</p>
+          <p className="text-gray-500">
+            Enter a query to search Scripture (
+            {mode === "semantic" ? "by meaning" : "by exact word or phrase"}) and your notes.
+          </p>
         )}
 
         {query.length > 0 && (
           <div className="flex flex-col gap-8">
-            {/* Scripture — semantic search via Concord */}
+            {/* Scripture — semantic or keyword search via Concord, per the mode toggle */}
             <section aria-label="Scripture results">
               <h2 className="mb-2 text-lg font-semibold">
-                Scripture <span className="text-sm font-normal text-gray-400">(semantic)</span>
+                Scripture{" "}
+                <span className="text-sm font-normal text-gray-400">
+                  ({mode === "semantic" ? "semantic" : "keyword"})
+                </span>
               </h2>
               {scripture.isPending && <p className="text-gray-500">Searching…</p>}
               {scripture.isError && (
                 <p className="text-red-600">Couldn&rsquo;t search (is Concord reachable?).</p>
               )}
-              {scripture.data && scripture.data.length === 0 && (
-                <p className="text-gray-500">No matching verses.</p>
+              {scripture.data && scriptureResults.length === 0 && (
+                <div className="text-gray-500">
+                  <p>No matching verses.</p>
+                  {/* A keyword query Concord can't run (FTS5 punctuation) comes back empty; offer the
+                      same text in the other mode — semantic doesn't use FTS5 (issue #51). */}
+                  <button
+                    type="button"
+                    onClick={() => setMode(otherMode)}
+                    className="mt-1 text-sm text-blue-700 hover:underline"
+                  >
+                    {mode === "keyword"
+                      ? `Search “${query}” by meaning instead →`
+                      : `Search “${query}” for the exact phrase instead →`}
+                  </button>
+                </div>
               )}
               <ul className="flex flex-col gap-3">
-                {scripture.data?.map((r) => (
+                {scriptureResults.map((r) => (
                   <li
                     key={`${r.book}-${r.chapter}-${r.verse}`}
                     className="rounded border border-gray-200 bg-white p-4"
                   >
                     <div className="flex items-baseline gap-2">
                       <span className="font-semibold">{r.reference}</span>
-                      <span className="text-xs text-gray-400">score {r.score.toFixed(3)}</span>
+                      {"score" in r && (
+                        <span className="text-xs text-gray-400">score {r.score.toFixed(3)}</span>
+                      )}
                       <Link
-                        to={`/?book=${r.book}&chapter=${r.chapter}&verse=${r.verse}`}
+                        to={`/read?book=${r.book}&chapter=${r.chapter}&verse=${r.verse}`}
                         className="ml-auto text-sm text-blue-700 hover:underline"
                       >
                         Open
                       </Link>
                     </div>
-                    {r.text && <p className="mt-1 font-serif text-gray-700">{r.text}</p>}
+                    {"snippet" in r
+                      ? r.snippet && (
+                          <p className="mt-1 font-serif text-gray-700">
+                            {markSegments(r.snippet).map((s) =>
+                              s.mark ? (
+                                <mark key={s.key} className="rounded bg-yellow-200">
+                                  {s.text}
+                                </mark>
+                              ) : (
+                                <span key={s.key}>{s.text}</span>
+                              ),
+                            )}
+                          </p>
+                        )
+                      : r.text && <p className="mt-1 font-serif text-gray-700">{r.text}</p>}
                   </li>
                 ))}
               </ul>
@@ -132,9 +198,9 @@ export function SearchView(): JSX.Element {
                 {notes.data?.map((a) => (
                   <li key={a.id} className="rounded border border-gray-200 bg-white p-4">
                     <div className="flex items-center gap-3">
-                      <span className="font-semibold">{reference(a, booksById)}</span>
+                      <span className="font-semibold">{noteReference(a, booksById)}</span>
                       <Link
-                        to={`/?book=${a.book_usfm}&chapter=${a.start_chapter}&verse=${a.start_verse}`}
+                        to={readerLink(a)}
                         className="ml-auto text-sm text-blue-700 hover:underline"
                       >
                         Open in reader

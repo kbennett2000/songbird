@@ -199,14 +199,77 @@ export const semanticResultSchema = z.object({
 export const semanticResultsSchema = z.array(semanticResultSchema);
 export type SemanticResult = z.infer<typeof semanticResultSchema>;
 
+// An exact word/phrase match from Concord's keyword search — same canonical coords, no score
+// (keyword matches aren't ranked). `snippet` is the verse text with the matched term(s) wrapped in
+// <mark>…</mark>; the UI renders the highlight by splitting on the tags (never as raw HTML).
+export const keywordResultSchema = z.object({
+  book: z.string(),
+  chapter: z.number(),
+  verse: z.number(),
+  reference: z.string(),
+  snippet: z.string().nullable(),
+});
+export const keywordResultsSchema = z.array(keywordResultSchema);
+export type KeywordResult = z.infer<typeof keywordResultSchema>;
+
+// --- Import / Export (issue #41) ---
+
+// Portable, account-agnostic shapes (no id/author/timestamps) — the round-trippable export file.
+export const annotationExportSchema = z.object({
+  book_usfm: z.string(),
+  start_chapter: z.number(),
+  start_verse: z.number(),
+  end_chapter: z.number(),
+  end_verse: z.number(),
+  note_markdown: z.string(),
+  color: z.string().nullable(),
+  scope_type: z.string(),
+  scope_translations: z.array(z.string()),
+  tags: z.array(z.string()),
+});
+export const sermonNoteExportSchema = z.object({
+  title: z.string(),
+  sermon_url: z.string(),
+  reference: z.string(),
+  book_usfm: z.string(),
+  start_chapter: z.number(),
+  start_verse: z.number(),
+  end_chapter: z.number(),
+  end_verse: z.number(),
+  event_date: z.string().nullable(),
+  tags: z.array(z.string()),
+});
+export const exportDocumentSchema = z.object({
+  version: z.number(),
+  exported_at: z.string().nullable().optional(),
+  annotations: z.array(annotationExportSchema),
+  sermon_notes: z.array(sermonNoteExportSchema),
+});
+
+const importOutcomeSchema = z.object({
+  created: z.number(),
+  skipped: z.number(),
+  failed: z.number(),
+});
+export const importSummarySchema = z.object({
+  annotations: importOutcomeSchema,
+  sermon_notes: importOutcomeSchema,
+  errors: z.array(z.string()),
+});
+
+export type ExportDocument = z.infer<typeof exportDocumentSchema>;
+export type ImportSummary = z.infer<typeof importSummarySchema>;
+
 // --- Auth (Slice 8) ---
 
 export const userSchema = z.object({
   id: z.number(),
   username: z.string().nullable(),
   is_admin: z.boolean(),
-  // The translation this profile last read in — the reader opens to it. Null until first set.
+  // Where this profile last read — the reader reopens to this position. Null until first set.
   last_translation: z.string().nullable(),
+  last_book: z.string().nullable(),
+  last_chapter: z.number().nullable(),
   created_at: z.string(),
 });
 export const authEnvelopeSchema = z.object({

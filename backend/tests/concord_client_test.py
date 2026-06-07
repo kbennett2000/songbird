@@ -286,6 +286,61 @@ async def test_semantic_search_404_is_not_found() -> None:
     await client.aclose()
 
 
+async def test_keyword_search_hits_v1_search_and_parses() -> None:
+    seen: dict[str, str] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["path"] = request.url.path
+        seen["q"] = request.url.params.get("q", "")
+        seen["translation"] = request.url.params.get("translation", "")
+        seen["limit"] = request.url.params.get("limit", "")
+        # The real Concord /v1/search body: a `hits` array whose items carry a `snippet` with the
+        # matched term wrapped in <mark>…</mark> (captured live from Concord 192.168.1.62:8000).
+        return httpx.Response(
+            200,
+            json={
+                "query": "living water",
+                "translation": "KJV",
+                "book": None,
+                "limit": 5,
+                "offset": 0,
+                "total": 7,
+                "hits": [
+                    {
+                        "book": "JHN",
+                        "chapter": 7,
+                        "verse": 38,
+                        "reference": "John 7:38",
+                        "snippet": "rivers of <mark>living</mark> <mark>water</mark>.",
+                    }
+                ],
+            },
+        )
+
+    client = ConcordClient("http://concord.test", transport=httpx.MockTransport(handler))
+    result = await client.keyword_search("living water", "KJV", limit=5)
+    await client.aclose()
+    assert seen == {
+        "path": "/v1/search",
+        "q": "living water",
+        "translation": "KJV",
+        "limit": "5",
+    }
+    assert result.hits[0].book == "JHN"
+    assert result.hits[0].snippet is not None
+    assert "<mark>living</mark>" in result.hits[0].snippet
+
+
+async def test_keyword_search_404_is_not_found() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(404, json={"error": {"code": "unknown_translation"}})
+
+    client = ConcordClient("http://concord.test", transport=httpx.MockTransport(handler))
+    with pytest.raises(ConcordNotFoundError):
+        await client.keyword_search("peace", "ZZZ")
+    await client.aclose()
+
+
 async def test_semantic_search_422_is_not_found() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(422, json={"detail": "bad query"})

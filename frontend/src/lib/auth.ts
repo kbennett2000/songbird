@@ -26,9 +26,21 @@ export async function logout(): Promise<void> {
   await apiRequest<void>("POST", "/auth/logout");
 }
 
-/** Remember the reader's translation on the user's profile (per-profile default). Returns the
- * updated user so the auth cache can be refreshed. */
-export async function updateLastTranslation(code: string): Promise<User> {
-  const data = await apiRequest<unknown>("PATCH", "/auth/me", { last_translation: code });
+/** The reader's last position — translation + book + chapter — saved per-profile so the reader
+ * reopens where the user left off. */
+export interface ReadingPosition {
+  translation: string;
+  book: string;
+  chapter: number;
+}
+
+/** Remember the reader's position on the user's profile. Returns the updated user so the auth
+ * cache can be refreshed. */
+export async function saveReadingPosition(pos: ReadingPosition): Promise<User> {
+  const data = await apiRequest<unknown>("PATCH", "/auth/me", {
+    last_translation: pos.translation,
+    last_book: pos.book,
+    last_chapter: pos.chapter,
+  });
   return authEnvelopeSchema.parse(data).user;
 }

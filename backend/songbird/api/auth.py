@@ -17,6 +17,7 @@ from songbird.api.schemas import (
     UserResponse,
     UserUpdate,
 )
+from songbird.config import get_settings
 from songbird.core.cookies import COOKIE_NAME, clear_session_cookie, set_session_cookie
 from songbird.core.errors import ErrorCode, raise_http
 from songbird.core.passwords import hash_password, verify_password
@@ -76,7 +77,7 @@ async def register(
     await db.flush()
 
     session = await create_session(db, user.id)
-    set_session_cookie(response, session.token)
+    set_session_cookie(response, session.token, secure=get_settings().cookie_secure)
     return AuthEnvelope(user=UserResponse.model_validate(user))
 
 
@@ -97,7 +98,7 @@ async def login(
 
     await cleanup_expired_sessions(db, user.id)
     session = await create_session(db, user.id)
-    set_session_cookie(response, session.token)
+    set_session_cookie(response, session.token, secure=get_settings().cookie_secure)
     return AuthEnvelope(user=UserResponse.model_validate(user))
 
 
@@ -124,10 +125,17 @@ async def update_me(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> AuthEnvelope:
-    """Update the current user's per-profile preferences. `last_translation` is the reader's
-    default translation — stored as a normalized code (no Concord round-trip; a preference write
-    shouldn't fail just because Concord is down). The frontend only submits offered codes, and the
-    reader falls back if a stored code is stale."""
-    user.last_translation = body.last_translation.strip().upper()
+    """Update the current user's reading position — translation, book, chapter — so the reader
+    reopens where they left off. A partial patch: only the fields the client sent are applied
+    (`model_fields_set`), so saving one coordinate never clobbers the others. Codes are
+    normalized upper-case. No Concord round-trip — a preference write shouldn't fail just because
+    Concord is down; the frontend submits offered values and the reader self-heals a stale one."""
+    fields = body.model_fields_set
+    if "last_translation" in fields and body.last_translation is not None:
+        user.last_translation = body.last_translation.strip().upper()
+    if "last_book" in fields and body.last_book is not None:
+        user.last_book = body.last_book.strip().upper()
+    if "last_chapter" in fields and body.last_chapter is not None:
+        user.last_chapter = body.last_chapter
     await db.commit()
     return AuthEnvelope(user=UserResponse.model_validate(user))

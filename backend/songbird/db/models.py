@@ -73,9 +73,12 @@ class User(Base):
     is_admin: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default="0"
     )
-    # The translation this user last read in — the reader opens to it (per-profile default).
-    # Just a remembered code (e.g. "WEB"); not validated against Concord on write.
+    # Where this user last read — the reader reopens to this position (per-profile, follows them
+    # across browsers/devices). Just remembered coordinates (code "WEB", USFM "JHN", chapter 3);
+    # not validated against Concord on write — the reader self-heals a stale value.
     last_translation: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    last_book: Mapped[str | None] = mapped_column(String(3), nullable=True)
+    last_chapter: Mapped[int | None] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=_utcnow
     )

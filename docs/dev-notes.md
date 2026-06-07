@@ -4,45 +4,64 @@ A running log of per-slice decisions, gotchas, and how each slice was verified. 
 
 ---
 
-## Post-v1.1 — reconciliation backfill (translator's notes, sermon notes, profiles)
+## Documentation audit — Concord prominence, sermon-notes docs, refreshed screenshots
 
 - **Date:** 2026-06-07
-- **Branch:** `slice/docs-reconcile-features`
-- **Scope:** docs only. This is a **backfill** — the slices below shipped after the v1.1.0 entry
-  and were merged via their own PRs, but the log skipped them. Summarized here from `git log`
-  rather than reconstructed per-slice; the source PRs hold the blow-by-blow.
+- **Branch:** `docs/audit-concord-screenshots-sermon-notes`
+- **Scope:** docs + screenshot tooling only — **no feature/behavior/Concord change.**
 
-### What shipped since v1.1.0 (in merge order)
-- **Translator's notes** (slice 11, PR #17). A backend pass-through to Concord's per-chapter
-  translator's-notes endpoint, surfaced as inline footnote markers + a popover in the reader.
-  Pure proxy — no songbird data. (Plus a follow-up fix, PR #18: keep the note popover open while
-  scrolling its content.)
-- **Sermon notes** (slices 12–15, PRs #21–#26) — a **second annotation type**, pinned to the same
-  canonical USFM coordinates as annotations so the bridge invariant (§4) covers it for free:
-  - *12* — model + migration + chapter overlay; reader markers + popover.
-  - *13* — count badge + newest-first stacked popover when several sermons land on one verse.
-  - *14* — one-time seed importer (soap-journal backup → sermon notes) with transform guards so
-    it never touches the real backup; popover sorted newest-first.
-  - *15* — full create/edit/delete from the reader, backend write endpoints + tests.
-- **Browse sermon notes** (PR #24/#27) — sermon notes appear in the Browse view; the sermon-note
-  list endpoint takes a tag filter (shared tag vocabulary with annotations).
-- **Per-profile default translation** (slice 20, PR #20/#28) — `users.last_translation` +
-  `PATCH /api/v1/auth/me`; the reader opens to the profile's last translation.
-- **Mobile horizontal-scroll fix** (PR #29) — stop the reader scrolling sideways on phones.
-  (Note: native mobile remains out of scope; responsive web is in — see CLAUDE.md.)
-- **Concord consumer contract test** — validates songbird's hand-written Concord types against
-  Concord's pinned OpenAPI schema, catching drift between the two services.
+### Why
+A doc audit found the public docs had fallen behind the code: the README screenshots predated the
+sermon-notes / translator's-notes work, sermon notes were undocumented for users and had no spec,
+and the "built on Concord" relationship + repo link were buried at the bottom of the README.
 
-### Docs reconciled in this pass
-- `docs/v1/SPEC.md` — added a status banner, annotated §9/§11 as resolved, and added **§12
-  "Implemented since v1"** (auth-as-mandatory, sermon notes, translator's notes, default
-  translation, the restated data model).
-- `README.md` — "Using songbird" now covers saved sermons + translator's-note markers; the
-  account step notes that others get their own private accounts.
-- `CLAUDE.md` — "Out of scope: Mobile" reworded to "native mobile app (responsive web is in
-  scope)"; committed the documentation charter; trimmed stray blank lines.
-- `.gitignore` — ignore `seed-trimmed.json` / `seed-*.json` (local sermon-seed input, never
-  committed).
+### What changed
+- **Concord, surfaced:** the README intro now states songbird is built on
+  **[Concord](https://github.com/kbennett2000/concord)** with the repo link up top (kept the
+  "How it works" explanation too); the link was also added to `docs/v1/SPEC.md` and
+  `docs/v1.1/MAP-SPEC.md` openings.
+- **Sermon notes, documented:** new **`docs/v1.2/SERMON-NOTES-SPEC.md`** (mirrors the map spec),
+  a sermon entry in the README "See it" gallery + "Using songbird" tour.
+- **Screenshots refreshed:** re-captured against a live stack; `capture.mjs` now seeds a sermon
+  note (Psalm 23) and captures a new **`sermon.png`** (the ▶ marker + popover). Capture ran against
+  an **isolated, ephemeral compose project** (`-p sbshots`, throwaway volume) so the seeded shot
+  data never touched real data.
+
+### Gotcha — translator's notes are dormant in the default stack (finding)
+Translator's notes come from **NET**, but Concord **v1.0.0 ships 13 public-domain translations and
+no NET**. So `/api/v1/notes/{translation}/...` 404s for every available translation, and the reader
+shows a red **"Translator's notes unavailable (is Concord reachable?)"** on every chapter — copy
+that wrongly implies a connectivity problem. The sermon screenshot is framed (NET unavailable, so
+the notice is clipped out) to avoid showcasing it. **Not fixed here** (code/Concord change): either
+ship NET in Concord, or soften the notice so "this translation has no notes" ≠ "Concord is down".
+
+---
+
+## Slices 11–15 + fixes #19/#20/#24 — catch-up log (landed after v1.1.0, logged late)
+
+These shipped to `main` between v1.1.0 and this audit but weren't logged at the time; recorded here
+for the record (each was its own reviewed PR with tests).
+
+- **Slice 11 — translator's notes (PR #17):** proxy Concord's NET tn/sn/tc/map footnotes
+  (`84dc83f`) and render them as inline violet superscript markers with a popover (`6ccd2b3`).
+  Followed by **fix #18** — keep the note popover open while scrolling its own content (`e42476b`).
+  (See the gotcha above: dormant without NET in Concord.)
+- **Slice 12 — sermon notes (PR #21):** the model, migration, and chapter overlay (`a667691`) +
+  the reader ▶ marker and popover (`a037b51`). Canonical anchor, always shown in every translation.
+- **Slice 13 — sermon count (PR #22):** count badge + stacked, newest-first popover when a verse
+  carries multiple sermons (`09f0dd6`).
+- **Slice 14 — seed sermon notes (PR #23):** a pure, copyright-free import transform + one-time
+  loader from a soap-journal backup (`4d57551`); multi-sermon popover sorted newest-first (`7f13a0b`).
+- **Slice 15 — sermon-note CRUD (PR #26):** full create/update/delete over the API (`290cb3a`) and
+  from the reader (`cd69ec3`); the anchor is immutable on edit.
+- **Fix #24 — browse sermon notes (PR #27):** tag-filter the sermon-note list endpoint (`3607b1e`)
+  and surface sermon notes in the Browse view (`3cf5721`), sharing the annotation tag vocabulary.
+- **Fix #20 — default translation (PR #28):** per-profile `last_translation` + `PATCH /auth/me`
+  (`d11bea3`); the reader opens to the profile's last-read translation (`d69d238`).
+- **Fix #19 — mobile horizontal scroll (PR #29):** stop the reader scrolling sideways on mobile
+  (`d4971de`).
+
+Sermon notes are specified in **`docs/v1.2/SERMON-NOTES-SPEC.md`**.
 
 ---
 

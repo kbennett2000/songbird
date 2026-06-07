@@ -35,9 +35,7 @@ async def _resolve_book_order_index(book_usfm: str, concord: ConcordClient) -> i
 async def _get_or_404(db: AsyncSession, sermon_note_id: int, author_id: int) -> SermonNote:
     # Scoped to the author: another user's note is a 404 (no existence leak).
     result = await db.execute(
-        select(SermonNote).where(
-            SermonNote.id == sermon_note_id, SermonNote.author_id == author_id
-        )
+        select(SermonNote).where(SermonNote.id == sermon_note_id, SermonNote.author_id == author_id)
     )
     note = result.scalar_one_or_none()
     if note is None:

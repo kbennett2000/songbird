@@ -1,5 +1,6 @@
 """Session cookie config (mirrors soap-journal). The cookie holds a random DB session token —
-no signing secret needed. `secure=False` because the single-unit deploy is typically LAN HTTP."""
+no signing secret needed. `secure` is config-driven (COOKIE_SECURE): False for the typical
+LAN-HTTP single-unit deploy, True once TLS fronts songbird (see docs/SECURITY.md)."""
 
 from fastapi import Response
 
@@ -8,14 +9,14 @@ COOKIE_MAX_AGE = 60 * 60 * 24 * 30  # 30 days
 COOKIE_PATH = "/"
 
 
-def set_session_cookie(response: Response, token: str) -> None:
+def set_session_cookie(response: Response, token: str, *, secure: bool) -> None:
     response.set_cookie(
         key=COOKIE_NAME,
         value=token,
         max_age=COOKIE_MAX_AGE,
         path=COOKIE_PATH,
         httponly=True,
-        secure=False,
+        secure=secure,
         samesite="lax",
     )
 

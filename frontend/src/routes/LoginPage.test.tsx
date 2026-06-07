@@ -29,7 +29,17 @@ describe("LoginPage", () => {
         HttpResponse.json({ detail: { code: "NOT_AUTHENTICATED", message: "no" } }, { status: 401 }),
       ),
       http.post("/api/v1/auth/login", () =>
-        HttpResponse.json({ user: { id: 1, username: "kris", is_admin: true, last_translation: null, created_at: "x" } }),
+        HttpResponse.json({
+          user: {
+            id: 1,
+            username: "kris",
+            is_admin: true,
+            last_translation: null,
+            last_book: null,
+            last_chapter: null,
+            created_at: "x",
+          },
+        }),
       ),
     );
     const user = userEvent.setup();
@@ -72,7 +82,17 @@ describe("LoginPage", () => {
       ),
       http.post("/api/v1/auth/register", () =>
         HttpResponse.json(
-          { user: { id: 1, username: "kris", is_admin: true, last_translation: null, created_at: "x" } },
+          {
+            user: {
+              id: 1,
+              username: "kris",
+              is_admin: true,
+              last_translation: null,
+              last_book: null,
+              last_chapter: null,
+              created_at: "x",
+            },
+          },
           { status: 201 },
         ),
       ),
