@@ -271,6 +271,18 @@ class SemanticResult(BaseModel):
     text: str | None
 
 
+class KeywordResult(BaseModel):
+    """An exact word/phrase match from Concord's keyword search. Canonical coords → jump reuses
+    navigation. No `score` — a keyword match is literal, not ranked (we expose only what the mode
+    actually means)."""
+
+    book: str  # USFM code — canonical
+    chapter: int
+    verse: int
+    reference: str
+    text: str | None
+
+
 class NoteCrossReference(BaseModel):
     """A cross-reference carried by a translator's note (from Concord) → a target verse or
     range. Canonical coords, so the note popover reuses songbird's coordinate navigation."""
