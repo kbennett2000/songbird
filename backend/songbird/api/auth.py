@@ -17,6 +17,7 @@ from songbird.api.schemas import (
     UserResponse,
     UserUpdate,
 )
+from songbird.config import get_settings
 from songbird.core.cookies import COOKIE_NAME, clear_session_cookie, set_session_cookie
 from songbird.core.errors import ErrorCode, raise_http
 from songbird.core.passwords import hash_password, verify_password
@@ -76,7 +77,7 @@ async def register(
     await db.flush()
 
     session = await create_session(db, user.id)
-    set_session_cookie(response, session.token)
+    set_session_cookie(response, session.token, secure=get_settings().cookie_secure)
     return AuthEnvelope(user=UserResponse.model_validate(user))
 
 
@@ -97,7 +98,7 @@ async def login(
 
     await cleanup_expired_sessions(db, user.id)
     session = await create_session(db, user.id)
-    set_session_cookie(response, session.token)
+    set_session_cookie(response, session.token, secure=get_settings().cookie_secure)
     return AuthEnvelope(user=UserResponse.model_validate(user))
 
 
