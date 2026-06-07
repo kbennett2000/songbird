@@ -116,20 +116,19 @@ class SemanticSearchResponse(BaseModel):
 
 
 class KeywordResult(BaseModel):
-    """One exact word/phrase match from Concord's `/v1/search`. Modeled defensively: Concord's
-    keyword response is untyped in its OpenAPI, so `score`/`text` are optional — a keyword match
-    isn't ranked, but tolerating either keeps parsing robust to the real shape."""
+    """One exact word/phrase match from Concord's `/v1/search`. Concord returns the verse as a
+    `snippet` with the matched term(s) wrapped in `<mark>…</mark>` for highlighting; there is no
+    relevance score (a keyword match is literal, not ranked)."""
 
     book: str  # USFM code — canonical
     chapter: int
     verse: int
     reference: str
-    text: str | None = None
-    score: float | None = None
+    snippet: str | None = None  # verse text with <mark>…</mark> around the matched term(s)
 
 
 class KeywordSearchResponse(BaseModel):
-    results: list[KeywordResult]
+    hits: list[KeywordResult]
 
 
 class NoteCrossReference(BaseModel):

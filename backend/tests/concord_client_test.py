@@ -294,56 +294,41 @@ async def test_keyword_search_hits_v1_search_and_parses() -> None:
         seen["q"] = request.url.params.get("q", "")
         seen["translation"] = request.url.params.get("translation", "")
         seen["limit"] = request.url.params.get("limit", "")
-        # Keyword results carry no score — the client must parse them all the same.
+        # The real Concord /v1/search body: a `hits` array whose items carry a `snippet` with the
+        # matched term wrapped in <mark>…</mark> (captured live from Concord 192.168.1.62:8000).
         return httpx.Response(
             200,
             json={
-                "query": "wept",
+                "query": "living water",
                 "translation": "KJV",
-                "count": 1,
-                "results": [
+                "book": None,
+                "limit": 5,
+                "offset": 0,
+                "total": 7,
+                "hits": [
                     {
                         "book": "JHN",
-                        "chapter": 11,
-                        "verse": 35,
-                        "reference": "John 11:35",
-                        "text": "Jesus wept.",
+                        "chapter": 7,
+                        "verse": 38,
+                        "reference": "John 7:38",
+                        "snippet": "rivers of <mark>living</mark> <mark>water</mark>.",
                     }
                 ],
             },
         )
 
     client = ConcordClient("http://concord.test", transport=httpx.MockTransport(handler))
-    result = await client.keyword_search("wept", "KJV", limit=5)
+    result = await client.keyword_search("living water", "KJV", limit=5)
     await client.aclose()
-    assert seen == {"path": "/v1/search", "q": "wept", "translation": "KJV", "limit": "5"}
-    assert result.results[0].book == "JHN"
-    assert result.results[0].score is None
-
-
-async def test_keyword_search_tolerates_a_score_field() -> None:
-    # Concord's keyword response is untyped; a `score`, if ever present, must parse (be robust).
-    def handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(
-            200,
-            json={
-                "results": [
-                    {
-                        "book": "JHN",
-                        "chapter": 11,
-                        "verse": 35,
-                        "reference": "John 11:35",
-                        "score": 1.0,
-                    }
-                ]
-            },
-        )
-
-    client = ConcordClient("http://concord.test", transport=httpx.MockTransport(handler))
-    result = await client.keyword_search("wept")
-    await client.aclose()
-    assert result.results[0].score == 1.0
-    assert result.results[0].text is None
+    assert seen == {
+        "path": "/v1/search",
+        "q": "living water",
+        "translation": "KJV",
+        "limit": "5",
+    }
+    assert result.hits[0].book == "JHN"
+    assert result.hits[0].snippet is not None
+    assert "<mark>living</mark>" in result.hits[0].snippet
 
 
 async def test_keyword_search_404_is_not_found() -> None:

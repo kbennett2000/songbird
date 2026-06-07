@@ -41,6 +41,7 @@ async def test_live_keyword_search() -> None:
         result = await client.keyword_search("God", limit=5)
     finally:
         await client.aclose()
-    assert len(result.results) >= 1
-    first = result.results[0]
+    assert len(result.hits) >= 1
+    first = result.hits[0]
     assert first.book and first.chapter >= 1 and first.verse >= 1
+    assert first.snippet  # Concord returns the verse text as a (highlight-marked) snippet

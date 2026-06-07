@@ -147,7 +147,7 @@ class FakeConcordClient:
     ) -> KeywordSearchResponse:
         if self._error is not None:
             raise self._error
-        return self._keyword if self._keyword is not None else KeywordSearchResponse(results=[])
+        return self._keyword if self._keyword is not None else KeywordSearchResponse(hits=[])
 
 
 @pytest_asyncio.fixture

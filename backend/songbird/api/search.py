@@ -65,11 +65,11 @@ async def keyword_search(
         raise_http(502, ErrorCode.CONCORD_UNREACHABLE, str(exc))
     return [
         KeywordResult(
-            book=r.book,
-            chapter=r.chapter,
-            verse=r.verse,
-            reference=r.reference,
-            text=r.text,
+            book=h.book,
+            chapter=h.chapter,
+            verse=h.verse,
+            reference=h.reference,
+            snippet=h.snippet,
         )
-        for r in result.results
+        for h in result.hits
     ]
