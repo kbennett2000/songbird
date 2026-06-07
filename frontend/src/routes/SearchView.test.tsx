@@ -36,7 +36,7 @@ function renderSearch() {
       <MemoryRouter initialEntries={["/search"]}>
         <Routes>
           <Route path="/search" element={<SearchView />} />
-          <Route path="/" element={<Probe />} />
+          <Route path="/read" element={<Probe />} />
         </Routes>
       </MemoryRouter>
     </QueryClientProvider>,

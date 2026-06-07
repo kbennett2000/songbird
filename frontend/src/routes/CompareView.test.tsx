@@ -128,7 +128,7 @@ describe("CompareView", () => {
     await user.click(await screen.findByRole("button", { name: "View note on KJV 16" }));
     expect(await screen.findByText("grace abounds")).toBeInTheDocument();
     const link = screen.getByRole("link", { name: /Open in reader/ });
-    expect(link).toHaveAttribute("href", "/?book=JHN&chapter=3&verse=16");
+    expect(link).toHaveAttribute("href", "/read?book=JHN&chapter=3&verse=16");
   });
 
   it("switches a column's translation and refetches just that column", async () => {
