@@ -9,6 +9,7 @@ import { Modal } from "@/components/Modal";
 import { NoteEditor } from "@/components/NoteEditor";
 import { NotePopover } from "@/components/NotePopover";
 import { ScopePicker } from "@/components/ScopePicker";
+import { SermonNotePopover } from "@/components/SermonNotePopover";
 import { SidePanel } from "@/components/SidePanel";
 import { TagInput } from "@/components/TagInput";
 import { VerseText } from "@/components/VerseText";
@@ -27,7 +28,7 @@ import {
   resolveReference,
   updateAnnotation,
 } from "@/lib/reader";
-import type { ReadAnnotation, ReadVerse, Scope, TranslatorNote } from "@/schemas";
+import type { ReadAnnotation, ReadVerse, Scope, SermonNote, TranslatorNote } from "@/schemas";
 
 const DEFAULT_TRANSLATION = "KJV";
 
@@ -61,6 +62,10 @@ export function ReaderView(): JSX.Element {
   const [map, setMap] = useState(false);
   // The translator's note whose popover is open, with the marker it's anchored to.
   const [openNote, setOpenNote] = useState<{ note: TranslatorNote; anchor: HTMLElement } | null>(
+    null,
+  );
+  // The sermon note whose popover is open (separate system — canonical, all-translations).
+  const [openSermon, setOpenSermon] = useState<{ note: SermonNote; anchor: HTMLElement } | null>(
     null,
   );
   const [refInput, setRefInput] = useState("");
@@ -127,6 +132,7 @@ export function ReaderView(): JSX.Element {
     setGeo(false);
     setMap(false);
     setOpenNote(null);
+    setOpenSermon(null);
   };
 
   const next = nextChapter(books, book, chapter);
@@ -477,6 +483,19 @@ export function ReaderView(): JSX.Element {
                       ○
                     </button>
                   )}
+                  {v.sermon_notes.length > 0 && (
+                    <button
+                      type="button"
+                      className="ml-2 align-middle text-emerald-600 hover:text-emerald-800"
+                      onClick={(e) =>
+                        setOpenSermon({ note: v.sermon_notes[0]!, anchor: e.currentTarget })
+                      }
+                      aria-label={`Sermon on verse ${v.verse}`}
+                      title="Sermon"
+                    >
+                      ▶
+                    </button>
+                  )}
                   <button
                     type="button"
                     className="ml-2 align-middle text-xs text-gray-300 opacity-0 transition hover:text-blue-600 group-hover:opacity-100"
@@ -567,6 +586,14 @@ export function ReaderView(): JSX.Element {
           anchor={openNote.anchor}
           onClose={() => setOpenNote(null)}
           onJump={(b, c, v) => navigate(b, c, v)}
+        />
+      )}
+
+      {openSermon && (
+        <SermonNotePopover
+          note={openSermon.note}
+          anchor={openSermon.anchor}
+          onClose={() => setOpenSermon(null)}
         />
       )}
     </div>

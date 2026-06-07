@@ -3,7 +3,7 @@
 Kept separate from `concord/schemas.py` (which models Concord's responses).
 """
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Annotated, Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -90,6 +90,36 @@ class ReadAnnotation(AnnotationOut):
     (decision B: out-of-scope annotations are shown-but-marked, never hidden)."""
 
     in_scope: bool
+
+
+class SermonNoteOut(BaseModel):
+    """A sermon note (songbird-owned). Canonical anchor + a stored display `reference`; the body
+    is an external sermon URL. Always visible on every translation — there is no scope/in_scope
+    concept (unlike an annotation)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    title: str
+    sermon_url: str
+    reference: str
+    book_usfm: str  # USFM code — canonical (overlay match key)
+    book_order_index: int  # canonical sort order
+    start_chapter: int
+    start_verse: int
+    end_chapter: int
+    end_verse: int
+    event_date: date | None
+    tags: list[str]
+    author_id: int
+    created_at: datetime
+    updated_at: datetime
+
+    @field_validator("tags", mode="before")
+    @classmethod
+    def _tag_names(cls, value: Any) -> list[str]:
+        # Map ORM Tag objects → names (from_attributes); pass plain strings through.
+        return [getattr(t, "name", t) for t in value]
 
 
 class CrossReference(BaseModel):
@@ -185,6 +215,8 @@ class ReadVerse(BaseModel):
     reference: str
     text: str | None
     annotations: list[ReadAnnotation]
+    # Sermon notes covering this verse — always present regardless of translation (no scope).
+    sermon_notes: list[SermonNoteOut]
 
 
 class ReadChapter(BaseModel):
