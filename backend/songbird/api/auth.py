@@ -20,6 +20,7 @@ from songbird.api.schemas import (
 from songbird.config import get_settings
 from songbird.core.cookies import COOKIE_NAME, clear_session_cookie, set_session_cookie
 from songbird.core.errors import ErrorCode, raise_http
+from songbird.core.login_throttle import LoginThrottle
 from songbird.core.passwords import hash_password, verify_password
 from songbird.core.sessions import (
     cleanup_expired_sessions,
@@ -84,18 +85,32 @@ async def register(
 @router.post("/login", response_model=AuthEnvelope)
 async def login(
     body: LoginRequest,
+    request: Request,
     response: Response,
     db: AsyncSession = Depends(get_db),
 ) -> AuthEnvelope:
-    user = await _get_by_username(db, body.username.lower())
+    username = body.username.lower()
+    ip = request.client.host if request.client else "unknown"
+    throttle: LoginThrottle = request.app.state.login_throttle
+    # Lockout is checked before the (deliberately expensive) Argon2 verify, so a flood of
+    # attempts is cheap to reject. Keyed by (username, IP) and triggered on the same path for
+    # both unknown users and wrong passwords, so it leaks no user existence either.
+    if throttle.is_locked(username, ip):
+        raise_http(
+            429, ErrorCode.TOO_MANY_ATTEMPTS, "Too many failed login attempts; try again later"
+        )
+
+    user = await _get_by_username(db, username)
     # Same response whether the user is unknown or the password is wrong (timing-safe-ish).
     if (
         user is None
         or user.password_hash is None
         or not verify_password(body.password, user.password_hash)
     ):
+        throttle.record_failure(username, ip)
         raise_http(401, ErrorCode.INVALID_CREDENTIALS, "Invalid username or password")
 
+    throttle.reset(username, ip)
     await cleanup_expired_sessions(db, user.id)
     session = await create_session(db, user.id)
     set_session_cookie(response, session.token, secure=get_settings().cookie_secure)

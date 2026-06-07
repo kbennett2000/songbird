@@ -17,6 +17,7 @@ class ErrorCode(StrEnum):
     NOT_AUTHENTICATED = "NOT_AUTHENTICATED"
     INVALID_CREDENTIALS = "INVALID_CREDENTIALS"
     USERNAME_TAKEN = "USERNAME_TAKEN"
+    TOO_MANY_ATTEMPTS = "TOO_MANY_ATTEMPTS"
 
 
 def raise_http(status: int, code: ErrorCode, message: str | None = None) -> NoReturn:
