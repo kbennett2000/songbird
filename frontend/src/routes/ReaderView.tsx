@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { type FormEvent, useEffect, useMemo, useState } from "react";
+import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 
 import { CrossReferences } from "@/components/CrossReferences";
@@ -17,7 +17,7 @@ import { TagInput } from "@/components/TagInput";
 import { VerseText } from "@/components/VerseText";
 import { useAuth } from "@/hooks/useAuth";
 import { ApiError } from "@/lib/api";
-import { updateLastTranslation } from "@/lib/auth";
+import { saveReadingPosition } from "@/lib/auth";
 import { nextChapter, prevChapter } from "@/lib/navigation";
 import {
   createAnnotation,
@@ -73,11 +73,14 @@ export function ReaderView(): JSX.Element {
   const { user, logout } = useAuth();
   // A jump-from-browse arrives as ?book=&chapter=&verse=; seed the initial location from it.
   const [searchParams] = useSearchParams();
-  // Open to the translation this profile last read in (RequireAuth guarantees `user` is loaded by
-  // the time the reader mounts); fall back to the default the very first time.
+  // Reopen to where this profile last read (RequireAuth guarantees `user` is loaded by the time
+  // the reader mounts). Priority: an explicit deep link (?book=&chapter= from Browse) wins, then
+  // the saved position, then the first-time defaults.
   const [translation, setTranslation] = useState(() => user?.last_translation ?? DEFAULT_TRANSLATION);
-  const [book, setBook] = useState(() => searchParams.get("book") ?? "JHN");
-  const [chapter, setChapter] = useState(() => Number(searchParams.get("chapter") ?? 3));
+  const [book, setBook] = useState(() => searchParams.get("book") ?? user?.last_book ?? "JHN");
+  const [chapter, setChapter] = useState(() =>
+    Number(searchParams.get("chapter") ?? user?.last_chapter ?? 3),
+  );
   const [editing, setEditing] = useState<Editing | null>(null);
   const [xref, setXref] = useState<XrefView | null>(null);
   const [geo, setGeo] = useState(false);
@@ -139,20 +142,43 @@ export function ReaderView(): JSX.Element {
   const translations = useMemo(() => translationsQuery.data ?? [], [translationsQuery.data]);
   const books = useMemo(() => booksQuery.data ?? [], [booksQuery.data]);
 
-  // Remember the reader's translation on the profile so it's the default next time. Fire-and-forget;
-  // updates the cached user so /auth/me stays consistent without a refetch.
-  const rememberTranslation = useMutation({
-    mutationFn: updateLastTranslation,
-    onSuccess: (updated) => queryClient.setQueryData(["auth", "me"], updated),
-  });
-
   const changeTranslation = (code: string) => {
     // Notes are translation-specific; close any open note popover whose marker is about to be
-    // refetched away (the canonical annotation overlay is untouched).
+    // refetched away (the canonical annotation overlay is untouched). Persistence is handled by
+    // the reading-position effect below, which covers every navigation path.
     setOpenNote(null);
     setTranslation(code);
-    rememberTranslation.mutate(code);
   };
+
+  // Persist the full reading position (translation + book + chapter) on the profile whenever it
+  // changes, so the reader reopens here next time. One effect covers every navigation path —
+  // translation/book/chapter selects, prev/next, jump, and the xref/geo/map jumps. Debounced and
+  // last-write-wins so a burst of prev/next collapses to a single PATCH; fire-and-forget so a
+  // failed save (e.g. a network blip) never disrupts reading.
+  const savedPositionRef = useRef({
+    translation: user?.last_translation ?? null,
+    book: user?.last_book ?? null,
+    chapter: user?.last_chapter ?? null,
+  });
+  useEffect(() => {
+    const saved = savedPositionRef.current;
+    // Skip the mount-time run while the reader still sits on the stored position (no redundant
+    // write); also makes StrictMode's double-invoke a no-op. A deep link or a self-heal that
+    // differs from storage does persist.
+    if (saved.translation === translation && saved.book === book && saved.chapter === chapter) {
+      return;
+    }
+    const handle = setTimeout(() => {
+      savedPositionRef.current = { translation, book, chapter };
+      saveReadingPosition({ translation, book, chapter })
+        .then((updated) => queryClient.setQueryData(["auth", "me"], updated))
+        .catch(() => {
+          // Best-effort: restore the ref so a later identical change retries the save.
+          savedPositionRef.current = saved;
+        });
+    }, 600);
+    return () => clearTimeout(handle);
+  }, [translation, book, chapter, queryClient]);
 
   // If the stored default is a code Concord no longer offers, fall back so the reader isn't stuck
   // fetching a missing translation.
@@ -182,6 +208,23 @@ export function ReaderView(): JSX.Element {
     setOpenNote(null);
     setOpenSermon(null);
   };
+
+  // Self-heal a stale *stored* position once Concord's book list is known: if the initial book is
+  // one Concord no longer lists, reset to the default; if the initial chapter overruns the book,
+  // clamp it. Runs once (on first book-list availability) so it heals the loaded position without
+  // ever second-guessing later navigation — a jump always targets a real Concord book/chapter.
+  const healedRef = useRef(false);
+  useEffect(() => {
+    if (healedRef.current || books.length === 0) return;
+    healedRef.current = true;
+    const current = books.find((b) => b.id === book);
+    if (!current) {
+      setBook("JHN");
+      setChapter(3);
+    } else if (current.chapter_count !== null && chapter > current.chapter_count) {
+      setChapter(current.chapter_count);
+    }
+  }, [books, book, chapter]);
 
   const next = nextChapter(books, book, chapter);
   const prev = prevChapter(books, book, chapter);

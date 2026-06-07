@@ -160,6 +160,8 @@ describe("ReaderView", () => {
       username: "tester",
       is_admin: true,
       last_translation,
+      last_book: null,
+      last_chapter: null,
       created_at: "x",
     });
     let patched: string | null = null;
@@ -193,6 +195,120 @@ describe("ReaderView", () => {
     await user.selectOptions(await screen.findByLabelText("Translation"), "KJV");
     expect(await screen.findByText(/KJV text 16/)).toBeInTheDocument();
     await waitFor(() => expect(patched).toBe("KJV"));
+  });
+
+  it("opens to the profile's last position — book + chapter + translation (issue #38)", async () => {
+    const profile = {
+      id: 1,
+      username: "tester",
+      is_admin: true,
+      last_translation: "WEB",
+      last_book: "ACT",
+      last_chapter: 2,
+      created_at: "x",
+    };
+    let patchCount = 0;
+    server.use(
+      http.get("/api/v1/auth/me", () => HttpResponse.json({ user: profile })),
+      http.patch("/api/v1/auth/me", async ({ request }) => {
+        patchCount += 1;
+        const body = (await request.json()) as Record<string, unknown>;
+        return HttpResponse.json({ user: { ...profile, ...body } });
+      }),
+      // The default /read handler echoes the requested book/chapter into the verse text.
+      http.get("/api/v1/read/:translation/:book/:chapter", ({ params }) =>
+        HttpResponse.json({
+          translation: String(params.translation),
+          book: String(params.book),
+          chapter: Number(params.chapter),
+          reference: `${String(params.book)} ${Number(params.chapter)}`,
+          verses: [
+            {
+              book: String(params.book),
+              chapter: Number(params.chapter),
+              verse: 16,
+              reference: `${String(params.book)} ${Number(params.chapter)}:16`,
+              text: `${String(params.translation)} ${String(params.book)} ${Number(params.chapter)}`,
+              annotations: [],
+              sermon_notes: [],
+            },
+          ],
+        }),
+      ),
+    );
+
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    client.setQueryData(["auth", "me"], profile);
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter>
+          <ReaderView />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    // Reopens at Acts 2 in WEB — not the JHN 3 / KJV first-time defaults.
+    expect(await screen.findByText(/WEB ACT 2/)).toBeInTheDocument();
+    // No redundant write on mount: the reader is still sitting on the stored position.
+    await waitFor(() => expect(patchCount).toBe(0));
+  });
+
+  it("persists the new full position when navigating chapters (issue #38)", async () => {
+    let body: { last_translation?: string; last_book?: string; last_chapter?: number } | null = null;
+    server.use(
+      http.patch("/api/v1/auth/me", async ({ request }) => {
+        body = (await request.json()) as typeof body;
+        return HttpResponse.json({
+          user: {
+            id: 1,
+            username: "tester",
+            is_admin: true,
+            last_translation: body?.last_translation ?? null,
+            last_book: body?.last_book ?? null,
+            last_chapter: body?.last_chapter ?? null,
+            created_at: "x",
+          },
+        });
+      }),
+    );
+
+    const user = userEvent.setup();
+    renderReader();
+    // Defaults: JHN 3 in KJV (no seeded profile); the default /read handler echoes "JHN 3:16".
+    expect(await screen.findByText(/JHN 3:16/)).toBeInTheDocument();
+
+    // Next chapter → JHN 4; the whole position is saved (debounced).
+    await user.click(screen.getByRole("button", { name: /next chapter/i }));
+    expect(await screen.findByText(/JHN 4:16/)).toBeInTheDocument();
+    await waitFor(() =>
+      expect(body).toEqual({ last_translation: "KJV", last_book: "JHN", last_chapter: 4 }),
+    );
+  });
+
+  it("self-heals a stale stored book that Concord no longer lists (issue #38)", async () => {
+    const profile = {
+      id: 1,
+      username: "tester",
+      is_admin: true,
+      last_translation: "KJV",
+      last_book: "ZZZ",
+      last_chapter: 1,
+      created_at: "x",
+    };
+    server.use(http.get("/api/v1/auth/me", () => HttpResponse.json({ user: profile })));
+
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    client.setQueryData(["auth", "me"], profile);
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter>
+          <ReaderView />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    // ZZZ isn't in Concord's book list → the reader falls back to John 3.
+    expect(await screen.findByText(/JHN 3:16/)).toBeInTheDocument();
   });
 
   it("overlays NET's translator's notes (separate from canonical annotations) and clears them on translation switch", async () => {
