@@ -64,6 +64,17 @@ describe("SermonNotesPopover", () => {
     expect(link).toHaveAttribute("rel", "noopener noreferrer");
   });
 
+  it("sorts newest event_date first, nulls last, created_at as tiebreaker", () => {
+    renderPopover([
+      note(1, { event_date: "2026-05-01", created_at: "2026-06-02T00:00:00Z" }), // newest date, later created
+      note(2, { event_date: "2026-05-01", created_at: "2026-06-01T00:00:00Z" }), // same date, earlier created → first
+      note(3, { event_date: "2026-03-01" }), // older
+      note(4, { event_date: null }), // null → last
+    ]);
+    const order = screen.getAllByRole("heading").map((h) => h.textContent);
+    expect(order).toEqual(["Sermon 2", "Sermon 1", "Sermon 3", "Sermon 4"]);
+  });
+
   it("closes on Escape (shared Popover shell)", async () => {
     const { onClose } = renderPopover([note(1), note(2)]);
     await userEvent.keyboard("{Escape}");
