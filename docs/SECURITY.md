@@ -82,21 +82,27 @@ not Scripture data (Concord is read-only and data-only) and not anyone else's ac
   songbird, set **`COOKIE_SECURE=1`** (§8) so the session cookie is HTTPS-only. `SameSite=Lax`
   is not a substitute for `Secure` under TLS — both matter once you have HTTPS.
 
-## 6. Rate limiting
+## 6. Rate limiting / login throttle
 
-songbird's login endpoint currently has **no rate limit or lockout**. The mitigations that make
-this defensible on a trusted LAN:
+songbird applies a **best-effort in-memory login throttle** (`songbird/core/login_throttle.py`):
+after a number of failed attempts (default **5**) within a window (default **15 minutes**),
+keyed by **(username, client IP)**, further attempts are locked out with **HTTP 429** until the
+old failures age out of the window; a **successful login clears** the counter. The check runs
+**before** the expensive Argon2 verify, so a flood is cheap to reject, and it triggers on the
+same path for unknown users and wrong passwords, so it leaks no user existence (§3).
 
-- **Argon2's cost.** Each password verification is intentionally expensive (memory- and
-  time-hard), so online brute force is slow by construction — orders of magnitude slower than a
-  fast-hash endpoint.
-- **No user enumeration** (§3) raises the attacker's work: both the username and the password
-  are unknown.
-- **The trusted-LAN assumption** (§1): there is no anonymous internet attacker in the intended
-  deployment.
+It is a **speed bump, not a distributed limiter**, and its limits are deliberate:
 
-This is acceptable **only** under the LAN posture. If songbird is exposed (§8), add a throttle
-or lockout — it is cheap insurance once anonymous traffic can reach `/api/v1/auth/login`.
+- **In-memory, single-process.** State lives in the process, so it resets on restart and is not
+  shared across multiple workers. songbird's single-unit deploy runs one worker, so this is
+  fine as shipped; scale out and you'd want a shared store.
+- **IP keying degrades behind a proxy.** A reverse proxy makes every request appear to come from
+  the proxy's IP, so the IP half of the key collapses — the **per-username** half still applies.
+  If you forward the real client IP (and trust the header), keying improves.
+
+This is layered on the deeper mitigations: **Argon2's cost** (each verify is intentionally
+memory- and time-hard) and **no user enumeration** (§3). On a trusted LAN the throttle is
+insurance; once exposed (§8), pair it with proxy-level rate limiting.
 
 ## 7. The Concord trust boundary
 
@@ -121,8 +127,9 @@ the §1 assumptions no longer hold. Do **all** of the following before exposing 
 1. **Terminate TLS.** Put songbird behind a reverse proxy (Caddy, nginx, Traefik) that serves
    HTTPS. songbird speaks plain HTTP; the proxy owns certificates.
 2. **Set `COOKIE_SECURE=1`** so the session cookie is only ever sent over HTTPS (§5).
-3. **Add login rate limiting / lockout** (§6) — at the proxy and/or in the app — now that
-   anonymous traffic can reach the auth endpoint.
+3. **Augment the login throttle** (§6) with **proxy-level rate limiting** now that anonymous
+   traffic can reach the auth endpoint — the in-app throttle is a speed bump, not a substitute
+   for an edge limiter, and forwarding the real client IP restores per-IP keying.
 4. **Front it with a reverse proxy** regardless of TLS: it is the place for request limits,
    IP allow-lists, and access logging, and it keeps uvicorn off the open internet directly.
 5. **Lock down the network**: expose only the proxy's port; keep Concord and `DATA_DIR`

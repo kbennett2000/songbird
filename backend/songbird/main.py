@@ -26,6 +26,7 @@ from songbird.api.sermon_notes import router as sermon_notes_router
 from songbird.api.tags import router as tags_router
 from songbird.concord.client import ConcordClient
 from songbird.config import get_settings
+from songbird.core.login_throttle import LoginThrottle
 
 logger = logging.getLogger("songbird")
 
@@ -64,6 +65,9 @@ def create_app() -> FastAPI:
         )
 
     app = FastAPI(title="songbird", version=__version__, lifespan=lifespan)
+
+    # Best-effort in-memory login throttle, one per process (a fresh app per test gets its own).
+    app.state.login_throttle = LoginThrottle()
 
     # Routers BEFORE the SPA catch-all so API paths win.
     # Open routes: liveness + auth itself.

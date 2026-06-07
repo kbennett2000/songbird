@@ -162,6 +162,67 @@ async def test_patch_me_without_cookie_401(
     assert resp.json()["detail"]["code"] == "NOT_AUTHENTICATED"
 
 
+async def test_login_lockout_after_repeated_failures(
+    make_concord: type[FakeConcordClient],
+    unauth_client: Callable[[FakeConcordClient], httpx.AsyncClient],
+) -> None:
+    async with unauth_client(make_concord()) as client:
+        await client.post("/api/v1/auth/register", json=CREDS)
+        # The default throttle locks after 5 failures; each of these is a normal 401.
+        for _ in range(5):
+            bad = await client.post(
+                "/api/v1/auth/login", json={"username": "kris", "password": "wrongpass"}
+            )
+            assert bad.status_code == 401
+        # The next attempt is locked out — even with the *correct* password.
+        locked = await client.post("/api/v1/auth/login", json=CREDS)
+        assert locked.status_code == 429
+        assert locked.json()["detail"]["code"] == "TOO_MANY_ATTEMPTS"
+
+
+async def test_login_lockout_is_per_username(
+    make_concord: type[FakeConcordClient],
+    unauth_client: Callable[[FakeConcordClient], httpx.AsyncClient],
+) -> None:
+    async with unauth_client(make_concord()) as client:
+        await client.post("/api/v1/auth/register", json=CREDS)
+        for _ in range(5):
+            await client.post(
+                "/api/v1/auth/login", json={"username": "kris", "password": "wrongpass"}
+            )
+        assert (await client.post("/api/v1/auth/login", json=CREDS)).status_code == 429
+        # A different username from the same client is still just invalid creds, not locked.
+        other = await client.post(
+            "/api/v1/auth/login", json={"username": "ghost", "password": "whatever1"}
+        )
+    assert other.status_code == 401
+    assert other.json()["detail"]["code"] == "INVALID_CREDENTIALS"
+
+
+async def test_successful_login_clears_throttle(
+    make_concord: type[FakeConcordClient],
+    unauth_client: Callable[[FakeConcordClient], httpx.AsyncClient],
+) -> None:
+    async with unauth_client(make_concord()) as client:
+        await client.post("/api/v1/auth/register", json=CREDS)
+        # Four failures stay under the limit; a success then clears the counter.
+        for _ in range(4):
+            assert (
+                await client.post(
+                    "/api/v1/auth/login", json={"username": "kris", "password": "wrongpass"}
+                )
+            ).status_code == 401
+        assert (await client.post("/api/v1/auth/login", json=CREDS)).status_code == 200
+        # Without the reset, four more failures would trip the limit; because success cleared
+        # it, they are all still plain 401s.
+        for _ in range(4):
+            assert (
+                await client.post(
+                    "/api/v1/auth/login", json={"username": "kris", "password": "wrongpass"}
+                )
+            ).status_code == 401
+
+
 def test_argon2_hash_verifies() -> None:
     hashed = hash_password("supersecret")
     assert hashed != "supersecret"
