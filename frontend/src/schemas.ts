@@ -88,6 +88,8 @@ export const sermonNoteSchema = z.object({
   updated_at: z.string(),
 });
 
+export const sermonNotesListSchema = z.array(sermonNoteSchema);
+
 export const readVerseSchema = z.object({
   book: z.string(),
   chapter: z.number(),
