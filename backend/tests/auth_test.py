@@ -125,6 +125,43 @@ async def test_logout_revokes_session(
     assert me.status_code == 401
 
 
+async def test_me_last_translation_defaults_null(
+    make_concord: type[FakeConcordClient],
+    unauth_client: Callable[[FakeConcordClient], httpx.AsyncClient],
+) -> None:
+    # A fresh user has no remembered translation — the reader falls back to its default.
+    async with unauth_client(make_concord()) as client:
+        await client.post("/api/v1/auth/register", json=CREDS)
+        me = await client.get("/api/v1/auth/me")
+    assert me.status_code == 200
+    assert me.json()["user"]["last_translation"] is None
+
+
+async def test_patch_me_sets_last_translation_normalized(
+    make_concord: type[FakeConcordClient],
+    unauth_client: Callable[[FakeConcordClient], httpx.AsyncClient],
+) -> None:
+    async with unauth_client(make_concord()) as client:
+        await client.post("/api/v1/auth/register", json=CREDS)
+        # Lower-case in → stored upper-case (codes are canonical like "WEB").
+        patch = await client.patch("/api/v1/auth/me", json={"last_translation": "web"})
+        assert patch.status_code == 200
+        assert patch.json()["user"]["last_translation"] == "WEB"
+        # Persisted: the next /me round-trip reflects it.
+        me = await client.get("/api/v1/auth/me")
+    assert me.json()["user"]["last_translation"] == "WEB"
+
+
+async def test_patch_me_without_cookie_401(
+    make_concord: type[FakeConcordClient],
+    unauth_client: Callable[[FakeConcordClient], httpx.AsyncClient],
+) -> None:
+    async with unauth_client(make_concord()) as client:
+        resp = await client.patch("/api/v1/auth/me", json={"last_translation": "WEB"})
+    assert resp.status_code == 401
+    assert resp.json()["detail"]["code"] == "NOT_AUTHENTICATED"
+
+
 def test_argon2_hash_verifies() -> None:
     hashed = hash_password("supersecret")
     assert hashed != "supersecret"

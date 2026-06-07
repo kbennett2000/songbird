@@ -73,6 +73,9 @@ class User(Base):
     is_admin: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default="0"
     )
+    # The translation this user last read in — the reader opens to it (per-profile default).
+    # Just a remembered code (e.g. "WEB"); not validated against Concord on write.
+    last_translation: Mapped[str | None] = mapped_column(String(16), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=_utcnow
     )
