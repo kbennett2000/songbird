@@ -147,4 +147,42 @@ describe("SearchView", () => {
     expect(await screen.findByText("No matching verses.")).toBeInTheDocument();
     expect(keywordCalled).toBe(false);
   });
+
+  it("offers the same search semantically when keyword finds nothing (issue #51)", async () => {
+    server.use(
+      // Keyword finds nothing (e.g. an FTS5-unrunnable query the backend now returns [] for);
+      // semantic finds the verse.
+      http.get("/api/v1/keyword-search", () => HttpResponse.json([])),
+      http.get("/api/v1/semantic-search", () =>
+        HttpResponse.json([
+          {
+            book: "1JN",
+            chapter: 4,
+            verse: 7,
+            reference: "1 John 4:7",
+            score: 0.9382,
+            text: "Beloved, let us love one another...",
+          },
+        ]),
+      ),
+      http.get("/api/v1/annotations", () => HttpResponse.json([])),
+    );
+    const user = userEvent.setup();
+    renderSearch();
+
+    await user.click(screen.getByRole("tab", { name: "Keyword" }));
+    await user.type(screen.getByLabelText("Search query"), "God's love");
+    await user.click(screen.getByRole("button", { name: "Search" }));
+
+    // No error — a lack of results, plus a clickable offer to run the SAME query semantically.
+    expect(await screen.findByText("No matching verses.")).toBeInTheDocument();
+    expect(screen.queryByText(/Couldn’t search/)).not.toBeInTheDocument();
+    const offer = screen.getByRole("button", { name: /Search “God's love” by meaning instead/ });
+
+    await user.click(offer);
+
+    // Switched to semantic for the same query → results appear; the toggle reflects the new mode.
+    expect(await screen.findByText("1 John 4:7")).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Semantic" })).toHaveAttribute("aria-selected", "true");
+  });
 });
