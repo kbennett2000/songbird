@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { type FormEvent, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 
+import { TopNav } from "@/components/TopNav";
 import { useReadingTranslation } from "@/hooks/useReadingTranslation";
 import { markSegments } from "@/lib/highlight";
 import { noteReference, notePreview, readerLink, studyNoteBadge } from "@/lib/notes";
@@ -140,19 +141,7 @@ export function SearchView(): JSX.Element {
 
   return (
     <div className="min-h-screen bg-stone-50">
-      <header className="border-b border-gray-200 bg-white">
-        <div className="mx-auto flex max-w-3xl items-center gap-3 p-4">
-          <h1 className="text-2xl font-bold tracking-tight">Search</h1>
-          <div className="ml-auto flex items-center gap-3 text-sm">
-            <Link to="/read" className="text-blue-700 hover:underline">
-              Reader
-            </Link>
-            <Link to="/" className="text-blue-700 hover:underline">
-              Home
-            </Link>
-          </div>
-        </div>
-      </header>
+      <TopNav />
 
       <main className="mx-auto max-w-3xl p-6">
         {/* Scripture's semantic/keyword sub-toggle — only when Scripture is in scope. */}

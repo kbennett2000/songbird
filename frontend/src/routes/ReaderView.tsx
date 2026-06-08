@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 
 import { CrossReferences } from "@/components/CrossReferences";
 import { Geography } from "@/components/Geography";
@@ -14,6 +14,7 @@ import { SermonNotePopover } from "@/components/SermonNotePopover";
 import { SermonNotesPopover } from "@/components/SermonNotesPopover";
 import { SidePanel } from "@/components/SidePanel";
 import { TagInput } from "@/components/TagInput";
+import { TopNav } from "@/components/TopNav";
 import { VerseText } from "@/components/VerseText";
 import { useAuth } from "@/hooks/useAuth";
 import { ApiError } from "@/lib/api";
@@ -70,7 +71,7 @@ interface XrefView {
 
 export function ReaderView(): JSX.Element {
   const queryClient = useQueryClient();
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
   // A jump-from-browse arrives as ?book=&chapter=&verse=; seed the initial location from it.
   const [searchParams] = useSearchParams();
   // Reopen to where this profile last read (RequireAuth guarantees `user` is loaded by the time
@@ -455,40 +456,10 @@ export function ReaderView(): JSX.Element {
 
   return (
     <div className="min-h-screen bg-stone-50">
-      <header className="border-b border-gray-200 bg-white">
-        <div className="mx-auto flex max-w-3xl flex-col gap-3 p-4">
-          <div className="flex flex-wrap items-center gap-3">
-            <Link to="/" className="text-2xl font-bold tracking-tight hover:opacity-80">
-              songbird
-            </Link>
-            <Link to="/browse" className="text-sm text-blue-700 hover:underline">
-              Browse notes
-            </Link>
-            <Link to="/search" className="text-sm text-blue-700 hover:underline">
-              Search
-            </Link>
-            <Link to="/places" className="text-sm text-blue-700 hover:underline">
-              Places
-            </Link>
-            <Link
-              to={`/compare?translation=${encodeURIComponent(translation)}&book=${encodeURIComponent(book)}&chapter=${chapter}`}
-              className="text-sm text-blue-700 hover:underline"
-            >
-              Compare
-            </Link>
-            {user && (
-              <span className="flex items-center gap-2 text-sm text-gray-500">
-                <span title={user.is_admin ? "Admin" : undefined}>{user.username}</span>
-                <button
-                  type="button"
-                  className="text-blue-700 hover:underline"
-                  onClick={() => void logout()}
-                >
-                  Log out
-                </button>
-              </span>
-            )}
-            <div className="ml-auto flex flex-wrap items-center gap-2 text-sm">
+      <TopNav
+        compareHref={`/compare?translation=${encodeURIComponent(translation)}&book=${encodeURIComponent(book)}&chapter=${chapter}`}
+      >
+        <div className="flex flex-wrap items-center gap-2 text-sm">
               <label className="flex items-center gap-1">
                 <span className="text-gray-500">Book</span>
                 <select
@@ -538,9 +509,8 @@ export function ReaderView(): JSX.Element {
                 </select>
               </label>
             </div>
-          </div>
 
-          <div className="flex flex-wrap items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
             <form onSubmit={submitRef} className="flex w-full items-center gap-2 sm:w-auto">
               <input
                 type="text"
@@ -580,9 +550,8 @@ export function ReaderView(): JSX.Element {
                 Next →
               </button>
             </div>
-          </div>
         </div>
-      </header>
+      </TopNav>
 
       <main className="mx-auto max-w-3xl p-6">
         {chapterQuery.isPending && <p className="text-gray-500">Loading chapter…</p>}

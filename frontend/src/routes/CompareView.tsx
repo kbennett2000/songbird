@@ -1,8 +1,9 @@
 import { useQueries, useQuery } from "@tanstack/react-query";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 
 import { AnnotationPopover } from "@/components/AnnotationPopover";
+import { TopNav } from "@/components/TopNav";
 import { useAuth } from "@/hooks/useAuth";
 import { nextChapter, prevChapter } from "@/lib/navigation";
 import { fetchBooks, fetchChapter, fetchTranslations } from "@/lib/reader";
@@ -115,26 +116,8 @@ export function CompareView(): JSX.Element {
 
   return (
     <div className="min-h-screen bg-stone-50">
-      <header className="border-b border-gray-200 bg-white">
-        <div className="mx-auto flex max-w-6xl flex-col gap-3 p-4">
-          <div className="flex flex-wrap items-center gap-3">
-            <h1 className="text-2xl font-bold tracking-tight">songbird</h1>
-            <span className="text-sm text-gray-400">/ compare</span>
-            <Link to="/read" className="text-sm text-blue-700 hover:underline">
-              Reader
-            </Link>
-            <Link to="/" className="text-sm text-blue-700 hover:underline">
-              Home
-            </Link>
-            <Link to="/browse" className="text-sm text-blue-700 hover:underline">
-              Browse notes
-            </Link>
-            <Link to="/search" className="text-sm text-blue-700 hover:underline">
-              Search
-            </Link>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-3 text-sm">
+      <TopNav maxWidth="max-w-6xl">
+        <div className="flex flex-wrap items-center gap-3 text-sm">
             <label className="flex items-center gap-1">
               <span className="text-gray-500">Book</span>
               <select
@@ -203,9 +186,8 @@ export function CompareView(): JSX.Element {
                 </select>
               </label>
             )}
-          </div>
         </div>
-      </header>
+      </TopNav>
 
       <main className="mx-auto max-w-6xl p-4 sm:p-6">
         <div className="mb-4 rounded border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 sm:hidden">

@@ -4,6 +4,37 @@ A running log of per-slice decisions, gotchas, and how each slice was verified. 
 
 ---
 
+## #62b — shared `TopNav` across pages (closes #62)
+
+- **Date:** 2026-06-08
+- **Branch:** `feat/62-shared-topnav`
+- **Scope:** frontend — a new shared header, adopted by every content page. Second of two PRs for
+  #62 (the search-scope checkboxes were the first); together they close it.
+
+Every view inlined its own header and they'd drifted apart (Search had only Reader/Home; others each
+differed; brand was sometimes a link, sometimes plain text). Extracted **`components/TopNav.tsx`** —
+the `songbird` home link + the standard nav cluster (Reader / Browse notes / Search / Places /
+Compare) + the signed-in user & Log out, with the current page's link emphasized. Props: `maxWidth`
+(match the page body), `compareHref` (the reader seeds Compare with the current passage), `actions`
+(right-aligned nav-row controls, e.g. Browse's Export/Import), and `children` (a second row — the
+reader's and compare's book/chapter/translation + jump/column bars).
+
+Adopted in `WelcomeView`, `SearchView`, `BrowseView`, `PlacesView`, `PlaceDetailView`, `ReaderView`,
+`CompareView`. Page titles that lived in the old headers moved into the page body where they still
+add context (Places, Browse); the active nav link now signals location elsewhere. `LoginPage`
+(pre-auth) is untouched.
+
+**Gotchas:** the nav links now overlap Welcome's quick-link cards and the page sections, so two
+view tests had to scope their `getByRole("link", …)` to the relevant region (`"Go to"`, etc.) — the
+duplicate link text is expected. Removed now-unused `Link`/`logout` imports from the refactored
+context pages.
+
+**Verify:** `vitest` 160 passed (new `TopNav.test.tsx`: brand + cluster + user/logout, active-link
+emphasis, seeded `compareHref` + `actions`, signed-out chrome; all view tests green incl. the
+restructured Reader/Compare control rows); `tsc` + lint + `vite build` clean.
+
+---
+
 ## #62a — search-scope checkboxes
 
 - **Date:** 2026-06-08

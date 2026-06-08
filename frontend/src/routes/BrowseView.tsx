@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type ChangeEvent, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 
+import { TopNav } from "@/components/TopNav";
 import { downloadExport, importNotes, readJsonFile } from "@/lib/importExport";
 import { type NoteAnchor, noteReference, notePreview, readerLink } from "@/lib/notes";
 import { browseAnnotations, browseSermonNotes, fetchBooks, fetchTags } from "@/lib/reader";
@@ -86,15 +87,10 @@ export function BrowseView(): JSX.Element {
 
   return (
     <div className="min-h-screen bg-stone-50">
-      <header className="border-b border-gray-200 bg-white">
-        <div className="mx-auto flex max-w-3xl flex-wrap items-center gap-3 p-4">
-          <h1 className="text-2xl font-bold tracking-tight">Browse notes</h1>
-          <div className="ml-auto flex items-center gap-3 text-sm">
-            <button
-              type="button"
-              className="text-blue-700 hover:underline"
-              onClick={onExport}
-            >
+      <TopNav
+        actions={
+          <>
+            <button type="button" className="text-blue-700 hover:underline" onClick={onExport}>
               Export
             </button>
             <button
@@ -113,17 +109,12 @@ export function BrowseView(): JSX.Element {
               aria-label="Import notes file"
               onChange={onFilePicked}
             />
-            <Link to="/read" className="text-blue-700 hover:underline">
-              Reader
-            </Link>
-            <Link to="/" className="text-blue-700 hover:underline">
-              Home
-            </Link>
-          </div>
-        </div>
-      </header>
+          </>
+        }
+      />
 
       <main className="mx-auto max-w-3xl p-6">
+        <h1 className="mb-3 text-2xl font-bold tracking-tight">Browse notes</h1>
         {actionMsg && (
           <p
             className={`mb-4 text-sm ${

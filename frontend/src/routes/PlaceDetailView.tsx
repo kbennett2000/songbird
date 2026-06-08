@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link, useParams } from "react-router-dom";
 
 import { PlaceLocation, StatusBadge } from "@/components/PlaceHonesty";
+import { TopNav } from "@/components/TopNav";
 import { ApiError } from "@/lib/api";
 import { fetchPlace, fetchPlaceVerses } from "@/lib/reader";
 
@@ -24,23 +25,12 @@ export function PlaceDetailView(): JSX.Element {
 
   return (
     <div className="min-h-screen bg-stone-50">
-      <header className="border-b border-gray-200 bg-white">
-        <div className="mx-auto flex max-w-3xl items-center gap-3 p-4">
-          <Link to="/places" className="text-sm text-blue-700 hover:underline">
-            ← Places
-          </Link>
-          <div className="ml-auto flex items-center gap-3 text-sm">
-            <Link to="/read" className="text-blue-700 hover:underline">
-              Reader
-            </Link>
-            <Link to="/" className="text-blue-700 hover:underline">
-              Home
-            </Link>
-          </div>
-        </div>
-      </header>
+      <TopNav />
 
       <main className="mx-auto max-w-3xl p-6">
+        <Link to="/places" className="text-sm text-blue-700 hover:underline">
+          ← All places
+        </Link>
         {placeQuery.isPending && <p className="text-gray-500">Loading place…</p>}
 
         {notFound && <p className="text-gray-500">That place doesn&rsquo;t exist.</p>}
