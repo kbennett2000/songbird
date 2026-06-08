@@ -12,6 +12,7 @@ def _app_with_tiles(tmp_path: Path) -> TestClient:
     tiles = tmp_path / "tiles"
     tiles.mkdir()
     (tiles / "relief.pmtiles").write_bytes(bytes(range(256)) * 8)  # 2048 deterministic bytes
+    (tiles / "bible-physical.geojson").write_text('{"type":"FeatureCollection","features":[]}')
     (tmp_path / "index.html").write_text("<!doctype html>")
     app = FastAPI()
     _mount_frontend(app, tmp_path)
@@ -30,6 +31,18 @@ def test_tiles_served_with_range_support(tmp_path: Path) -> None:
     assert ranged.status_code == 206
     assert ranged.headers["content-range"] == "bytes 0-15/2048"
     assert ranged.content == bytes(range(16))
+
+
+def test_tiles_served_with_honest_content_types(tmp_path: Path) -> None:
+    # StaticFiles guesses content types from the mimetypes registry; songbird registers these
+    # tile extensions so they aren't served as text/plain.
+    client = _app_with_tiles(tmp_path)
+
+    pmtiles = client.get("/tiles/relief.pmtiles")
+    assert pmtiles.headers["content-type"] == "application/octet-stream"
+
+    geojson = client.get("/tiles/bible-physical.geojson")
+    assert geojson.headers["content-type"] == "application/geo+json"
 
 
 def test_tiles_path_does_not_fall_through_to_spa(tmp_path: Path) -> None:

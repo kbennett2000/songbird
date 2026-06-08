@@ -4,6 +4,7 @@ Run with: `uvicorn songbird.main:create_app --factory`.
 """
 
 import logging
+import mimetypes
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -31,6 +32,13 @@ from songbird.core.sessions import cleanup_all_expired_sessions
 from songbird.db.session import async_session_factory
 
 logger = logging.getLogger("songbird")
+
+# StaticFiles guesses content types via the stdlib mimetypes registry, which doesn't know these
+# map-tile extensions and would serve them as text/plain. Register honest types so /tiles responses
+# are correct. (The PMTiles client reads raw bytes over Range and ignores the header, so this is
+# correctness, not the basemap's load path — that relies only on Range, which StaticFiles provides.)
+mimetypes.add_type("application/octet-stream", ".pmtiles")
+mimetypes.add_type("application/geo+json", ".geojson")
 
 
 @asynccontextmanager
