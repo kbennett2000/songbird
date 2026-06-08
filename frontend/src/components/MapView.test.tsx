@@ -87,6 +87,37 @@ describe("MapView", () => {
     expect(screen.getByText(/high confidence/i)).toBeInTheDocument();
   });
 
+  it("offers pan/zoom controls (zoom in, zoom out, fit)", async () => {
+    mockPlaces([JERUSALEM]);
+    renderMap();
+    await screen.findByRole("button", { name: "Jerusalem" });
+    expect(screen.getByRole("button", { name: /zoom in/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /zoom out/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /fit chapter/i })).toBeInTheDocument();
+  });
+
+  it("collapses overlapping places into a cluster badge instead of crowding pins", async () => {
+    // Two places ~0.2° apart: they overlap at the auto-fit zoom and read as one count badge.
+    const NEAR = place({ id: "near", name: "Bethany", latitude: 31.9, longitude: 35.4 });
+    mockPlaces([JERUSALEM, NEAR]);
+    renderMap();
+    const clusterBadge = await screen.findByTestId("map-cluster");
+    expect(clusterBadge).toHaveAttribute("data-count", "2");
+    expect(screen.queryByTestId("map-pin")).not.toBeInTheDocument();
+  });
+
+  it("splits a cluster into individual pins as the user zooms in", async () => {
+    const NEAR = place({ id: "near", name: "Bethany", latitude: 31.9, longitude: 35.4 });
+    mockPlaces([JERUSALEM, NEAR]);
+    const user = userEvent.setup();
+    renderMap();
+    await screen.findByTestId("map-cluster");
+    const zoomIn = screen.getByRole("button", { name: /zoom in/i });
+    for (let i = 0; i < 6; i++) await user.click(zoomIn);
+    expect(screen.queryByTestId("map-cluster")).not.toBeInTheDocument();
+    expect(screen.getAllByTestId("map-pin")).toHaveLength(2);
+  });
+
   it("jumps to a verse from the card, reusing the existing navigation", async () => {
     mockPlaces([JERUSALEM]);
     server.use(
