@@ -7,6 +7,7 @@ import {
   type PlaceDetail,
   type PlacesPage,
   type PlaceVerse,
+  type RandomVerse,
   type ReadChapter,
   type ResolvedReference,
   type ScopeType,
@@ -25,6 +26,7 @@ import {
   placeVersesSchema,
   placesPageSchema,
   placesSchema,
+  randomVerseSchema,
   readChapterSchema,
   resolvedReferenceSchema,
   keywordResultsSchema,
@@ -133,6 +135,13 @@ export async function fetchPlace(placeId: string): Promise<PlaceDetail> {
 export async function fetchPlaceTypes(): Promise<string[]> {
   const data = await apiRequest<unknown>("GET", "/place-types");
   return placeTypesSchema.parse(data);
+}
+
+/** One random verse for the Welcome "verse of the day" card — fresh every call (no-store). */
+export async function fetchRandomVerse(translation?: string): Promise<RandomVerse> {
+  const t = translation ? `?translation=${encodeURIComponent(translation)}` : "";
+  const data = await apiRequest<unknown>("GET", `/random-verse${t}`);
+  return randomVerseSchema.parse(data);
 }
 
 export async function fetchChapter(
