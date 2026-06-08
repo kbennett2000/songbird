@@ -26,7 +26,7 @@ export function NotePopover({ note, anchor, onClose, onJump }: NotePopoverProps)
   return (
     <Popover anchor={anchor} onClose={onClose} ariaLabel={`${typeLabel(note.type)} — ${note.reference}`}>
       <div className="mb-1 flex items-center justify-between gap-2">
-        <span className="text-xs font-semibold uppercase tracking-wide text-violet-700">
+        <span className="text-xs font-semibold uppercase tracking-wide text-violet-700 dark:text-violet-400">
           {typeLabel(note.type)}
         </span>
         <button
