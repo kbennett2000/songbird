@@ -193,17 +193,13 @@ export interface CreateSermonNoteInput {
   title: string;
   sermon_url: string;
   reference: string;
-  book_usfm: string;
-  start_chapter: number;
-  start_verse: number;
-  end_chapter: number;
-  end_verse: number;
   event_date: string | null;
   tags: string[];
 }
 
-/** Create a sermon note. The server resolves `book_order_index` from Concord — the client only
- * sends the canonical anchor (invariant 4 stays server-authoritative). */
+/** Create a sermon note. The client sends only the human `reference`; the server resolves it
+ * through Concord into the canonical anchor + verse span and `book_order_index` (invariant 4
+ * stays server-authoritative, and a ranged reference covers every verse in the range). */
 export async function createSermonNote(input: CreateSermonNoteInput): Promise<SermonNote> {
   const data = await apiRequest<unknown>("POST", "/sermon-notes", input);
   return sermonNoteSchema.parse(data);
