@@ -1,0 +1,9 @@
+# Dev/build-time ONLY — used to build the bundled offline map assets
+# (frontend/public/tiles/relief.pmtiles + bible-physical.geojson) from Natural Earth public-domain
+# data. The committed outputs are what ship; songbird's runtime never imports these. Deliberately
+# kept out of backend/requirements*.txt — the runtime stays lean (no geo/ML stack), per canon.
+#
+# rasterio + rio-pmtiles ship manylinux wheels with GDAL bundled, so no system GDAL is needed.
+rasterio>=1.3
+rio-pmtiles>=1.1
+pyshp>=2.3
