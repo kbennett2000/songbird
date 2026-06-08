@@ -14,7 +14,7 @@
 services:
   # The Scripture engine. Pulled as a ready-made image — nothing to build.
   concord:
-    image: ghcr.io/kbennett2000/concord:v1.0.0
+    image: ghcr.io/kbennett2000/concord:v1.1.0
     restart: unless-stopped
     # Concord is only used by songbird, on this private network.
     # (We don't expose it to your whole computer — songbird talks to it internally.)
