@@ -4,6 +4,62 @@ A running log of per-slice decisions, gotchas, and how each slice was verified. 
 
 ---
 
+## Slice 1 (v1.3) — Multi-translation keyword search
+
+- **Date:** 2026-06-07
+- **Branch:** `slice/1-multi-translation-search`
+- **Scope:** keyword Scripture search now searches **all loaded translations** by default,
+  narrowable to a subset, rendering each verse's matching translations as labeled, highlighted
+  snippets. Builds on the Concord **v1.1.0** pin (Slice 0). No Concord change.
+
+### What changed
+- **Client** (`concord/client.py`): `keyword_search(q, translations: list[str] | None, …)` —
+  `None` → `translations=*` (all), a list → CSV. Dropped the singular `translation` param.
+- **Schemas**: Concord `KeywordResult.matches: dict[str,str] | None` + `KeywordSearchResponse
+  .translations`; the API `KeywordResult` gains `matches` (pass-through). Frontend
+  `keywordResultSchema.matches` (`z.record(z.string()).nullable().optional()`).
+- **API** (`api/search.py`): `/keyword-search?translations=` CSV (absent → all); returns `matches`.
+- **Frontend** (`SearchView.tsx`): removed the hardcoded `SEARCH_TRANSLATION = "KJV"`; added an
+  in-memory translation **scope picker** (keyword mode only); multi-match hits render one labeled,
+  `<mark>`-highlighted snippet per matched translation via `markSegments`.
+- **Contract** (`concord_contract_test.py`): new assertion that `/v1/search` exposes the
+  `translations` param.
+
+### Kris's three clarifications (the binding decisions)
+1. The picker **defaults to All and does not persist** — in-memory React state, resets on reload.
+2. **Semantic search's display translation moved hardcoded-KJV → the profile's reading
+   translation** (`user.last_translation`, fallback `KJV`). An **intended behavior change**, tested.
+3. A multi-match hit renders **all matched translations, reading-translation first** (else
+   Concord's order, which leads with the top-ranked); the rest compact; **no collapse this cut**.
+   A single match (or single-translation narrowing) renders just the snippet, as before.
+
+### Live shape (verified against v1.1.0 before building)
+`/v1/search?translations=*` returns each hit with a flat top-ranked `snippet`, a `matches` map
+(id → snippet) containing **only** the translations that matched, **rank-ordered** (flat `snippet`
+== `matches[firstKey]` for every hit), plus a `translations` echo. So the render rule is simply:
+keep `matches` order, hoist the reading translation.
+
+### Gotcha — single-translation narrowing was 502ing (Concord latency, not a songbird bug)
+End-to-end, narrowing to a **single** common translation (`translations=KJV`/`WEB`) returned
+**502**, while `*` and `KJV,WEB` were fine. Cause: Concord's single-translation keyword search is
+**slow cold** — measured `KJV` ~6.5s, `WEB` ~8.2s, `ASV` ~2.2s (`*` and multi-CSV were ~4ms,
+cached). songbird's `ConcordClient` 5s timeout turned the slow read into an `httpx.ReadTimeout`
+(empty message) → misreported as `ConcordUnreachableError` → 502. **Fix:** keyword search now uses
+`httpx.Timeout(30.0, connect=5.0)` — a generous **read** budget so a *slow* search isn't a false
+*outage*, with **connect** kept tight so a genuinely-down Concord still fails fast (invariant 3).
+**Flag for Concord:** single-translation `/v1/search` taking 6–8s is worth optimizing upstream;
+songbird now tolerates it but the UX waits.
+
+### Verify
+- Backend `pytest` 164 passed (new client/endpoint/contract tests incl. the read-timeout guard);
+  Pyright-strict + Ruff clean. Frontend `vitest` 134 passed (4 new SearchView tests); `tsc` strict
+  + lint clean. Canonical bridge untouched.
+- End-to-end (`docker compose up`, v1.1.0): keyword "living water" with no narrowing → hits with
+  multiple labeled snippets; single-translation narrowing → 200 (KJV 6.5s, WEB 8.2s) not 502;
+  semantic search displays in the profile's reading translation.
+
+---
+
 ## Slice 0 (v1.3) — Concord pin → v1.1.0 (the v5 prerequisite)
 
 - **Date:** 2026-06-07
