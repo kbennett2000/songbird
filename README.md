@@ -122,6 +122,8 @@ In the terminal, press **Ctrl + C**, then run `docker compose down`. Your notes 
 
 songbird is the app you use; **[Concord](https://github.com/kbennett2000/concord)** is the Scripture engine it’s built on — the text, the search, the places, and the cross-references all come from Concord over the network, and the single command above starts both for you. songbird keeps only *your* notes; Concord provides the Bible. If you’re technically inclined, [the design notes are here](docs/v1/SPEC.md); the **map view** (v1.1) is described [here](docs/v1.1/MAP-SPEC.md), and **sermon notes** [here](docs/v1.2/SERMON-NOTES-SPEC.md).
 
+Want to build something like this yourself? The Concord ecosystem now has two beginner courses: **[concord-tutorial-web](https://github.com/kbennett2000/concord-tutorial-web)** builds your first Concord app in plain HTML and JavaScript, and **[concord-tutorial-react](https://github.com/kbennett2000/concord-tutorial-react)** picks up from there and walks you — one idea at a time — right up to reading songbird’s own source.
+
 <br>
 
 ## Trouble?
