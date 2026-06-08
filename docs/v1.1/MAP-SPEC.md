@@ -1,5 +1,15 @@
 # songbird — Map View (v1.1 feature spec)
 
+> **Status — rendering has evolved since v1.1.** This spec captures the original v1.1 map: a
+> bundled, offline, *equirectangular* static image, fixed-fit with **no pan/zoom**. The map now
+> renders with **MapLibre GL** over bundled offline tiles — a natural-color **relief** raster plus a
+> physical-vector overlay — with **pan/zoom and clustering**, still fully offline. See
+> [ADR 0002](../adr/0002-vector-basemap-and-pan-zoom.md) and
+> [ADR 0003](../adr/0003-maplibre-offline-pmtiles-basemap.md) for that evolution. The design intent
+> below — the honesty model (§6), the globe affordance (§5), off-map/unknown listing, scope (§8),
+> and the mobile constraints (§7) — **still holds**; only the projection/asset/no-pan-zoom mechanics
+> described in §3, §4, §7, and §11 were superseded. Those passages are flagged inline.
+
 > songbird is built on **[Concord](https://github.com/kbennett2000/concord)**, which provides
 > the places data this feature renders. See [the design spec](../v1/SPEC.md) for that relationship.
 
@@ -20,9 +30,10 @@ the reader (enabled only when there's something to plot), opening a modal map wi
 each located place, confidence shown visually, and a clear note of any places whose location is
 unknown. Fully offline.
 
-**Is not:** an interactive slippy/tile map (no pan/zoom in v1.1 — fixed-fit), no online map
-service, no routing/journeys (a possible future Concord capability, not this), no editing of
-place data (Concord owns the data).
+**Is not:** an online/networked map (no tile *service* — Leaflet+OSM, Mapbox, Google), no
+routing/journeys (a possible future Concord capability, not this), no editing of place data
+(Concord owns the data). *(v1.1 was also fixed-fit with no pan/zoom; the map now pans, zooms, and
+clusters via MapLibre GL over bundled local tiles — still no network. See ADR 0003.)*
 
 ## 2. The boundary — this is a pure songbird slice
 
@@ -38,12 +49,20 @@ The whole stack runs **offline** (Concord `--network none`; songbird offline-exc
 the README promises "works without an internet connection"). Therefore:
 
 - **No runtime calls to any map service or tile server** (no Leaflet+OSM, Mapbox, Google,
-  etc.) — that would break the offline promise and add a third-party runtime dependency this
-  project has always refused.
-- The map is a **bundled static image asset**, shipped inside songbird, plotted on with
-  songbird's own code. Zero outbound calls at runtime.
+  etc.) — that would break the offline promise and add a third-party runtime dependency. *(This
+  rule still holds: the current map uses MapLibre GL, but it reads only **bundled, same-origin
+  tiles** — there is no tile service and no outbound call.)*
+- The map's data is **shipped inside songbird** and served by its own backend; **zero outbound
+  calls at runtime**. *(v1.1: a single bundled static image. Now: bundled `relief.pmtiles` +
+  `bible-physical.geojson` — still local-only. See ADR 0003.)*
 
 ## 4. The atlas asset — the load-bearing requirement
+
+> **Superseded (see ADR 0002/0003).** §4 describes the original v1.1 approach: a hand-projected
+> equirectangular raster with lat/lon→pixel math. The map now renders with **MapLibre GL** (Web
+> Mercator) — MapLibre owns the projection, and pins are placed by lng/lat natively. The
+> public-domain Natural Earth sourcing and the off-map/extent honesty below carry over; the
+> equirectangular formula and "static image" no longer apply.
 
 Pins are placed by converting **lat/lon → x/y pixels** on the bundled map. That math is only
 correct if the map's **projection and exact geographic bounds are known.** Therefore:
@@ -115,9 +134,10 @@ constraint** (songbird has a mobile audience):
   overlapping pins in dense areas degrade gracefully (e.g. slight offset or a "+N here").
 - **Obvious close:** a clear close control; tapping the backdrop or pressing Esc closes
   (desktop), a visible ✕ on mobile.
-- **Fixed-fit view (v1.1):** the whole atlas extent is shown at once with pins plotted; **no
-  pan/zoom** in v1.1 (the Holy Land clusters tightly — acceptable for v1.1; zoom is a later
-  polish item, explicitly deferred).
+- ~~**Fixed-fit view (v1.1):** the whole atlas extent is shown at once with pins plotted; **no
+  pan/zoom** in v1.1.~~ *Superseded:* the map now **pans and zooms** (capped to the biblical-world
+  extent so it can't be dragged off), **auto-frames each chapter** to its own places, and
+  **clusters** overlapping pins (a numbered badge that expands on tap). See ADR 0002/0003.
 
 ## 8. Scope
 
@@ -126,7 +146,7 @@ constraint** (songbird has a mobile audience):
 
 ## 9. What's deferred (not this slice)
 
-- Pan/zoom and clustering beyond graceful overlap handling.
+- ~~Pan/zoom and clustering~~ — *shipped post-v1.1 (ADR 0002/0003).*
 - Per-verse (vs per-chapter) mapping.
 - Routes/journeys between places (a possible future *Concord* capability — songbird would only
   render).
@@ -137,9 +157,8 @@ constraint** (songbird has a mobile audience):
 
 - A globe icon in the reader, **enabled only when the chapter has ≥1 located place**, disabled
   (with tooltip) otherwise.
-- Clicking it opens a **modal** with a **bundled, offline** equirectangular Bible-world map
-  (rendered from Natural Earth public-domain data, documented bounds), the chapter's located
-  places **plotted as pins**.
+- Clicking it opens a **modal** with a **bundled, offline** Bible-world map (rendered from Natural
+  Earth public-domain data), the chapter's located places **plotted as pins**.
 - **Pin placement is correct** (the accuracy test passes for known landmarks within tolerance).
 - **Confidence is encoded visually**; unknown/symbolic places are **not** plotted but are
   **listed** ("location unknown: …"), and located-but-off-extent places are listed ("off this
@@ -153,22 +172,27 @@ constraint** (songbird has a mobile audience):
 
 ## 11. Open questions — resolved
 
-1. **Asset format** → **committed PNG.** A pre-rendered raster lives at
-   `frontend/src/assets/bible-map.png`, rendered from Natural Earth public-domain vectors by the
-   dev-only `scripts/mapgen/generate_map.py` (pyshp + Pillow — not in the runtime). Leanest path
-   (~14 KB), zero runtime deps, and bounds are exact by construction because the renderer projects
-   with the *same* equirectangular transform the runtime uses. See ADR
-   `docs/adr/0001-offline-bundled-equirectangular-basemap.md`.
-2. **Exact bounds** → **west 10°E, east 50°E, south 13°N, north 45°N**, rendered at **1000×800 px**
-   (5:4, 25 px/degree, undistorted). Contains Rome, the Nile delta, Mesopotamia/Babylon, Ararat,
-   Cush. The single source of truth is `frontend/src/lib/mapBounds.ts`. Off-extent detection: a
-   located place whose `project(lat, lon)` returns `null` (out of bounds) is listed under "Off this
-   map", never clipped.
-3. **Pin/marker visual design** → `disputed` → a `?` in an amber ring; `high`/`identified` → a
-   solid filled (blue) pin; `medium`/`low`/null confidence → a faded hollow pin. Markers are
-   buttons with ≥24–28px tap targets and `aria-label`s.
+1. **Asset format** → *v1.1 answer (committed PNG) is superseded.* The map is now built from
+   **bundled tiles** committed under `frontend/public/tiles/` — `relief.pmtiles` (natural-color
+   shaded-relief raster) + `bible-physical.geojson` (coastlines, rivers, lakes, playas, reefs,
+   islands) — generated by the dev-only `scripts/tilegen/build.py` (rasterio + pyshp; not in the
+   runtime) from Natural Earth public-domain data. MapLibre GL renders them; the backend serves
+   `/tiles` over HTTP Range. See [ADR 0003](../adr/0003-maplibre-offline-pmtiles-basemap.md).
+   *(History: v1.1 was a ~14 KB committed PNG; v1.1.x added a vector SVG — ADR 0001/0002.)*
+2. **Extent** → the biblical world (≈ **west 9°E, south 12°N, east 51°E, north 46°N**), the bbox the
+   tiles were clipped to. The single source of truth is `frontend/src/lib/map/config.ts`
+   (`BIBLE_WORLD_BOUNDS` / `MAX_BOUNDS`), kept in lockstep with `scripts/tilegen/build.py`. Contains
+   Rome, the Nile delta, Mesopotamia/Babylon, Ararat, Cush. Off-extent detection: a located place
+   outside the bounds is listed under "Off this map" (`partitionPlaces` in
+   `frontend/src/lib/map/places.ts`), never clipped. *(v1.1 used `frontend/src/lib/mapBounds.ts` +
+   `project(lat,lon)→null`; both removed in the MapLibre rewrite.)*
+3. **Pin/marker visual design** → confidence tier drives the color: `high`/`identified` → a solid
+   filled (blue) pin; `medium`/`low`/null → a hollow (white, blue-ring) pin; `disputed` → an amber
+   ring. *(Now data-driven MapLibre `circle` layers rather than DOM buttons; `tierFor` in
+   `frontend/src/lib/map/places.ts`. The selection ring marks the tapped pin.)*
 4. **Globe-state data path** → **reuse the existing per-chapter places fetch.** The reader runs the
    same `["places", book, chapter]` query the map and the list already use; the globe is enabled
    when ≥1 place has coordinates. No extra call, no chapter-read change, no Concord change.
-5. **Overlap handling** → first cut: render all pins with a small deterministic offset for those
-   that collide; clustering/"+N" is explicitly deferred (§9).
+5. **Overlap handling** → **clustering shipped** (was deferred in v1.1): overlapping pins collapse
+   into a numbered badge that expands on tap and lists its member places; clusters split apart as
+   you zoom in (MapLibre native GeoJSON clustering). See ADR 0003.

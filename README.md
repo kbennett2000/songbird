@@ -131,8 +131,9 @@ In the terminal, press **Ctrl + C**, then run `docker compose down`. Your notes 
 - **Search three ways** — find **Scripture** by meaning (“verses about anxiety”) or by an exact word or phrase, sweeping **all translations at once or just the ones you pick**; search **your own notes** by word; and search **study notes** — the translators’ footnotes that some Scripture engines include. (The standard setup ships no study notes, so that section simply stays hidden until an engine provides them.)
 - **Explore the places** — open **Places** to browse every location named in Scripture — cities, regions, rivers, mountains — filter by name or kind, then open one to see what it is, how sure we are about where it sat, and every verse that names it.
 - **Back up your notes** — from **browse**, **export** all your notes and sermons to a single file, then **import** it back on another computer; importing skips anything you already have.
-- **Go deeper** — hover a verse for its **cross-references**, or tap the **globe** to see a passage’s places on a map, when their locations are known.
+- **Go deeper** — hover a verse for its **cross-references**, or tap the **globe** to see a passage’s places on a map you can pan and zoom, set on the terrain of the biblical world, when their locations are known.
 - **A verse to begin** — your home page opens with a **verse of the day** in your reading translation; open it in the reader, or ask for another.
+- **Read light or dark** — switch between a light and dark theme to suit the room; songbird remembers your choice.
 
 <br>
 

@@ -377,7 +377,9 @@ data; songbird stores none of it. Specified in `docs/v1.4/PLACES-SPEC.md`.
 against Concord's pinned OpenAPI schema, catching drift between the two services.
 
 **Specs for shipped features.** The map view (v1.1) is specified in `docs/v1.1/MAP-SPEC.md` +
-ADR 0001 (offline bundled basemap, honest pin placement); sermon notes in
+ADR 0001 (offline bundled basemap, honest pin placement), as amended by ADR 0002 (vector basemap +
+pan/zoom) and ADR 0003 (MapLibre GL over bundled PMTiles) — the current rendering approach; sermon
+notes in
 `docs/v1.2/SERMON-NOTES-SPEC.md`; the search expansion (multi-translation keyword + study-note
 search) in `docs/v1.3/SEARCH-EXPANSION-SPEC.md`; the places gazetteer in
 `docs/v1.4/PLACES-SPEC.md`; and the verse of the day in `docs/v1.5/RANDOM-VERSE-SPEC.md`.
