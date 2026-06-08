@@ -36,3 +36,21 @@ export function buildLabelElement(name: string, kind: LabelKind): HTMLSpanElemen
   el.textContent = name;
   return el;
 }
+
+/**
+ * A place name shown beside its pin (issue #86) — so a curious reader can scan the map without
+ * clicking every pin. Positioned to the right of the circle by the marker's anchor/offset (see
+ * MapView). Place names are the *data* (the pin's color already encodes tier), so this is a
+ * single readable dark style — heavier than the italic, secondary context labels — with a light
+ * halo (`drop-shadow`) so it stays legible over varied relief. Non-interactive, so a tap lands
+ * on the GL circle underneath.
+ */
+export function buildPlaceLabel(name: string): HTMLSpanElement {
+  const el = document.createElement("span");
+  el.dataset.testid = "map-place-label";
+  el.className =
+    "pointer-events-none whitespace-nowrap text-[11px] font-medium text-stone-900/85 " +
+    "[text-shadow:0_0_2px_rgba(255,255,255,0.9),0_0_2px_rgba(255,255,255,0.9)]";
+  el.textContent = name;
+  return el;
+}

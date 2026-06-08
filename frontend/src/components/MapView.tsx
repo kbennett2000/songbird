@@ -12,7 +12,7 @@ import {
   MIN_ZOOM,
 } from "@/lib/map/config";
 import { MAP_LABELS } from "@/lib/map/labels";
-import { buildClusterBadge, buildLabelElement } from "@/lib/map/markers";
+import { buildClusterBadge, buildLabelElement, buildPlaceLabel } from "@/lib/map/markers";
 import { boundsForPlaces } from "@/lib/map/bounds";
 import { partitionPlaces, placesToGeoJSON } from "@/lib/map/places";
 import { buildStyle, MATCH_NONE } from "@/lib/map/style";
@@ -154,8 +154,9 @@ function ControlButton({
 /**
  * The chapter's located places, plotted on a MapLibre map drawing natural-color relief + crisp
  * physical vectors from bundled, same-origin offline tiles (ADR 0003). Pins/clusters are GL circle
- * layers (tier-colored); cluster counts and curated labels are DOM markers (so no glyph font is
- * needed). The view auto-frames each chapter (fitBounds), can't be panned off (maxBounds), and
+ * layers (tier-colored); cluster counts, curated labels, and per-pin place names are DOM markers
+ * (so no glyph font is needed). The view auto-frames each chapter (fitBounds), can't be panned off
+ * (maxBounds), and
  * clusters expand on click — listing their members so a tap reaches each place card.
  */
 export function MapView({ book, chapter, onJump }: MapViewProps): JSX.Element {
@@ -163,6 +164,9 @@ export function MapView({ book, chapter, onJump }: MapViewProps): JSX.Element {
   const mapRef = useRef<maplibregl.Map | null>(null);
   const labelMarkers = useRef<maplibregl.Marker[]>([]);
   const badgeMarkers = useRef<Record<string, maplibregl.Marker>>({});
+  // Place-name labels beside each unclustered pin (issue #86), keyed by place id. Kept in sync
+  // with the GL points the same way the cluster badges are — added/removed as clustering changes.
+  const placeLabelMarkers = useRef<Record<string, maplibregl.Marker>>({});
   const [mapReady, setMapReady] = useState(false);
   // Set when the relief basemap fails to load (e.g. its bundled tiles aren't served with HTTP
   // Range). Without this the failure is silent — a blank map with no signal. Non-blocking: the
@@ -172,6 +176,9 @@ export function MapView({ book, chapter, onJump }: MapViewProps): JSX.Element {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [clusterMembers, setClusterMembers] = useState<MemberRef[] | null>(null);
   const [showLabels, setShowLabels] = useState(true);
+  // The sync below runs on `moveend`/`data` (outside React), so it can't read `showLabels` from
+  // closure freshly — mirror it into a ref so a label created mid-pan starts at the right visibility.
+  const showLabelsRef = useRef(showLabels);
 
   const query = useQuery({
     queryKey: ["places", book, chapter],
@@ -183,17 +190,22 @@ export function MapView({ book, chapter, onJump }: MapViewProps): JSX.Element {
     [data],
   );
 
-  // Keep cluster-count DOM badges in sync with the GL cluster circles (rebuilt as clusters change).
-  const syncClusterBadges = useCallback(() => {
+  // Keep the DOM markers in sync with the GL circles as clustering changes: a count badge over
+  // each cluster, and a name label beside each unclustered pin (issue #86). Both are rebuilt on
+  // `moveend`/`data` — a place that clusters loses its name (the badge's count stands in); when it
+  // expands back to its own pin, the name returns. So names show exactly when there's room.
+  const syncMapMarkers = useCallback(() => {
     const map = mapRef.current;
     if (!map || !map.isSourceLoaded("places")) return;
-    const feats = map.querySourceFeatures("places", { filter: ["has", "point_count"] });
-    const present = new Set<string>();
-    for (const f of feats) {
+
+    // Cluster-count badges.
+    const clusters = map.querySourceFeatures("places", { filter: ["has", "point_count"] });
+    const clusterIds = new Set<string>();
+    for (const f of clusters) {
       const props = f.properties as { cluster_id: number; point_count: number };
       const id = String(props.cluster_id);
-      if (present.has(id)) continue;
-      present.add(id);
+      if (clusterIds.has(id)) continue;
+      clusterIds.add(id);
       if (!badgeMarkers.current[id] && f.geometry.type === "Point") {
         const el = buildClusterBadge(props.point_count);
         badgeMarkers.current[id] = new maplibregl.Marker({ element: el })
@@ -202,9 +214,36 @@ export function MapView({ book, chapter, onJump }: MapViewProps): JSX.Element {
       }
     }
     for (const id of Object.keys(badgeMarkers.current)) {
-      if (!present.has(id)) {
+      if (!clusterIds.has(id)) {
         badgeMarkers.current[id]?.remove();
         delete badgeMarkers.current[id];
+      }
+    }
+
+    // Place-name labels beside each unclustered pin.
+    const points = map.querySourceFeatures("places", { filter: ["!", ["has", "point_count"]] });
+    const placeIds = new Set<string>();
+    for (const f of points) {
+      const props = f.properties as { id: string; name: string };
+      if (placeIds.has(props.id)) continue;
+      placeIds.add(props.id);
+      if (!placeLabelMarkers.current[props.id] && f.geometry.type === "Point") {
+        const el = buildPlaceLabel(props.name);
+        if (!showLabelsRef.current) el.style.display = "none";
+        // anchor "left" + a small x-offset seats the name just right of the ~8px pin radius.
+        placeLabelMarkers.current[props.id] = new maplibregl.Marker({
+          element: el,
+          anchor: "left",
+          offset: [10, 0],
+        })
+          .setLngLat(f.geometry.coordinates as [number, number])
+          .addTo(map);
+      }
+    }
+    for (const id of Object.keys(placeLabelMarkers.current)) {
+      if (!placeIds.has(id)) {
+        placeLabelMarkers.current[id]?.remove();
+        delete placeLabelMarkers.current[id];
       }
     }
   }, []);
@@ -290,10 +329,10 @@ export function MapView({ book, chapter, onJump }: MapViewProps): JSX.Element {
       map.on("mouseleave", "unclustered-point", setPointer(false));
       map.on("mouseenter", "clusters", setPointer(true));
       map.on("mouseleave", "clusters", setPointer(false));
-      map.on("moveend", syncClusterBadges);
+      map.on("moveend", syncMapMarkers);
       map.on("data", (e) => {
         const ev = e as { sourceId?: string; isSourceLoaded?: boolean };
-        if (ev.sourceId === "places" && ev.isSourceLoaded) syncClusterBadges();
+        if (ev.sourceId === "places" && ev.isSourceLoaded) syncMapMarkers();
       });
       // The modal lays out around us; make sure the GL canvas matches the final container size.
       map.resize();
@@ -305,9 +344,10 @@ export function MapView({ book, chapter, onJump }: MapViewProps): JSX.Element {
       mapRef.current = null;
       labelMarkers.current = [];
       badgeMarkers.current = {};
+      placeLabelMarkers.current = {};
       setMapReady(false);
     };
-  }, [handlePointClick, handleClusterClick, syncClusterBadges]);
+  }, [handlePointClick, handleClusterClick, syncMapMarkers]);
 
   // Feed the chapter's places to the source and frame them (per-chapter auto-fit).
   useEffect(() => {
@@ -328,9 +368,13 @@ export function MapView({ book, chapter, onJump }: MapViewProps): JSX.Element {
     map.setFilter("selected-point", selectedId ? ["==", ["get", "id"], selectedId] : MATCH_NONE);
   }, [selectedId, mapReady]);
 
-  // Labels on/off.
+  // Labels on/off — the one "Aa" control drives both the curated context labels and the place
+  // names (issue #86). Mirror the flag into the ref so the move-driven sync agrees.
   useEffect(() => {
-    for (const m of labelMarkers.current) m.getElement().style.display = showLabels ? "" : "none";
+    showLabelsRef.current = showLabels;
+    const display = showLabels ? "" : "none";
+    for (const m of labelMarkers.current) m.getElement().style.display = display;
+    for (const m of Object.values(placeLabelMarkers.current)) m.getElement().style.display = display;
   }, [showLabels, mapReady]);
 
   // Clear selection when the chapter changes (no stale card from the previous chapter).
