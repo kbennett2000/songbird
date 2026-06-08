@@ -1,6 +1,7 @@
 import { createBrowserRouter, RouterProvider } from "react-router-dom";
 
 import { RequireAuth } from "@/components/RequireAuth";
+import { useApplyTheme } from "@/hooks/useTheme";
 import { BrowseView } from "@/routes/BrowseView";
 import { CompareView } from "@/routes/CompareView";
 import { LoginPage } from "@/routes/LoginPage";
@@ -88,5 +89,7 @@ const router = createBrowserRouter([
 ]);
 
 export function App(): JSX.Element {
+  // Keep the colour scheme in sync with the profile (default: follow the OS) — app-wide (#60).
+  useApplyTheme();
   return <RouterProvider router={router} />;
 }

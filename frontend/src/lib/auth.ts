@@ -44,3 +44,9 @@ export async function saveReadingPosition(pos: ReadingPosition): Promise<User> {
   });
   return authEnvelopeSchema.parse(data).user;
 }
+
+/** Persist the user's colour-scheme choice on their profile (#60). Returns the updated user. */
+export async function saveTheme(theme: "light" | "dark" | "system"): Promise<User> {
+  const data = await apiRequest<unknown>("PATCH", "/auth/me", { theme });
+  return authEnvelopeSchema.parse(data).user;
+}
