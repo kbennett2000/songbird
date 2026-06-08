@@ -28,7 +28,7 @@ export function VerseText({ text, notes, onOpenNote }: VerseTextProps): JSX.Elem
           <button
             key={seg.key}
             type="button"
-            className="align-super font-sans text-[0.7em] font-medium text-violet-600 hover:text-violet-800 hover:underline"
+            className="align-super font-sans text-[0.7em] font-medium text-violet-600 hover:text-violet-800 dark:text-violet-400 dark:hover:text-violet-300 hover:underline"
             onClick={(e) => onOpenNote(seg.note, e.currentTarget)}
             aria-label={`Translator's note ${seg.number}`}
             title="Translator's note"
