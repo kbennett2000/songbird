@@ -4,6 +4,60 @@ A running log of per-slice decisions, gotchas, and how each slice was verified. 
 
 ---
 
+## Slice 0 (v1.3) — Concord pin → v1.1.0 (the v5 prerequisite)
+
+- **Date:** 2026-06-07
+- **Branch:** `slice/0-concord-pin`
+- **Scope:** the version-bump prerequisite for the v1.3–v1.5 catch-up. Config + fixture + a small
+  reader-notice correction. **No songbird feature/endpoint added** (those are Slices 1–4).
+
+### Why
+The runtime was pinned to `concord:v1.0.0`, which predates the endpoints the catch-up needs
+(`/v1/search?translations=`, `/v1/notes/search`) and the v4 notes-passage read. This slice moves
+the pin to the published v5 image so the later slices can build on it.
+
+### The gate caught a real mismatch (and changed the target version)
+The spec called this a bump to **v1.0.2**. The mandatory first step — pull the image and curl the
+three endpoints — found the **published `v1.0.2` predated v5**: `/v1/notes/search` → `404`, and
+`/v1/search` **ignored** `?translations=` (echoed single-translation KJV, no `matches`). I stopped
+and surfaced it; Kris cut and published v5 as a **new release, `v1.1.0`**. Re-running the gate
+against `v1.1.0` (`sha256:d10ed68a…`) passed:
+- `/v1/search?q=love&translations=*` → `200`, response carries `translations: [13 ids]`, each hit
+  has `matches: {translation_id: "<mark>…"}`.
+- `/v1/notes/search?q=love` → `200` empty `hits` (the stock image ships zero notes — success).
+- `/v1/translations/KJV/notes/JHN/3` → `200` empty.
+
+A second correction the gate forced: the **committed `concord-openapi.json` fixture was also
+pre-v5** (no `/v1/notes/search`, `/v1/search` had only the singular `translation` param), despite
+its `1.0.2` version string. So "no fixture change needed" was wrong — the fixture was regenerated.
+
+### What changed
+- `docker-compose.yml`: `concord` image `v1.0.0` → **`v1.1.0`**.
+- `backend/tests/fixtures/concord-openapi.json`: **regenerated** from the v1.1.0 image's
+  `/openapi.json` (now 15 paths incl. `/v1/notes/search`; `/v1/search` gains the `translations`
+  param). Serialized to match the existing style (`json.dumps(obj, indent=2, sort_keys=True)`).
+- `backend/tests/concord_contract_test.py`: `assert version == "1.0.2"` → `"1.1.0"`.
+- `.github/workflows/nightly-concord.yml`: pinned image `v1.0.2` → `v1.1.0`.
+- **Reader notes notice** (`ReaderView.tsx`): the "Translator's notes unavailable (is Concord
+  reachable?)" notice now fires **only on a genuine outage** (`CONCORD_UNREACHABLE` / network),
+  not on a `404`. A `404` now means genuinely-not-found (markers simply absent). Pre-v1.1.0 the
+  notes route `404`'d on every translation, so this notice fired on every chapter — the bump makes
+  a `404` honest, and this guard keeps the message correct. New `ReaderView.test.tsx` cases cover
+  502 → notice, 404 → no notice, empty-200 → no notice. **This resolves the "Gotcha carried
+  forward" from the Docs reconcile #2 entry below** (the dormant-translator's-notes misleading
+  notice).
+- Docs: corrected the `v1.0.2` → `v1.1.0` references across the v1.3/v1.4/v1.5 specs and added a
+  reality note in SEARCH-EXPANSION §Slice 0 (per CLAUDE.md "reality corrects the spec").
+
+### Verify
+- Image gate above (curls recorded). Backend `pytest` + Pyright-strict + Ruff clean; the contract
+  test now pins `1.1.0` against the regenerated fixture. Frontend `vitest` (new reader-notice
+  cases) + `tsc` strict + lint clean. `docker compose up` → both services healthy, `GET /healthz`
+  reports Concord reachable (13 translations). In the reader against v1.1.0, the translator's-notes
+  path no longer `404`s and shows no misleading notice on the stock no-notes image.
+
+---
+
 ## Docs reconcile #2 — newest features + SPEC §12 / CLAUDE.md / housekeeping
 
 - **Date:** 2026-06-07
