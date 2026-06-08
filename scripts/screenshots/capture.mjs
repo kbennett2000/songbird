@@ -277,25 +277,30 @@ async function openMap(page) {
   return dialog;
 }
 
-// Pick the most isolated pin (largest nearest-neighbour distance) so the click isn't stolen by
-// an overlapping neighbour — the Mesopotamian rivers sit almost on top of each other.
-async function isolatedPin(page) {
-  const pins = await page.getByTestId("map-pin").all();
-  const boxes = await Promise.all(
-    pins.map(async (p) => ({ p, box: await p.boundingBox(), name: await p.getAttribute("aria-label") })),
-  );
-  const valid = boxes.filter((b) => b.box);
-  let best = valid[0];
+// Locate the most isolated place pin and return the screen point to click.
+// Post-MapLibre (ADR 0003) pins are GL circles with no DOM node, so we can't select one directly.
+// But each unclustered pin now carries a place-name label (issue #86) — a DOM marker seated just
+// right of its pin via anchor:"left", offset:[10,0]. So a label's box locates its pin: the pin
+// center is ~10px left of the label's left edge, at the label's vertical middle. We click that
+// point (labels are pointer-events-none, so the click lands on the GL circle and opens the card).
+// Pick the pin whose neighbours are farthest off so an adjacent pin doesn't steal the click.
+async function isolatedPinPoint(page) {
+  const labels = await page.getByTestId("map-place-label").all();
+  const located = (
+    await Promise.all(
+      labels.map(async (l) => ({ name: (await l.textContent())?.trim(), box: await l.boundingBox() })),
+    )
+  )
+    .filter((b) => b.box)
+    .map((b) => ({ name: b.name, x: b.box.x - 10, y: b.box.y + b.box.height / 2 }));
+  if (located.length === 0) throw new Error("no place-name labels found to locate a pin");
+  let best = located[0];
   let bestDist = -1;
-  for (const a of valid) {
-    const ax = a.box.x + a.box.width / 2;
-    const ay = a.box.y + a.box.height / 2;
+  for (const a of located) {
     let nearest = Infinity;
-    for (const b of valid) {
+    for (const b of located) {
       if (b === a) continue;
-      const dx = b.box.x + b.box.width / 2 - ax;
-      const dy = b.box.y + b.box.height / 2 - ay;
-      nearest = Math.min(nearest, Math.hypot(dx, dy));
+      nearest = Math.min(nearest, Math.hypot(b.x - a.x, b.y - a.y));
     }
     if (nearest > bestDist) {
       bestDist = nearest;
@@ -316,9 +321,9 @@ async function captureMapDesktop(page) {
   console.log("✓ map-desktop.png");
 
   try {
-    // Tap an isolated pin → the selected-place card (name/status/confidence + jump chips).
-    const pin = await isolatedPin(page);
-    await pin.p.click();
+    // Click an isolated pin → the selected-place card (name/status/confidence + jump chips).
+    const pin = await isolatedPinPoint(page);
+    await page.mouse.click(pin.x, pin.y);
     await page.getByTestId("place-card").waitFor({ state: "visible", timeout: 8000 });
     await page.waitForTimeout(300);
     await dialog.screenshot({ path: `${OUT}/map-desktop-card.png` });
@@ -356,9 +361,9 @@ async function captureMapMobile(browser, channel) {
     console.log("✓ map-mobile.png");
 
     try {
-      // Tap (not hover) an isolated pin → card appears; confirms touch selection on mobile.
-      const pin = await isolatedPin(page);
-      await pin.p.tap();
+      // Tap (not click) an isolated pin → card appears; confirms touch selection on mobile.
+      const pin = await isolatedPinPoint(page);
+      await page.touchscreen.tap(pin.x, pin.y);
       await page.getByTestId("place-card").waitFor({ state: "visible", timeout: 8000 });
       await page.waitForTimeout(300);
       await page.screenshot({ path: `${OUT}/map-mobile-card.png` });

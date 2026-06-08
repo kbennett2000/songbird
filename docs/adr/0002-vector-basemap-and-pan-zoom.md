@@ -1,8 +1,12 @@
 # ADR 0002 — Vector (SVG) basemap, client-side pan/zoom, and curated labels
 
-- **Status:** Accepted
+- **Status:** Superseded by [ADR 0003](0003-maplibre-offline-pmtiles-basemap.md)
 - **Date:** 2026-06-08
 - **Context:** songbird Map View UX (issue #76); amends [ADR 0001](0001-offline-bundled-equirectangular-basemap.md)
+- **Superseded:** The hand-rolled vector-SVG basemap and CSS-transform pan/zoom here were short-lived —
+  ADR 0003 moved to MapLibre GL over bundled PMTiles (real relief, native pan/zoom/clustering) the
+  same day. The offline-and-honest goals carry forward; the bespoke pan/zoom engine was retired.
+  Kept for the decision history.
 
 ## Context
 

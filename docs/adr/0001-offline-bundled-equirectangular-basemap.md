@@ -1,8 +1,12 @@
 # ADR 0001 — Offline bundled equirectangular basemap for the Map View
 
-- **Status:** Accepted
+- **Status:** Superseded by [ADR 0003](0003-maplibre-offline-pmtiles-basemap.md) (via [ADR 0002](0002-vector-basemap-and-pan-zoom.md))
 - **Date:** 2026-06-06
 - **Context:** songbird v1.1 Map View (`docs/v1.1/MAP-SPEC.md`)
+- **Superseded:** The equirectangular static-image basemap was replaced — first by a vector SVG with
+  client pan/zoom (ADR 0002), then by the current MapLibre GL renderer over bundled PMTiles
+  (ADR 0003). The offline-bundled-basemap *principle* this ADR established still holds; only the
+  asset/projection mechanics changed. Kept for the decision history.
 
 ## Context
 
