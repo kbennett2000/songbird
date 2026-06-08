@@ -34,6 +34,28 @@ def build_chapter(
     )
 
 
+def build_range(
+    book: str, chapter: int, start: int, end: int, translation: str = "KJV"
+) -> Chapter:
+    """A canned 'resolved reference' chapter spanning verses start..end — what Concord returns for
+    a ranged reference like "Joshua 6:1-16". The sermon-note create/update derives its span from
+    the first and last verse of this list."""
+    return Chapter(
+        reference=f"{book} {chapter}:{start}-{end}",
+        translations=[translation],
+        verses=[
+            ChapterVerse(
+                book=book,
+                chapter=chapter,
+                verse=v,
+                reference=f"{book} {chapter}:{v}",
+                text={translation: f"{translation} text for {book} {chapter}:{v}"},
+            )
+            for v in range(start, end + 1)
+        ],
+    )
+
+
 ANNOTATION_BODY = {
     "book_usfm": "JHN",
     "start_chapter": 3,

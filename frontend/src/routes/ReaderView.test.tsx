@@ -895,18 +895,77 @@ describe("ReaderView", () => {
     await user.keyboard("{Enter}");
     await user.click(screen.getByRole("button", { name: "Save" }));
 
-    // The client sends the canonical anchor + tags — but NOT book_order_index (server resolves it).
+    // The client sends only the human reference + tags; the server resolves the canonical anchor
+    // and span from it (#91), so no coordinate fields go on the wire.
     expect(await screen.findByRole("button", { name: "Sermon on verse 16" })).toBeInTheDocument();
     expect(captured).toMatchObject({
       title: "A New Sermon",
       sermon_url: "https://example.test/x",
       reference: "John 3:16",
-      book_usfm: "JHN",
-      start_chapter: 3,
-      start_verse: 16,
       tags: ["grace"],
     });
-    expect(captured).not.toHaveProperty("book_order_index");
+    for (const coord of [
+      "book_usfm",
+      "book_order_index",
+      "start_chapter",
+      "start_verse",
+      "end_chapter",
+      "end_verse",
+    ]) {
+      expect(captured).not.toHaveProperty(coord);
+    }
+  });
+
+  it("can author a sermon note over a verse range via the reference", async () => {
+    let captured: Record<string, unknown> | null = null;
+    server.use(
+      http.get("/api/v1/read/:translation/:book/:chapter", () =>
+        HttpResponse.json(readResponse([], "KJV", [])),
+      ),
+      http.post("/api/v1/sermon-notes", async ({ request }) => {
+        captured = (await request.json()) as Record<string, unknown>;
+        return HttpResponse.json(sermonNote(), { status: 201 });
+      }),
+    );
+
+    const user = userEvent.setup();
+    renderReader();
+
+    await user.click(await screen.findByRole("button", { name: "Annotate verse 16" }));
+    await user.click(screen.getByRole("tab", { name: "Sermon" }));
+
+    const reference = screen.getByLabelText("Reference");
+    await user.clear(reference);
+    await user.type(reference, "Joshua 6:1-16");
+    await user.type(screen.getByLabelText("Title"), "Jericho");
+    await user.type(screen.getByLabelText("Sermon URL"), "https://example.test/j");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    // The range reference is forwarded verbatim — the server expands it into the covering span.
+    await vi.waitFor(() => expect(captured).not.toBeNull());
+    expect(captured).toMatchObject({ reference: "Joshua 6:1-16" });
+  });
+
+  it("surfaces an error when the sermon reference can't be resolved", async () => {
+    server.use(
+      http.get("/api/v1/read/:translation/:book/:chapter", () =>
+        HttpResponse.json(readResponse([], "KJV", [])),
+      ),
+      http.post("/api/v1/sermon-notes", () =>
+        HttpResponse.json({ detail: { code: "NOT_FOUND", message: "no" } }, { status: 404 }),
+      ),
+    );
+
+    const user = userEvent.setup();
+    renderReader();
+
+    await user.click(await screen.findByRole("button", { name: "Annotate verse 16" }));
+    await user.click(screen.getByRole("tab", { name: "Sermon" }));
+    await user.type(screen.getByLabelText("Title"), "Bad ref");
+    await user.type(screen.getByLabelText("Sermon URL"), "https://example.test/x");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(await screen.findByText(/Couldn't find that reference/)).toBeInTheDocument();
   });
 
   it("edits a sermon note from its popover", async () => {
