@@ -57,9 +57,13 @@ dynamic set — fetch the available types from the data rather than hardcoding (
   `ConcordUnreachableError`; `404` → `ConcordNotFoundError`.
 - **Concord schema** (`concord/schemas.py`): `PlaceDetail` (the detail fields the UI shows) and a
   `PlacesPage` (`places`, `total` for pagination). The summary `Place` already exists.
-- **songbird API**: `GET /api/v1/places` (browse — passthrough of the filters + pagination) and
-  `GET /api/v1/places/{id}` (detail). `api/schemas.py` gains the matching response models.
-  Unreachable → `502`; `404` → `404`.
+- **songbird API**: `GET /api/v1/places/browse` (browse — passthrough of the filters +
+  pagination) and `GET /api/v1/places/{id}` (detail), plus `GET /api/v1/place-types` (the derived
+  `type` vocabulary). `api/schemas.py` gains the matching response models. Unreachable → `502`;
+  `404` → `404`. (Browse is `/places/browse`, **not** `/api/v1/places` — that path is already the
+  per-chapter map endpoint; reality-corrects-spec, Slice 3.) The `type` options come from
+  Concord's unknown-type-error `available` list (`/api/v1/place-types`), with a graceful `[]`
+  fallback so the UI hides the type filter rather than ever hardcoding a list that goes stale.
 - **Frontend** — a new route `/places`:
   - **List**: filter by `type` and `status`, text search by name (`q`), paginated. Each row:
     name, type, status, modern name (when present), with unknown/symbolic places clearly marked.

@@ -6,6 +6,7 @@ over HTTP at a configured URL, never embedded; when it is unreachable songbird r
 clear error rather than falling back.
 """
 
+from typing import Any
 from urllib.parse import quote
 
 import httpx
@@ -19,6 +20,8 @@ from songbird.concord.schemas import (
     KeywordSearchResponse,
     NoteSearchResponse,
     NotesResponse,
+    PlaceDetail,
+    PlacesPage,
     PlaceVersesResponse,
     SemanticSearchResponse,
     Translation,
@@ -200,6 +203,73 @@ class ConcordClient:
         except httpx.HTTPError as exc:
             raise ConcordUnreachableError(self._base_url, exc) from exc
         return VersePlacesResponse.model_validate(response.json())
+
+    async def list_places(
+        self,
+        type: str | None = None,
+        status: str | None = None,
+        q: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> PlacesPage:
+        """One page of the whole gazetteer (`/v1/places`) — filter by type/status/name, paginated.
+        Honesty model carried through. A 400/404 (e.g. unknown type/status filter) is a client
+        error, not unreachability."""
+        params: dict[str, str] = {"limit": str(limit), "offset": str(offset)}
+        if type:
+            params["type"] = type
+        if status:
+            params["status"] = status
+        if q:
+            params["q"] = q
+        try:
+            response = await self._client.get("/v1/places", params=params)
+            response.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code in (400, 404):
+                raise ConcordNotFoundError(
+                    f"Concord could not run that places query: {exc.response.status_code}"
+                ) from exc
+            raise ConcordUnreachableError(self._base_url, exc) from exc
+        except httpx.HTTPError as exc:
+            raise ConcordUnreachableError(self._base_url, exc) from exc
+        return PlacesPage.model_validate(response.json())
+
+    async def get_place(self, place_id: str) -> PlaceDetail:
+        """A single place's full record (`/v1/places/{id}`). A 404 is a real not-found."""
+        try:
+            response = await self._client.get(f"/v1/places/{quote(place_id, safe='')}")
+            response.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code in (400, 404):
+                raise ConcordNotFoundError(f"Concord has no place '{place_id}'") from exc
+            raise ConcordUnreachableError(self._base_url, exc) from exc
+        except httpx.HTTPError as exc:
+            raise ConcordUnreachableError(self._base_url, exc) from exc
+        return PlaceDetail.model_validate(response.json())
+
+    async def list_place_types(self) -> list[str]:
+        """The gazetteer's `type` vocabulary, derived from Concord rather than hardcoded (so it
+        never goes stale as Concord adds types). Concord has no list-types endpoint, but rejects an
+        unknown `type` with `{error: {detail: {available: [...]}}}` — we read it. Best-effort: any
+        failure (or a Concord that stops surfacing the list) yields `[]`, and the UI hides the type
+        filter rather than showing a stale or broken one."""
+        try:
+            response = await self._client.get(
+                "/v1/places", params={"type": "__songbird_probe__", "limit": "1"}
+            )
+        except httpx.HTTPError:
+            return []
+        if response.status_code == 200:
+            return []  # no error → no `available` list to read; hide the filter
+        try:
+            available = response.json()["error"]["detail"]["available"]
+        except (ValueError, KeyError, TypeError):
+            return []
+        if not isinstance(available, list):
+            return []
+        items: list[Any] = available
+        return [t for t in items if isinstance(t, str)]
 
     async def get_notes(self, translation: str, book: str, chapter: int) -> NotesResponse:
         """Translator's notes for a whole chapter in one translation, from Concord (songbird

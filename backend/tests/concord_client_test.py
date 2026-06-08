@@ -519,3 +519,105 @@ async def test_get_place_verses_unknown_is_not_found() -> None:
     with pytest.raises(ConcordNotFoundError):
         await client.get_place_verses("does-not-exist")
     await client.aclose()
+
+
+async def test_list_places_sends_filters_and_parses_page() -> None:
+    seen: dict[str, str] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["path"] = request.url.path
+        for k in ("type", "status", "q", "limit", "offset"):
+            seen[k] = request.url.params.get(k, "")
+        return httpx.Response(
+            200,
+            json={
+                "total": 1340,
+                "places": [
+                    {
+                        "id": "a15257a",
+                        "friendly_id": "Jerusalem",
+                        "name": "Jerusalem",
+                        "type": "settlement",
+                        "latitude": 31.78,
+                        "longitude": 35.23,
+                        "confidence": "high",
+                        "confidence_score": 90,
+                        "status": "identified",
+                    }
+                ],
+            },
+        )
+
+    client = ConcordClient("http://concord.test", transport=httpx.MockTransport(handler))
+    page = await client.list_places(type="settlement", status="identified", q="jer", limit=25, offset=50)
+    await client.aclose()
+    assert seen == {
+        "path": "/v1/places",
+        "type": "settlement",
+        "status": "identified",
+        "q": "jer",
+        "limit": "25",
+        "offset": "50",
+    }
+    assert page.total == 1340
+    assert page.places[0].name == "Jerusalem"
+
+
+async def test_get_place_parses_detail_fields() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/v1/places/a15257a"
+        return httpx.Response(
+            200,
+            json={
+                "id": "a15257a",
+                "friendly_id": "Jerusalem",
+                "name": "Jerusalem",
+                "url_slug": "jerusalem",
+                "type": "settlement",
+                "preceding_article": None,
+                "latitude": 31.78,
+                "longitude": 35.23,
+                "confidence": "high",
+                "confidence_score": 90,
+                "status": "identified",
+                "modern_name": "Jerusalem, Israel",
+                "verse_count": 800,
+            },
+        )
+
+    client = ConcordClient("http://concord.test", transport=httpx.MockTransport(handler))
+    detail = await client.get_place("a15257a")
+    await client.aclose()
+    assert detail.modern_name == "Jerusalem, Israel"
+    assert detail.verse_count == 800
+
+
+async def test_list_place_types_parses_available_from_unknown_type_error() -> None:
+    # Concord rejects an unknown `type` with the full vocabulary in error.detail.available — we read
+    # it rather than hardcoding a list that goes stale (verified live against v1.1.0).
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            400,
+            json={
+                "error": {
+                    "code": "unknown_type",
+                    "message": "unknown place type '__songbird_probe__'",
+                    "detail": {"type": "__songbird_probe__", "available": ["altar", "settlement"]},
+                }
+            },
+        )
+
+    client = ConcordClient("http://concord.test", transport=httpx.MockTransport(handler))
+    types = await client.list_place_types()
+    await client.aclose()
+    assert types == ["altar", "settlement"]
+
+
+async def test_list_place_types_empty_when_not_surfaced() -> None:
+    # Graceful fallback: a 200 (no error body) or a malformed error → [] (the UI hides the filter).
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"total": 0, "places": []})
+
+    client = ConcordClient("http://concord.test", transport=httpx.MockTransport(handler))
+    assert await client.list_place_types() == []
+    await client.aclose()

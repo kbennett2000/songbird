@@ -166,6 +166,23 @@ export const placeSchema = z.object({
 });
 export const placesSchema = z.array(placeSchema);
 
+// One page of the gazetteer browse — `total` drives "Load more" pagination.
+export const placesPageSchema = z.object({
+  places: placesSchema,
+  total: z.number(),
+});
+
+// A single place's full record (gazetteer detail) — the summary fields + the detail-only ones.
+export const placeDetailSchema = placeSchema.extend({
+  url_slug: z.string().nullable().optional(),
+  preceding_article: z.string().nullable().optional(),
+  modern_name: z.string().nullable().optional(),
+  verse_count: z.number(),
+});
+
+// The gazetteer's `type` vocabulary (from Concord; empty → the UI hides the type filter).
+export const placeTypesSchema = z.array(z.string());
+
 export const placeVerseSchema = z.object({
   book: z.string(),
   chapter: z.number(),
@@ -185,6 +202,8 @@ export type CrossReference = z.infer<typeof crossReferenceSchema>;
 export type NoteCrossReference = z.infer<typeof noteCrossReferenceSchema>;
 export type TranslatorNote = z.infer<typeof translatorNoteSchema>;
 export type Place = z.infer<typeof placeSchema>;
+export type PlaceDetail = z.infer<typeof placeDetailSchema>;
+export type PlacesPage = z.infer<typeof placesPageSchema>;
 export type PlaceVerse = z.infer<typeof placeVerseSchema>;
 
 // A ranked Scripture result from Concord's semantic search.

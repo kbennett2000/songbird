@@ -25,6 +25,8 @@ from songbird.concord.schemas import (
     KeywordSearchResponse,
     NoteSearchResponse,
     NotesResponse,
+    PlaceDetail,
+    PlacesPage,
     PlaceVersesResponse,
     SemanticSearchResponse,
     Translation,
@@ -55,6 +57,9 @@ class FakeConcordClient:
         semantic: SemanticSearchResponse | None = None,
         keyword: KeywordSearchResponse | None = None,
         note_search: NoteSearchResponse | None = None,
+        places_page: PlacesPage | None = None,
+        place_detail: PlaceDetail | None = None,
+        place_types: list[str] | None = None,
         error: Exception | None = None,
         base_url: str = "http://concord.test",
     ) -> None:
@@ -69,7 +74,12 @@ class FakeConcordClient:
         self._semantic = semantic
         self._keyword = keyword
         self._note_search = note_search
+        self._places_page = places_page
+        self._place_detail = place_detail
+        self._place_types = place_types or []
         self._error = error
+        # Records the last `list_places` filter args so tests can assert filter/pagination passthrough.
+        self.last_list_places: dict[str, object] = {}
         self.base_url = base_url
         # Records the last `keyword_search` translations arg so tests can assert the endpoint's
         # CSV→list parse and the absent→None (search-all) default.
@@ -125,6 +135,35 @@ class FakeConcordClient:
         return (
             self._place_verses if self._place_verses is not None else PlaceVersesResponse(verses=[])
         )
+
+    async def list_places(
+        self,
+        type: str | None = None,
+        status: str | None = None,
+        q: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> PlacesPage:
+        self.last_list_places = {
+            "type": type,
+            "status": status,
+            "q": q,
+            "limit": limit,
+            "offset": offset,
+        }
+        if self._error is not None:
+            raise self._error
+        return self._places_page if self._places_page is not None else PlacesPage(places=[], total=0)
+
+    async def get_place(self, place_id: str) -> PlaceDetail:
+        if self._error is not None:
+            raise self._error
+        assert self._place_detail is not None
+        return self._place_detail
+
+    async def list_place_types(self) -> list[str]:
+        # The real client swallows failures to [] (the UI hides the filter), so the fake never raises.
+        return self._place_types
 
     async def get_notes(self, translation: str, book: str, chapter: int) -> NotesResponse:
         if self._error is not None:

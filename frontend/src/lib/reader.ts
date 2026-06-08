@@ -4,6 +4,8 @@ import {
   type Book,
   type CrossReference,
   type Place,
+  type PlaceDetail,
+  type PlacesPage,
   type PlaceVerse,
   type ReadChapter,
   type ResolvedReference,
@@ -18,7 +20,10 @@ import {
   annotationsListSchema,
   booksResponseSchema,
   crossReferencesSchema,
+  placeDetailSchema,
+  placeTypesSchema,
   placeVersesSchema,
+  placesPageSchema,
   placesSchema,
   readChapterSchema,
   resolvedReferenceSchema,
@@ -93,6 +98,41 @@ export async function fetchPlaceVerses(placeId: string): Promise<PlaceVerse[]> {
     `/places/${encodeURIComponent(placeId)}/verses`,
   );
   return placeVersesSchema.parse(data);
+}
+
+// --- Gazetteer (v1.4): browse the WHOLE place corpus + per-place detail. Distinctly named from
+// the per-chapter map's fetchPlaces/fetchPlaceVerses above (which are untouched).
+
+export interface PlaceFilters {
+  type?: string;
+  status?: string;
+  q?: string;
+  limit?: number;
+  offset?: number;
+}
+
+/** One page of the gazetteer — filter by type/status/name, paginated (`{ places, total }`). */
+export async function browsePlaces(filters: PlaceFilters = {}): Promise<PlacesPage> {
+  const params = new URLSearchParams();
+  if (filters.type) params.set("type", filters.type);
+  if (filters.status) params.set("status", filters.status);
+  if (filters.q) params.set("q", filters.q);
+  params.set("limit", String(filters.limit ?? 50));
+  params.set("offset", String(filters.offset ?? 0));
+  const data = await apiRequest<unknown>("GET", `/places/browse?${params.toString()}`);
+  return placesPageSchema.parse(data);
+}
+
+/** A single place's full record (honesty model + detail fields). */
+export async function fetchPlace(placeId: string): Promise<PlaceDetail> {
+  const data = await apiRequest<unknown>("GET", `/places/${encodeURIComponent(placeId)}`);
+  return placeDetailSchema.parse(data);
+}
+
+/** The gazetteer's `type` vocabulary, from Concord (empty → the UI hides the type filter). */
+export async function fetchPlaceTypes(): Promise<string[]> {
+  const data = await apiRequest<unknown>("GET", "/place-types");
+  return placeTypesSchema.parse(data);
 }
 
 export async function fetchChapter(

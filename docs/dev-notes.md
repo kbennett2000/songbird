@@ -4,6 +4,60 @@ A running log of per-slice decisions, gotchas, and how each slice was verified. 
 
 ---
 
+## Slice 3 (v1.4) — Places gazetteer
+
+- **Date:** 2026-06-07
+- **Branch:** `slice/3-places-gazetteer`
+- **Scope:** a standalone, browsable/filterable/paginated gazetteer of all ~1,340 places Concord
+  knows, plus a deep-linkable detail route. Over Concord's existing `/v1/places` + `/v1/places/{id}`
+  (live since v1.0.0). **No Concord change.** The per-chapter map is untouched.
+
+### What changed
+- **Client** (`concord/client.py`): `list_places(type?, status?, q?, limit, offset) → PlacesPage`,
+  `get_place(id) → PlaceDetail`, `list_place_types() → list[str]`. `get_places`/`get_place_verses`
+  untouched. **Schemas**: `PlaceDetail` (summary + url_slug/preceding_article/modern_name/
+  verse_count), `PlacesPage` (places + total).
+- **API** (`geography.py`): `GET /api/v1/places/browse`, `GET /api/v1/places/{id}`,
+  `GET /api/v1/place-types`. Errors **surface** (unreachable → 502, bad filter / unknown id → 404)
+  — NOT best-effort (the opposite of Slice 2's Study notes).
+- **Frontend**: `browsePlaces`/`fetchPlace`/`fetchPlaceTypes`; new routes `/places` (list, filters,
+  `useInfiniteQuery` "Load more") and `/places/:id` (detail + verses). Extracted the honesty
+  presentation (`STATUS_BADGE` + the location renderer) from `Geography.tsx` into a shared
+  `components/PlaceHonesty.tsx` (`StatusBadge`, `PlaceLocation`) — reused verbatim, never
+  reinvented. WelcomeView quick-link + a "Places" nav entry. Contract test pins `/v1/places` and
+  `/v1/places/{}`.
+
+### Clarifications (open-question answers)
+1. **No collision with the chapter map.** `fetchPlaces`/`get_places` left untouched; gazetteer adds
+   distinctly-named `browsePlaces`/`fetchPlace` + `list_places`/`get_place`. **Route gotcha:**
+   `GET /api/v1/places` is *already* the chapter-map endpoint (it takes `book`+`chapter`), so browse
+   could **not** live there — it went to **`/api/v1/places/browse`** (declared before `/places/{id}`
+   so "browse" isn't read as an id). Verified live that both coexist.
+2. **`type` vocabulary never hardcoded.** `status` uses its fixed enum; `type` options come from
+   Concord's unknown-type-error `available` list (`list_place_types` sends a sentinel type, reads
+   `error.detail.available`). The live probe confirmed **36 types** returned cleanly, so the type
+   dropdown ships. Graceful `[]` fallback hides the dropdown if Concord ever stops surfacing it.
+3. **Detail is a real route** `/places/:id` (not a modal); "Open in reader" = verse-only jump (no
+   translation switch, like Slice 2). "View on map" deferred.
+4. **Errors surface** (primary content): visible "Couldn't load places" on outage, not-found on a
+   detail 404, plain "No places match" empty state on zero results. Deliberately the opposite of
+   Slice 2's best-effort swallow.
+5. **Paginated** (`useInfiniteQuery`, 50/page, "Load more"); honesty model per row via the shared
+   `PlaceHonesty` presentation.
+6. **Discoverability**: WelcomeView quick-link + a Reader-header "Places" nav entry.
+
+### Verify
+- Backend `pytest` 182 passed (new `places_test.py` + client-level tests + contract additions);
+  Pyright-strict + Ruff clean. Frontend `vitest` 148 passed (new PlacesView + PlaceDetailView);
+  `tsc` + lint clean. Geography's 36 existing tests still green after the honesty extraction.
+- **End-to-end (live v1.1.0 — ships real places, so the happy path IS verifiable):** browse
+  `total: 1340`; `status=symbolic` → 3, `q=jerusalem` → Jerusalem; offset paging works;
+  `place-types` → 36; detail (Jerusalem, modern name, `verse_count` 955) + 200 verses; unknown id →
+  404; and the **chapter-map `/api/v1/places?book=&chapter=` still 200** (collision-free). Canonical
+  bridge untouched.
+
+---
+
 ## Slice 2 (v1.3) — Notes ("Study notes") keyword search
 
 - **Date:** 2026-06-07

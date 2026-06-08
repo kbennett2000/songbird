@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 
+import { PlaceLocation, StatusBadge } from "@/components/PlaceHonesty";
 import { fetchPlaceVerses, fetchPlaces } from "@/lib/reader";
 import type { Place } from "@/schemas";
 
@@ -8,29 +9,6 @@ interface GeographyProps {
   book: string;
   chapter: number;
   onJump: (book: string, chapter: number, verse: number) => void;
-}
-
-const STATUS_BADGE: Record<string, string> = {
-  identified: "bg-green-100 text-green-800",
-  disputed: "bg-amber-100 text-amber-800",
-  unknown: "bg-gray-100 text-gray-600",
-  symbolic: "bg-gray-100 text-gray-600",
-  multiple: "bg-gray-100 text-gray-600",
-};
-
-/** Carry Concord's honesty model through to the UI: identified → coordinates; disputed →
- * coordinates marked contested; unknown/symbolic → "Location unknown", never a fabricated pin. */
-function Location({ place }: { place: Place }): JSX.Element {
-  if (place.latitude === null || place.longitude === null) {
-    return <span className="text-sm italic text-gray-400">Location unknown</span>;
-  }
-  return (
-    <span className="text-sm text-gray-600">
-      {place.latitude.toFixed(2)}, {place.longitude.toFixed(2)}
-      {place.confidence && <span className="text-gray-400"> · {place.confidence} confidence</span>}
-      {place.status === "disputed" && <span className="text-amber-700"> · contested</span>}
-    </span>
-  );
 }
 
 function PlaceRow({
@@ -56,12 +34,10 @@ function PlaceRow({
         aria-expanded={open}
       >
         <span className="font-medium">{place.name}</span>
-        <span className={`rounded px-1.5 py-0.5 text-xs ${STATUS_BADGE[place.status] ?? STATUS_BADGE.unknown}`}>
-          {place.status}
-        </span>
+        <StatusBadge status={place.status} />
       </button>
       <div className="mt-0.5">
-        <Location place={place} />
+        <PlaceLocation place={place} />
       </div>
       {open && (
         <div className="mt-2 border-t border-gray-100 pt-2">

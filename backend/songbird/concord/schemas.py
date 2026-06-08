@@ -91,6 +91,23 @@ class VersePlacesResponse(BaseModel):
     places: list[Place]
 
 
+class PlacesPage(BaseModel):
+    """One page of the gazetteer browse (`/v1/places`). `total` drives pagination."""
+
+    places: list[Place]
+    total: int
+
+
+class PlaceDetail(Place):
+    """A single place's full record (`/v1/places/{id}`) — the summary `Place` (honesty model and
+    all) plus the detail-only fields the gazetteer screen shows."""
+
+    url_slug: str | None = None
+    preceding_article: str | None = None
+    modern_name: str | None = None
+    verse_count: int = 0
+
+
 class PlaceVerse(BaseModel):
     book: str  # USFM code — canonical
     chapter: int

@@ -252,6 +252,23 @@ class Place(BaseModel):
     status: str  # identified | disputed | unknown | symbolic | multiple
 
 
+class PlaceDetail(Place):
+    """A single place's full record for the gazetteer detail screen — the summary `Place`
+    (honesty model and all) plus the detail-only fields."""
+
+    url_slug: str | None = None
+    preceding_article: str | None = None
+    modern_name: str | None = None
+    verse_count: int = 0
+
+
+class PlacesPageOut(BaseModel):
+    """One page of the gazetteer browse — `total` lets the client paginate ("Load more")."""
+
+    places: list[Place]
+    total: int
+
+
 class PlaceVerse(BaseModel):
     book: str  # USFM code — canonical
     chapter: int
