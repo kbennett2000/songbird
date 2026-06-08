@@ -79,6 +79,9 @@ class User(Base):
     last_translation: Mapped[str | None] = mapped_column(String(16), nullable=True)
     last_book: Mapped[str | None] = mapped_column(String(3), nullable=True)
     last_chapter: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # UI colour-scheme preference, per profile (#60): "light" | "dark" | "system". Null = follow
+    # the OS until the user picks. songbird's own domain — no Concord involvement.
+    theme: Mapped[str | None] = mapped_column(String(16), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=_utcnow
     )
