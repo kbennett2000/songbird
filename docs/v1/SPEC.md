@@ -359,6 +359,12 @@ imported / skipped / failed. Controls live in the Browse view.
 greeting, library counts (notes, sermons, tags), a "pick up where you left off" card from the
 saved reading position, a recent-notes feed, and quick links to Browse / Search / Compare / Places.
 
+**Light / dark theme (issue #60).** A per-profile theme: `users.theme` (`'light' | 'dark' |
+'system'`, nullable; migration `0009`) persists each reader's choice via `PATCH /api/v1/auth/me`,
+and a top-nav toggle switches it live. The frontend applies the saved theme before first paint (an
+inline script in `index.html`) so there's no flash of the wrong theme on load; `system` follows the
+OS preference. Pure presentation — no Bible text, no Concord involvement.
+
 **Verse of the day (v1.5).** The Welcome page leads with a verse-of-the-day card — one random
 verse from Concord's `/v1/random?translation=` in the profile's reading translation, with an
 "Open in reader" link and a "show another" re-roll. Best-effort and bonus: it's the page's only
@@ -385,7 +391,7 @@ search) in `docs/v1.3/SEARCH-EXPANSION-SPEC.md`; the places gazetteer in
 `docs/v1.4/PLACES-SPEC.md`; and the verse of the day in `docs/v1.5/RANDOM-VERSE-SPEC.md`.
 
 **The data model, restated.** songbird's database holds: `users` (now with `last_translation`,
-`last_book`, `last_chapter`), `sessions`, `annotations`, `annotation_translations`, `tags`
+`last_book`, `last_chapter`, `theme`), `sessions`, `annotations`, `annotation_translations`, `tags`
 (+ `annotation_tags`, `sermon_note_tags` joins), and `sermon_notes`. Keyword search, compare,
 export/import, the home page, and the later search expansion (multi-translation keyword +
 study-note search, v1.3), the places gazetteer (v1.4), and the verse of the day (v1.5) all added
