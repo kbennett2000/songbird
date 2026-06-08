@@ -304,7 +304,10 @@ three independent nullable columns, not validated on write — the reader self-h
 
 **Sermon notes (a second annotation type).** A `sermon_notes` table pins a sermon — `title`,
 `sermon_url`, `reference`, `event_date` — to a canonical verse span (same USFM coordinates as
-annotations, so the bridge invariant §4 applies equally). They overlay in the reader (markers,
+annotations, so the bridge invariant §4 applies equally). The client sends only the human
+`reference`; the server resolves it through Concord into that span, so a ranged reference (e.g.
+`Joshua 6:1-16`) covers — and overlays on — every verse in the range, and editing the reference
+re-anchors the note. They overlay in the reader (markers,
 a count badge, and a newest-first stacked popover when several land on one verse), appear in the
 Browse view, are taggable from the **shared** tag vocabulary, and have full CRUD. A one-time
 **seed importer** transforms a soap-journal backup into sermon notes (with guards so it never
