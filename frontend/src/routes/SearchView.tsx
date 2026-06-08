@@ -86,6 +86,15 @@ export function SearchView(): JSX.Element {
   const [selected, setSelected] = useState<string[]>([]);
   const [pickerOpen, setPickerOpen] = useState(false);
 
+  // Search scope (#62): what to search — Scripture, your own notes, Concord's study notes. All on
+  // by default (today's behavior); unchecking one stops that search and hides its section. Lets a
+  // user search Scripture OR the notes OR any mix, and makes the study-notes search discoverable.
+  // In-memory, not persisted.
+  const [scriptureOn, setScriptureOn] = useState(true);
+  const [yourNotesOn, setYourNotesOn] = useState(true);
+  const [studyNotesOn, setStudyNotesOn] = useState(true);
+  const nothingSelected = !scriptureOn && !yourNotesOn && !studyNotesOn;
+
   const booksQuery = useQuery({ queryKey: ["books"], queryFn: fetchBooks });
   const booksById = useMemo(
     () => new Map((booksQuery.data ?? []).map((b) => [b.id, b])),
@@ -96,20 +105,20 @@ export function SearchView(): JSX.Element {
   const semantic = useQuery({
     queryKey: ["semantic-search", query, readingTranslation],
     queryFn: () => semanticSearch(query, readingTranslation),
-    enabled: mode === "semantic" && query.length > 0,
+    enabled: scriptureOn && mode === "semantic" && query.length > 0,
   });
   const keyword = useQuery({
     // The selection is part of the key so narrowing refetches; sorted so order doesn't churn it.
     queryKey: ["keyword-search", query, [...selected].sort().join(",")],
     queryFn: () => keywordSearch(query, selected.length > 0 ? selected : undefined),
-    enabled: mode === "keyword" && query.length > 0,
+    enabled: scriptureOn && mode === "keyword" && query.length > 0,
   });
   const scripture = mode === "semantic" ? semantic : keyword;
   const otherMode: Mode = mode === "keyword" ? "semantic" : "keyword";
   const notes = useQuery({
     queryKey: ["note-search", query],
     queryFn: () => searchAnnotations(query),
-    enabled: query.length > 0,
+    enabled: yourNotesOn && query.length > 0,
   });
   // Concord's translator's/study notes — independent of the Scripture mode/picker, like "Your
   // notes". Its own key (distinct from "note-search"). Best-effort: the backend swallows failures
@@ -117,7 +126,7 @@ export function SearchView(): JSX.Element {
   const studyNotes = useQuery({
     queryKey: ["study-notes-search", query],
     queryFn: () => searchStudyNotes(query),
-    enabled: query.length > 0,
+    enabled: studyNotesOn && query.length > 0,
   });
 
   const submit = (e: FormEvent) => {
@@ -146,22 +155,25 @@ export function SearchView(): JSX.Element {
       </header>
 
       <main className="mx-auto max-w-3xl p-6">
-        <div className="mb-3 flex w-full gap-1 rounded-lg bg-gray-100 p-1 sm:w-72" role="tablist">
-          {(["semantic", "keyword"] as const).map((m) => (
-            <button
-              key={m}
-              type="button"
-              role="tab"
-              aria-selected={mode === m}
-              className={`flex-1 rounded-md px-3 py-1 text-sm font-medium ${
-                mode === m ? "bg-white text-gray-900 shadow" : "text-gray-500 hover:text-gray-700"
-              }`}
-              onClick={() => setMode(m)}
-            >
-              {m === "semantic" ? "Semantic" : "Keyword"}
-            </button>
-          ))}
-        </div>
+        {/* Scripture's semantic/keyword sub-toggle — only when Scripture is in scope. */}
+        {scriptureOn && (
+          <div className="mb-3 flex w-full gap-1 rounded-lg bg-gray-100 p-1 sm:w-72" role="tablist">
+            {(["semantic", "keyword"] as const).map((m) => (
+              <button
+                key={m}
+                type="button"
+                role="tab"
+                aria-selected={mode === m}
+                className={`flex-1 rounded-md px-3 py-1 text-sm font-medium ${
+                  mode === m ? "bg-white text-gray-900 shadow" : "text-gray-500 hover:text-gray-700"
+                }`}
+                onClick={() => setMode(m)}
+              >
+                {m === "semantic" ? "Semantic" : "Keyword"}
+              </button>
+            ))}
+          </div>
+        )}
 
         <form onSubmit={submit} className="mb-3 flex gap-2">
           <input
@@ -169,9 +181,11 @@ export function SearchView(): JSX.Element {
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             placeholder={
-              mode === "semantic"
-                ? "Search by meaning… e.g. anxiety, the good shepherd"
-                : "Search for an exact word or phrase… e.g. living water"
+              !scriptureOn
+                ? "Search your notes…"
+                : mode === "semantic"
+                  ? "Search by meaning… e.g. anxiety, the good shepherd"
+                  : "Search for an exact word or phrase… e.g. living water"
             }
             aria-label="Search query"
             className="flex-1 rounded border border-gray-300 px-3 py-2"
@@ -184,9 +198,39 @@ export function SearchView(): JSX.Element {
           </button>
         </form>
 
+        {/* Search scope (#62) — what to search. All on by default; uncheck to exclude a kind. */}
+        <fieldset className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-gray-700">
+          <legend className="sr-only">What to search</legend>
+          <span className="text-gray-500">Search:</span>
+          <label className="flex items-center gap-1.5">
+            <input
+              type="checkbox"
+              checked={scriptureOn}
+              onChange={(e) => setScriptureOn(e.target.checked)}
+            />
+            Scripture
+          </label>
+          <label className="flex items-center gap-1.5">
+            <input
+              type="checkbox"
+              checked={yourNotesOn}
+              onChange={(e) => setYourNotesOn(e.target.checked)}
+            />
+            Your notes
+          </label>
+          <label className="flex items-center gap-1.5">
+            <input
+              type="checkbox"
+              checked={studyNotesOn}
+              onChange={(e) => setStudyNotesOn(e.target.checked)}
+            />
+            Study notes
+          </label>
+        </fieldset>
+
         {/* Translation scope — keyword only. Defaults to all loaded translations; narrow to a
             subset here. In-memory: this resets on reload. (Semantic shows one display translation.) */}
-        {mode === "keyword" && (
+        {scriptureOn && mode === "keyword" && (
           <div className="mb-6">
             <button
               type="button"
@@ -237,7 +281,9 @@ export function SearchView(): JSX.Element {
 
         {query.length > 0 && (
           <div className="flex flex-col gap-8">
+            {nothingSelected && <p className="text-gray-500">Pick what to search above.</p>}
             {/* Scripture — semantic or keyword search via Concord, per the mode toggle */}
+            {scriptureOn && (
             <section aria-label="Scripture results">
               <h2 className="mb-2 text-lg font-semibold">
                 Scripture{" "}
@@ -288,8 +334,10 @@ export function SearchView(): JSX.Element {
                 ))}
               </ul>
             </section>
+            )}
 
             {/* Notes — keyword search (semantic note search awaits a Concord embed endpoint) */}
+            {yourNotesOn && (
             <section aria-label="Note results">
               <h2 className="mb-1 text-lg font-semibold">
                 Your notes <span className="text-sm font-normal text-gray-400">(keyword)</span>
@@ -331,11 +379,12 @@ export function SearchView(): JSX.Element {
                 ))}
               </ul>
             </section>
+            )}
 
             {/* Study notes — Concord's translator's/study notes (best-effort). Renders ONLY on
                 real hits: the stock image ships none, so on most deployments this never appears,
                 and any failure is already swallowed to [] by the backend. */}
-            {studyNotes.data && studyNotes.data.length > 0 && (
+            {studyNotesOn && studyNotes.data && studyNotes.data.length > 0 && (
               <section aria-label="Study notes results">
                 <h2 className="mb-2 text-lg font-semibold">
                   Study notes{" "}

@@ -323,10 +323,10 @@ describe("SearchView", () => {
     await user.type(screen.getByLabelText("Search query"), "anxiety");
     await user.click(screen.getByRole("button", { name: "Search" }));
 
-    // Scripture renders; the Study-notes section is simply absent (no header, no "no notes" line).
+    // Scripture renders; the Study-notes results section is simply absent (no header, no "no
+    // notes" line). ("Study notes" as text still exists — it's the scope checkbox label now.)
     expect(await screen.findByText("Proverbs 12:25")).toBeInTheDocument();
     expect(screen.queryByRole("region", { name: "Study notes results" })).not.toBeInTheDocument();
-    expect(screen.queryByText("Study notes")).not.toBeInTheDocument();
   });
 
   it("shows the Study notes section on hits — type badge, highlight, and verse jump", async () => {
@@ -411,5 +411,98 @@ describe("SearchView", () => {
     // Scripture still renders; no Study-notes section, no error text from it.
     expect(await screen.findByText("Proverbs 12:25")).toBeInTheDocument();
     expect(screen.queryByRole("region", { name: "Study notes results" })).not.toBeInTheDocument();
+  });
+
+  it("unchecking Scripture excludes it from the search (scope, #62)", async () => {
+    let scriptureCalled = false;
+    server.use(
+      http.get("/api/v1/semantic-search", () => {
+        scriptureCalled = true;
+        return HttpResponse.json([]);
+      }),
+      http.get("/api/v1/keyword-search", () => {
+        scriptureCalled = true;
+        return HttpResponse.json([]);
+      }),
+      http.get("/api/v1/annotations", () => HttpResponse.json([note()])),
+      http.get("/api/v1/study-notes-search", () => HttpResponse.json([])),
+    );
+    const user = userEvent.setup();
+    renderSearch();
+
+    await user.click(screen.getByRole("checkbox", { name: "Scripture" })); // uncheck
+    await user.type(screen.getByLabelText("Search query"), "anxiety");
+    await user.click(screen.getByRole("button", { name: "Search" }));
+
+    // Your notes still renders; the Scripture section and its request are gone.
+    expect(await screen.findByText(/on anxiety and peace/)).toBeInTheDocument();
+    expect(scriptureCalled).toBe(false);
+    expect(screen.queryByRole("region", { name: "Scripture results" })).not.toBeInTheDocument();
+  });
+
+  it("unchecking Your notes excludes it from the search (scope, #62)", async () => {
+    let notesCalled = false;
+    server.use(
+      http.get("/api/v1/semantic-search", () =>
+        HttpResponse.json([
+          { book: "PRO", chapter: 12, verse: 25, reference: "Proverbs 12:25", score: 0.8, text: "…" },
+        ]),
+      ),
+      http.get("/api/v1/annotations", () => {
+        notesCalled = true;
+        return HttpResponse.json([note()]);
+      }),
+      http.get("/api/v1/study-notes-search", () => HttpResponse.json([])),
+    );
+    const user = userEvent.setup();
+    renderSearch();
+
+    await user.click(screen.getByRole("checkbox", { name: "Your notes" })); // uncheck
+    await user.type(screen.getByLabelText("Search query"), "anxiety");
+    await user.click(screen.getByRole("button", { name: "Search" }));
+
+    expect(await screen.findByText("Proverbs 12:25")).toBeInTheDocument();
+    expect(notesCalled).toBe(false);
+    expect(screen.queryByRole("region", { name: "Note results" })).not.toBeInTheDocument();
+  });
+
+  it("unchecking Study notes excludes it even when it would have hits (scope, #62)", async () => {
+    let studyCalled = false;
+    server.use(
+      http.get("/api/v1/semantic-search", () => HttpResponse.json([])),
+      http.get("/api/v1/annotations", () => HttpResponse.json([])),
+      http.get("/api/v1/study-notes-search", () => {
+        studyCalled = true;
+        return HttpResponse.json([
+          { book: "JHN", chapter: 3, verse: 16, reference: "John 3:16", translation: "NET", type: "sn", snippet: "love" },
+        ]);
+      }),
+    );
+    const user = userEvent.setup();
+    renderSearch();
+
+    await user.click(screen.getByRole("checkbox", { name: "Study notes" })); // uncheck
+    await user.type(screen.getByLabelText("Search query"), "love");
+    await user.click(screen.getByRole("button", { name: "Search" }));
+
+    // Scripture settles (no matches); the study-notes request never fired despite the hit above.
+    expect(await screen.findByText("No matching verses.")).toBeInTheDocument();
+    expect(studyCalled).toBe(false);
+    expect(screen.queryByRole("region", { name: "Study notes results" })).not.toBeInTheDocument();
+  });
+
+  it("shows a hint and searches nothing when all scopes are unchecked (#62)", async () => {
+    const user = userEvent.setup();
+    renderSearch();
+
+    for (const name of ["Scripture", "Your notes", "Study notes"]) {
+      await user.click(screen.getByRole("checkbox", { name }));
+    }
+    await user.type(screen.getByLabelText("Search query"), "anything");
+    await user.click(screen.getByRole("button", { name: "Search" }));
+
+    expect(await screen.findByText("Pick what to search above.")).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Scripture results" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Note results" })).not.toBeInTheDocument();
   });
 });

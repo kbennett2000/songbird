@@ -4,6 +4,31 @@ A running log of per-slice decisions, gotchas, and how each slice was verified. 
 
 ---
 
+## #62a — search-scope checkboxes
+
+- **Date:** 2026-06-08
+- **Branch:** `feat/62-search-scope`
+- **Scope:** Search page only (`SearchView.tsx`) — frontend. First of two PRs for #62 (the nav
+  standardization is the second).
+
+The Search page ran Scripture + Your notes + Study notes on every query with no control — and on
+the stock (notes-less) Concord image the Study-notes section never appears, so the
+translator-notes search was undiscoverable ("How to search translator notes?"). Added a **scope
+checkbox row** (Scripture / Your notes / Study notes), all on by default. Each query's `enabled`
+now ANDs its checkbox; unchecking one stops that search and hides its section. The Scripture-only
+controls (semantic/keyword toggle + translation picker) hide when Scripture is unchecked; all-off
+shows a "Pick what to search above" hint. In-memory, not persisted (like the translation picker).
+
+**Gotcha:** the Slice-2 test that asserted `queryByText("Study notes")` absent now matches the new
+checkbox label — narrowed it to the precise `region "Study notes results"` assertion (the checkbox
+text is expected).
+
+**Verify:** `vitest` 156 passed (SearchView 17, +4: each checkbox excludes its search/section, and
+all-off shows the hint — asserted via "request never fired" MSW flags); `tsc` + lint + `vite build`
+clean.
+
+---
+
 ## Fix #55 — disable "Places in this chapter" when a chapter names none
 
 - **Date:** 2026-06-08
