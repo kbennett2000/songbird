@@ -109,25 +109,22 @@ class ReadAnnotation(AnnotationOut):
 
 
 class SermonNoteCreate(BaseModel):
-    """Author a sermon note. The anchor is canonical coordinates (invariant 4); the client
-    does NOT send `book_order_index` — the server resolves it from Concord so canonical order
-    stays server-authoritative (and a client can't assert a wrong one)."""
+    """Author a sermon note. The client sends only the human `reference` (e.g. "Joshua 6:1-16");
+    the server resolves it through Concord to the canonical anchor — book + verse span (invariant
+    4) — and the `book_order_index`. Coordinates stay server-authoritative (a client can't assert
+    a wrong one), and a ranged reference covers every verse in the range."""
 
     title: str = Field(min_length=1)
     sermon_url: str = Field(min_length=1)
     reference: str = Field(min_length=1, max_length=128)
-    book_usfm: str = Field(min_length=1, max_length=3)
-    start_chapter: int = Field(ge=1)
-    start_verse: int = Field(ge=1)
-    end_chapter: int = Field(ge=1)
-    end_verse: int = Field(ge=1)
     event_date: date | None = None
     tags: list[str] = Field(default_factory=list)
 
 
 class SermonNoteUpdate(BaseModel):
-    """Edit a sermon note. The canonical anchor is intentionally NOT editable here
-    (re-anchoring = delete + recreate), keeping the coordinate logic in one place."""
+    """Edit a sermon note. Changing `reference` re-anchors the note: the server re-resolves it
+    through Concord and updates the canonical span to match, so reference and coverage never
+    drift apart. All coordinate logic stays server-side (invariant 4)."""
 
     title: str | None = Field(default=None, min_length=1)
     sermon_url: str | None = Field(default=None, min_length=1)

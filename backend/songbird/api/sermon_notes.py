@@ -10,11 +10,30 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from songbird.api._tags import normalize_tags, resolve_tags
 from songbird.api.deps import get_concord_client, get_current_user, get_db
 from songbird.api.schemas import SermonNoteCreate, SermonNoteOut, SermonNoteUpdate
-from songbird.concord.client import ConcordClient, ConcordUnreachableError
+from songbird.concord.client import ConcordClient, ConcordNotFoundError, ConcordUnreachableError
+from songbird.concord.schemas import ChapterVerse
 from songbird.core.errors import ErrorCode, raise_http
 from songbird.db.models import SermonNote, Tag, User
 
 router = APIRouter(prefix="/api/v1/sermon-notes", tags=["sermon-notes"])
+
+
+async def _resolve_anchor(
+    reference: str, concord: ConcordClient
+) -> tuple[ChapterVerse, ChapterVerse]:
+    """Resolve a human `reference` to its canonical span via Concord (songbird never parses
+    references itself — invariant 4). Returns the (first, last) verse of the range, so a ranged
+    reference like "Joshua 6:1-16" covers every verse in it. Unparseable / unknown reference →
+    404; Concord unreachable → 502 (it's a hard dependency, invariant 3)."""
+    try:
+        chapter = await concord.resolve_reference(reference)
+    except ConcordNotFoundError as exc:
+        raise_http(404, ErrorCode.NOT_FOUND, f"Couldn't find reference '{reference}': {exc}")
+    except ConcordUnreachableError as exc:
+        raise_http(502, ErrorCode.CONCORD_UNREACHABLE, str(exc))
+    if not chapter.verses:
+        raise_http(404, ErrorCode.NOT_FOUND, f"Couldn't find reference '{reference}'")
+    return chapter.verses[0], chapter.verses[-1]
 
 
 async def _resolve_book_order_index(book_usfm: str, concord: ConcordClient) -> int:
@@ -76,17 +95,18 @@ async def create_sermon_note(
     concord: ConcordClient = Depends(get_concord_client),
     user: User = Depends(get_current_user),
 ) -> SermonNoteOut:
-    book_order_index = await _resolve_book_order_index(body.book_usfm, concord)
+    first, last = await _resolve_anchor(body.reference, concord)
+    book_order_index = await _resolve_book_order_index(first.book, concord)
     note = SermonNote(
         title=body.title,
         sermon_url=body.sermon_url,
         reference=body.reference,
-        book_usfm=body.book_usfm.strip().upper(),
+        book_usfm=first.book.strip().upper(),
         book_order_index=book_order_index,
-        start_chapter=body.start_chapter,
-        start_verse=body.start_verse,
-        end_chapter=body.end_chapter,
-        end_verse=body.end_verse,
+        start_chapter=first.chapter,
+        start_verse=first.verse,
+        end_chapter=last.chapter,
+        end_verse=last.verse,
         event_date=body.event_date,
         author_id=user.id,
         tags=await resolve_tags(db, body.tags),
@@ -111,6 +131,7 @@ async def update_sermon_note(
     sermon_note_id: int,
     body: SermonNoteUpdate,
     db: AsyncSession = Depends(get_db),
+    concord: ConcordClient = Depends(get_concord_client),
     user: User = Depends(get_current_user),
 ) -> SermonNoteOut:
     note = await _get_or_404(db, sermon_note_id, user.id)
@@ -119,7 +140,16 @@ async def update_sermon_note(
     if body.sermon_url is not None:
         note.sermon_url = body.sermon_url
     if body.reference is not None:
+        # Changing the reference re-anchors the note: re-resolve the canonical span so the
+        # stored coverage always matches the displayed reference.
+        first, last = await _resolve_anchor(body.reference, concord)
         note.reference = body.reference
+        note.book_usfm = first.book.strip().upper()
+        note.book_order_index = await _resolve_book_order_index(first.book, concord)
+        note.start_chapter = first.chapter
+        note.start_verse = first.verse
+        note.end_chapter = last.chapter
+        note.end_verse = last.verse
     if body.event_date is not None:
         note.event_date = body.event_date
     if body.tags is not None:
