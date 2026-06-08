@@ -44,7 +44,8 @@ function renderSearch() {
 }
 
 describe("SearchView", () => {
-  it("shows ranked Scripture results with scores and keyword note results, and jumps", async () => {
+  it("semantic mode shows ranked Scripture only (no keyword note results) and jumps (#67)", async () => {
+    let notesCalled = false;
     server.use(
       http.get("/api/v1/semantic-search", () =>
         HttpResponse.json([
@@ -58,7 +59,10 @@ describe("SearchView", () => {
           },
         ]),
       ),
-      http.get("/api/v1/annotations", () => HttpResponse.json([note()])),
+      http.get("/api/v1/annotations", () => {
+        notesCalled = true;
+        return HttpResponse.json([note()]);
+      }),
     );
 
     const user = userEvent.setup();
@@ -70,12 +74,42 @@ describe("SearchView", () => {
     // Scripture (semantic) result with score.
     expect(await screen.findByText("Proverbs 12:25")).toBeInTheDocument();
     expect(screen.getByText(/score 0\.895/)).toBeInTheDocument();
-    // Note (keyword) result.
-    expect(screen.getByText(/on anxiety and peace/)).toBeInTheDocument();
+    // No keyword note results in semantic mode — the note search never even fires (#67).
+    expect(screen.queryByText(/on anxiety and peace/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Note results" })).not.toBeInTheDocument();
+    expect(notesCalled).toBe(false);
 
     // Clicking a Scripture result jumps to the verse.
     await user.click(screen.getByRole("link", { name: "Open" }));
     expect(await screen.findByText(/book=PRO&chapter=12&verse=25/)).toBeInTheDocument();
+  });
+
+  it("keyword mode shows keyword Scripture and keyword note results together", async () => {
+    server.use(
+      http.get("/api/v1/keyword-search", () =>
+        HttpResponse.json([
+          {
+            book: "PRO",
+            chapter: 12,
+            verse: 25,
+            reference: "Proverbs 12:25",
+            snippet: "Heaviness in the heart of man maketh it stoop.",
+          },
+        ]),
+      ),
+      http.get("/api/v1/annotations", () => HttpResponse.json([note()])),
+    );
+
+    const user = userEvent.setup();
+    renderSearch();
+
+    await user.click(screen.getByRole("tab", { name: "Keyword" }));
+    await user.type(screen.getByLabelText("Search query"), "anxiety");
+    await user.click(screen.getByRole("button", { name: "Search" }));
+
+    // Both the keyword Scripture hit and the keyword note hit render.
+    expect(await screen.findByText("Proverbs 12:25")).toBeInTheDocument();
+    expect(screen.getByText(/on anxiety and peace/)).toBeInTheDocument();
   });
 
   it("makes no query until the user searches", () => {
@@ -309,9 +343,9 @@ describe("SearchView", () => {
 
   it("hides the Study notes section when Concord has no matching notes (the stock case)", async () => {
     server.use(
-      http.get("/api/v1/semantic-search", () =>
+      http.get("/api/v1/keyword-search", () =>
         HttpResponse.json([
-          { book: "PRO", chapter: 12, verse: 25, reference: "Proverbs 12:25", score: 0.8, text: "…" },
+          { book: "PRO", chapter: 12, verse: 25, reference: "Proverbs 12:25", snippet: "…" },
         ]),
       ),
       http.get("/api/v1/annotations", () => HttpResponse.json([])),
@@ -320,6 +354,8 @@ describe("SearchView", () => {
     const user = userEvent.setup();
     renderSearch();
 
+    // Study notes search runs in keyword mode; with an empty result the section stays absent.
+    await user.click(screen.getByRole("tab", { name: "Keyword" }));
     await user.type(screen.getByLabelText("Search query"), "anxiety");
     await user.click(screen.getByRole("button", { name: "Search" }));
 
@@ -331,6 +367,7 @@ describe("SearchView", () => {
 
   it("shows the Study notes section on hits — type badge, highlight, and verse jump", async () => {
     server.use(
+      http.get("/api/v1/keyword-search", () => HttpResponse.json([])),
       http.get("/api/v1/annotations", () => HttpResponse.json([])),
       http.get("/api/v1/study-notes-search", () =>
         HttpResponse.json([
@@ -349,6 +386,8 @@ describe("SearchView", () => {
     const user = userEvent.setup();
     renderSearch();
 
+    // Study notes are keyword-matched, so they only search in keyword mode (#66/#67).
+    await user.click(screen.getByRole("tab", { name: "Keyword" }));
     await user.type(screen.getByLabelText("Search query"), "love");
     await user.click(screen.getByRole("button", { name: "Search" }));
 
@@ -365,6 +404,7 @@ describe("SearchView", () => {
 
   it("falls back to a neutral 'Note' badge for an unknown note type", async () => {
     server.use(
+      http.get("/api/v1/keyword-search", () => HttpResponse.json([])),
       http.get("/api/v1/annotations", () => HttpResponse.json([])),
       http.get("/api/v1/study-notes-search", () =>
         HttpResponse.json([
@@ -383,6 +423,7 @@ describe("SearchView", () => {
     const user = userEvent.setup();
     renderSearch();
 
+    await user.click(screen.getByRole("tab", { name: "Keyword" }));
     await user.type(screen.getByLabelText("Search query"), "note");
     await user.click(screen.getByRole("button", { name: "Search" }));
 
@@ -393,9 +434,10 @@ describe("SearchView", () => {
 
   it("best-effort: an erroring Study-notes call leaves the section absent and the rest intact", async () => {
     server.use(
-      http.get("/api/v1/semantic-search", () =>
+      // Study notes search runs in keyword mode; a keyword Scripture hit anchors the page.
+      http.get("/api/v1/keyword-search", () =>
         HttpResponse.json([
-          { book: "PRO", chapter: 12, verse: 25, reference: "Proverbs 12:25", score: 0.8, text: "…" },
+          { book: "PRO", chapter: 12, verse: 25, reference: "Proverbs 12:25", snippet: "…" },
         ]),
       ),
       http.get("/api/v1/annotations", () => HttpResponse.json([])),
@@ -405,6 +447,7 @@ describe("SearchView", () => {
     const user = userEvent.setup();
     renderSearch();
 
+    await user.click(screen.getByRole("tab", { name: "Keyword" }));
     await user.type(screen.getByLabelText("Search query"), "anxiety");
     await user.click(screen.getByRole("button", { name: "Search" }));
 
@@ -430,6 +473,8 @@ describe("SearchView", () => {
     const user = userEvent.setup();
     renderSearch();
 
+    // The scope row lives in keyword mode now (#66); switch there to reach the checkboxes.
+    await user.click(screen.getByRole("tab", { name: "Keyword" }));
     await user.click(screen.getByRole("checkbox", { name: "Scripture" })); // uncheck
     await user.type(screen.getByLabelText("Search query"), "anxiety");
     await user.click(screen.getByRole("button", { name: "Search" }));
@@ -443,9 +488,9 @@ describe("SearchView", () => {
   it("unchecking Your notes excludes it from the search (scope, #62)", async () => {
     let notesCalled = false;
     server.use(
-      http.get("/api/v1/semantic-search", () =>
+      http.get("/api/v1/keyword-search", () =>
         HttpResponse.json([
-          { book: "PRO", chapter: 12, verse: 25, reference: "Proverbs 12:25", score: 0.8, text: "…" },
+          { book: "PRO", chapter: 12, verse: 25, reference: "Proverbs 12:25", snippet: "…" },
         ]),
       ),
       http.get("/api/v1/annotations", () => {
@@ -457,6 +502,7 @@ describe("SearchView", () => {
     const user = userEvent.setup();
     renderSearch();
 
+    await user.click(screen.getByRole("tab", { name: "Keyword" }));
     await user.click(screen.getByRole("checkbox", { name: "Your notes" })); // uncheck
     await user.type(screen.getByLabelText("Search query"), "anxiety");
     await user.click(screen.getByRole("button", { name: "Search" }));
@@ -469,7 +515,7 @@ describe("SearchView", () => {
   it("unchecking Study notes excludes it even when it would have hits (scope, #62)", async () => {
     let studyCalled = false;
     server.use(
-      http.get("/api/v1/semantic-search", () => HttpResponse.json([])),
+      http.get("/api/v1/keyword-search", () => HttpResponse.json([])),
       http.get("/api/v1/annotations", () => HttpResponse.json([])),
       http.get("/api/v1/study-notes-search", () => {
         studyCalled = true;
@@ -481,6 +527,7 @@ describe("SearchView", () => {
     const user = userEvent.setup();
     renderSearch();
 
+    await user.click(screen.getByRole("tab", { name: "Keyword" }));
     await user.click(screen.getByRole("checkbox", { name: "Study notes" })); // uncheck
     await user.type(screen.getByLabelText("Search query"), "love");
     await user.click(screen.getByRole("button", { name: "Search" }));
@@ -495,6 +542,7 @@ describe("SearchView", () => {
     const user = userEvent.setup();
     renderSearch();
 
+    await user.click(screen.getByRole("tab", { name: "Keyword" }));
     for (const name of ["Scripture", "Your notes", "Study notes"]) {
       await user.click(screen.getByRole("checkbox", { name }));
     }
@@ -504,5 +552,80 @@ describe("SearchView", () => {
     expect(await screen.findByText("Pick what to search above.")).toBeInTheDocument();
     expect(screen.queryByRole("region", { name: "Scripture results" })).not.toBeInTheDocument();
     expect(screen.queryByRole("region", { name: "Note results" })).not.toBeInTheDocument();
+  });
+
+  it("hides the scope row in Semantic mode and shows it in Keyword mode (#66)", async () => {
+    const user = userEvent.setup();
+    renderSearch();
+
+    // Default Semantic mode: no scope checkboxes — they only apply to keyword searches.
+    expect(screen.queryByRole("checkbox", { name: "Scripture" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("checkbox", { name: "Your notes" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("checkbox", { name: "Study notes" })).not.toBeInTheDocument();
+
+    // Switching to Keyword reveals the row.
+    await user.click(screen.getByRole("tab", { name: "Keyword" }));
+    expect(screen.getByRole("checkbox", { name: "Scripture" })).toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: "Your notes" })).toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: "Study notes" })).toBeInTheDocument();
+
+    // ...and switching back hides it again.
+    await user.click(screen.getByRole("tab", { name: "Semantic" }));
+    expect(screen.queryByRole("checkbox", { name: "Your notes" })).not.toBeInTheDocument();
+  });
+
+  it("a semantic search fires no keyword, note, or study-note requests (#67)", async () => {
+    let keywordCalled = false;
+    let notesCalled = false;
+    let studyCalled = false;
+    server.use(
+      http.get("/api/v1/semantic-search", () =>
+        HttpResponse.json([
+          { book: "PRO", chapter: 12, verse: 25, reference: "Proverbs 12:25", score: 0.8, text: "…" },
+        ]),
+      ),
+      http.get("/api/v1/keyword-search", () => {
+        keywordCalled = true;
+        return HttpResponse.json([]);
+      }),
+      http.get("/api/v1/annotations", () => {
+        notesCalled = true;
+        return HttpResponse.json([note()]);
+      }),
+      http.get("/api/v1/study-notes-search", () => {
+        studyCalled = true;
+        return HttpResponse.json([
+          { book: "JHN", chapter: 3, verse: 16, reference: "John 3:16", translation: "NET", type: "sn", snippet: "x" },
+        ]);
+      }),
+    );
+    const user = userEvent.setup();
+    renderSearch();
+
+    await user.type(screen.getByLabelText("Search query"), "anxiety");
+    await user.click(screen.getByRole("button", { name: "Search" }));
+
+    // Only the semantic Scripture section renders; no keyword-derived results or requests.
+    expect(await screen.findByText("Proverbs 12:25")).toBeInTheDocument();
+    expect(keywordCalled).toBe(false);
+    expect(notesCalled).toBe(false);
+    expect(studyCalled).toBe(false);
+    expect(screen.queryByRole("region", { name: "Note results" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Study notes results" })).not.toBeInTheDocument();
+  });
+
+  it("preserves scope selections across the mode toggle (#66)", async () => {
+    const user = userEvent.setup();
+    renderSearch();
+
+    await user.click(screen.getByRole("tab", { name: "Keyword" }));
+    await user.click(screen.getByRole("checkbox", { name: "Your notes" })); // uncheck
+    expect(screen.getByRole("checkbox", { name: "Your notes" })).not.toBeChecked();
+
+    // Round-trip through Semantic and back — the unchecked state survives.
+    await user.click(screen.getByRole("tab", { name: "Semantic" }));
+    await user.click(screen.getByRole("tab", { name: "Keyword" }));
+    expect(screen.getByRole("checkbox", { name: "Your notes" })).not.toBeChecked();
+    expect(screen.getByRole("checkbox", { name: "Scripture" })).toBeChecked();
   });
 });
