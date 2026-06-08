@@ -8,6 +8,7 @@ import { MAP_LABELS } from "@/lib/mapLabels";
 import { project } from "@/lib/projection";
 import {
   applyZoomAt,
+  clampTransform,
   fitToBounds,
   screenPos,
   type ImagePoint,
@@ -169,6 +170,37 @@ function PlaceCard({
   );
 }
 
+/** Shown when a numbered (cluster) pin is tapped: the places it stands for, each selectable. */
+function ClusterCard({
+  members,
+  onPick,
+}: {
+  members: Place[];
+  onPick: (place: Place) => void;
+}): JSX.Element {
+  return (
+    <div data-testid="cluster-card" className="mt-3 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-3 shadow-sm">
+      <p className="mb-2 text-xs text-gray-500 dark:text-gray-400">
+        {members.length} places here — pick one:
+      </p>
+      <ul className="flex flex-wrap gap-1">
+        {members.map((place) => (
+          <li key={place.id}>
+            <button
+              type="button"
+              data-testid="cluster-member"
+              className="rounded border border-gray-200 dark:border-gray-700 px-2 py-1 text-xs text-blue-700 dark:text-blue-400 hover:bg-gray-50 dark:hover:bg-gray-700"
+              onClick={() => onPick(place)}
+            >
+              {place.name}
+            </button>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 /** A line like "Off this map: Tarshish" — shown only when the list is non-empty. */
 function PlaceList({ label, places }: { label: string; places: Place[] }): JSX.Element | null {
   if (places.length === 0) return null;
@@ -212,6 +244,7 @@ function ControlButton({
  */
 export function MapView({ book, chapter, onJump }: MapViewProps): JSX.Element {
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [clusterMembers, setClusterMembers] = useState<Place[] | null>(null);
   const [showLabels, setShowLabels] = useState(true);
   const [containerRef, size] = useContainerSize();
   const [transform, setTransform] = useState<Transform | null>(null);
@@ -239,6 +272,12 @@ export function MapView({ book, chapter, onJump }: MapViewProps): JSX.Element {
     setTransform(fitToBounds(points, effSize));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fitKey, data, effSize.width, effSize.height]);
+
+  // Clear any open selection when the chapter changes (no stale card from the previous chapter).
+  useEffect(() => {
+    setSelectedId(null);
+    setClusterMembers(null);
+  }, [fitKey]);
 
   // Latest transform/size for the non-passive wheel listener, without rebinding it each render.
   const transformRef = useRef<Transform | null>(transform);
@@ -298,11 +337,13 @@ export function MapView({ book, chapter, onJump }: MapViewProps): JSX.Element {
       return;
     }
 
-    // Single pointer: pan by the drag delta.
+    // Single pointer: pan by the drag delta, clamped so the map can't be dragged off-screen.
     pointers.current.set(e.pointerId, cur);
     const dx = cur.x - prev.x;
     const dy = cur.y - prev.y;
-    setTransform((t) => (t ? { ...t, tx: t.tx + dx, ty: t.ty + dy } : t));
+    setTransform((t) =>
+      t ? clampTransform({ ...t, tx: t.tx + dx, ty: t.ty + dy }, sizeRef.current) : t,
+    );
   };
 
   const endPointer = (e: React.PointerEvent): void => {
@@ -387,7 +428,10 @@ export function MapView({ book, chapter, onJump }: MapViewProps): JSX.Element {
                   aria-label={place.name}
                   title={place.name}
                   onPointerDown={(e) => e.stopPropagation()}
-                  onClick={() => setSelectedId(place.id)}
+                  onClick={() => {
+                    setSelectedId(place.id);
+                    setClusterMembers(null);
+                  }}
                   style={{ left: `${pos.x}px`, top: `${pos.y}px` }}
                   className={`pointer-events-auto absolute flex h-6 w-6 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-2 text-xs font-bold shadow ${
                     MARKER_CLASS[tier]
@@ -407,7 +451,14 @@ export function MapView({ book, chapter, onJump }: MapViewProps): JSX.Element {
                 aria-label={`${c.members.length} clustered places`}
                 title={c.members.map((m) => m.place.name).join(", ")}
                 onPointerDown={(e) => e.stopPropagation()}
-                onClick={() => setTransform(fitToBounds(c.members, sizeRef.current))}
+                onClick={() => {
+                  // Show this cluster's members in the pane (clearing any single-place card), and
+                  // zoom to expand. If they can't split further (shared point), the list is how the
+                  // user reaches each place.
+                  setSelectedId(null);
+                  setClusterMembers(c.members.map((m) => m.place));
+                  setTransform(fitToBounds(c.members, sizeRef.current));
+                }}
                 style={{ left: `${pos.x}px`, top: `${pos.y}px` }}
                 className="pointer-events-auto absolute flex h-7 w-7 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-2 border-blue-700 bg-blue-600 text-xs font-bold text-white shadow"
               >
@@ -438,6 +489,15 @@ export function MapView({ book, chapter, onJump }: MapViewProps): JSX.Element {
       </div>
 
       {selected && <PlaceCard place={selected} onJump={onJump} />}
+      {!selected && clusterMembers && (
+        <ClusterCard
+          members={clusterMembers}
+          onPick={(place) => {
+            setSelectedId(place.id);
+            setClusterMembers(null);
+          }}
+        />
+      )}
 
       <PlaceList label="Also mentioned, location unknown" places={unknown} />
       <PlaceList label="Off this map" places={offMap} />

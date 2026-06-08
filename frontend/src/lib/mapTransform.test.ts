@@ -75,6 +75,24 @@ describe("clampTransform", () => {
   });
 });
 
+describe("clampTransform — drag pan stays on-screen (issue #76)", () => {
+  it("a large drag delta cannot push the map off the viewport", () => {
+    // Simulate a pan: take a zoomed-in transform, add a huge drag delta, clamp (what the drag
+    // handler now does). The image must still cover the container — never slid off.
+    const zoomed = { scale: 2, tx: 0, ty: 0 }; // image 2000x1600 > container
+    const dragged = clampTransform(
+      { ...zoomed, tx: zoomed.tx + 5000, ty: zoomed.ty - 5000 },
+      CONTAINER,
+    );
+    const scaledW = MAP_PX.width * dragged.scale;
+    const scaledH = MAP_PX.height * dragged.scale;
+    expect(dragged.tx).toBeLessThanOrEqual(0);
+    expect(dragged.tx).toBeGreaterThanOrEqual(CONTAINER.width - scaledW);
+    expect(dragged.ty).toBeLessThanOrEqual(0);
+    expect(dragged.ty).toBeGreaterThanOrEqual(CONTAINER.height - scaledH);
+  });
+});
+
 describe("applyZoomAt", () => {
   it("keeps the anchored point fixed while zooming in", () => {
     const start = fitToBounds([], CONTAINER);

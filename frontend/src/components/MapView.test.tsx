@@ -106,6 +106,32 @@ describe("MapView", () => {
     expect(screen.queryByTestId("map-pin")).not.toBeInTheDocument();
   });
 
+  it("clicking a cluster shows its members and clears a previously-open place card (issue #76)", async () => {
+    // Two co-located places (a cluster) + one far place (a single pin).
+    const BETHANY = place({ id: "beth", name: "Bethany", latitude: 31.9, longitude: 35.4 });
+    mockPlaces([JERUSALEM, BETHANY, ROME]);
+    const user = userEvent.setup();
+    renderMap();
+
+    // Open Rome's card first.
+    await user.click(await screen.findByRole("button", { name: "Rome" }));
+    expect(screen.getByTestId("place-card")).toBeInTheDocument();
+
+    // Click the numbered cluster: the stale Rome card goes away, the members are listed.
+    await user.click(screen.getByTestId("map-cluster"));
+    expect(screen.queryByTestId("place-card")).not.toBeInTheDocument();
+    const clusterCard = screen.getByTestId("cluster-card");
+    const members = within(clusterCard).getAllByTestId("cluster-member");
+    expect(members.map((m) => m.textContent)).toEqual(
+      expect.arrayContaining(["Jerusalem", "Bethany"]),
+    );
+
+    // Picking a member opens its place card and dismisses the cluster list.
+    await user.click(within(clusterCard).getByRole("button", { name: "Bethany" }));
+    expect(screen.queryByTestId("cluster-card")).not.toBeInTheDocument();
+    expect(screen.getByTestId("place-card")).toBeInTheDocument();
+  });
+
   it("splits a cluster into individual pins as the user zooms in", async () => {
     const NEAR = place({ id: "near", name: "Bethany", latitude: 31.9, longitude: 35.4 });
     mockPlaces([JERUSALEM, NEAR]);
