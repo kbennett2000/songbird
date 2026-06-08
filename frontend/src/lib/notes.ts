@@ -1,5 +1,22 @@
 import type { Book } from "@/schemas";
 
+/**
+ * The reader's canonical labels for Concord's note `type` codes — one home so the reader popover
+ * and the Search page's "Study notes" badges never drift. A `null`/unknown type has no entry here;
+ * each caller chooses its own fallback ("Footnote" in the reader, "Note" on the Search page).
+ */
+export const NOTE_TYPE_LABELS: Record<string, string> = {
+  tn: "Translator’s note",
+  sn: "Study note",
+  tc: "Text-critical note",
+  map: "Map note",
+};
+
+/** Badge label for a "Study notes" search hit: a known type's label, else a neutral "Note". */
+export function studyNoteBadge(type: string | null): string {
+  return (type && NOTE_TYPE_LABELS[type]) || "Note";
+}
+
 /** The canonical anchor fields both annotations and sermon notes carry. */
 export interface NoteAnchor {
   book_usfm: string;

@@ -4,12 +4,13 @@ import { Link } from "react-router-dom";
 
 import { useAuth } from "@/hooks/useAuth";
 import { markSegments } from "@/lib/highlight";
-import { noteReference, notePreview, readerLink } from "@/lib/notes";
+import { noteReference, notePreview, readerLink, studyNoteBadge } from "@/lib/notes";
 import {
   fetchBooks,
   fetchTranslations,
   keywordSearch,
   searchAnnotations,
+  searchStudyNotes,
   semanticSearch,
 } from "@/lib/reader";
 import type { KeywordResult, SemanticResult } from "@/schemas";
@@ -113,6 +114,14 @@ export function SearchView(): JSX.Element {
   const notes = useQuery({
     queryKey: ["note-search", query],
     queryFn: () => searchAnnotations(query),
+    enabled: query.length > 0,
+  });
+  // Concord's translator's/study notes — independent of the Scripture mode/picker, like "Your
+  // notes". Its own key (distinct from "note-search"). Best-effort: the backend swallows failures
+  // to [], so the section renders only on real hits and never degrades the rest of the page.
+  const studyNotes = useQuery({
+    queryKey: ["study-notes-search", query],
+    queryFn: () => searchStudyNotes(query),
     enabled: query.length > 0,
   });
 
@@ -327,6 +336,42 @@ export function SearchView(): JSX.Element {
                 ))}
               </ul>
             </section>
+
+            {/* Study notes — Concord's translator's/study notes (best-effort). Renders ONLY on
+                real hits: the stock image ships none, so on most deployments this never appears,
+                and any failure is already swallowed to [] by the backend. */}
+            {studyNotes.data && studyNotes.data.length > 0 && (
+              <section aria-label="Study notes results">
+                <h2 className="mb-2 text-lg font-semibold">
+                  Study notes{" "}
+                  <span className="text-sm font-normal text-gray-400">(keyword)</span>
+                </h2>
+                <ul className="flex flex-col gap-3">
+                  {studyNotes.data.map((n) => (
+                    <li
+                      key={`${n.book}-${n.chapter}-${n.verse}-${n.translation}-${n.type ?? ""}`}
+                      className="rounded border border-gray-200 bg-white p-4"
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold">{n.reference}</span>
+                        <span className="rounded bg-violet-100 px-2 py-0.5 text-xs font-medium text-violet-800">
+                          {studyNoteBadge(n.type)}
+                        </span>
+                        <Link
+                          to={`/read?book=${n.book}&chapter=${n.chapter}&verse=${n.verse}`}
+                          className="ml-auto text-sm text-blue-700 hover:underline"
+                        >
+                          Open in reader
+                        </Link>
+                      </div>
+                      {n.snippet && (
+                        <p className="mt-1 font-serif text-gray-700">{highlighted(n.snippet)}</p>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
           </div>
         )}
       </main>

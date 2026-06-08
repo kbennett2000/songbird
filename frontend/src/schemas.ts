@@ -215,6 +215,21 @@ export const keywordResultSchema = z.object({
 export const keywordResultsSchema = z.array(keywordResultSchema);
 export type KeywordResult = z.infer<typeof keywordResultSchema>;
 
+// A keyword match from Concord's translator's/study notes ("Study notes" on the Search page —
+// distinct from the user's own "Your notes"). `snippet` carries the matched term(s) in
+// <mark>…</mark>; the UI renders the highlight by splitting on the tags (never as raw HTML).
+export const studyNoteResultSchema = z.object({
+  book: z.string(),
+  chapter: z.number(),
+  verse: z.number(),
+  reference: z.string(),
+  translation: z.string(),
+  type: z.string().nullable(), // tn | sn | tc | map | other → a readable badge
+  snippet: z.string().nullable(),
+});
+export const studyNoteResultsSchema = z.array(studyNoteResultSchema);
+export type StudyNoteResult = z.infer<typeof studyNoteResultSchema>;
+
 // --- Import / Export (issue #41) ---
 
 // Portable, account-agnostic shapes (no id/author/timestamps) — the round-trippable export file.
