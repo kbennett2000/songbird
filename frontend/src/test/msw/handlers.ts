@@ -110,7 +110,11 @@ export const defaultHandlers = [
   // shows no markers; notes-specific tests override per-case via server.use().
   http.get("/api/v1/notes/:translation/:book/:chapter", () => HttpResponse.json([])),
   http.get("/api/v1/places", () => HttpResponse.json([])),
+  // Gazetteer (v1.4) defaults — places-specific tests override per-case via server.use().
+  http.get("/api/v1/places/browse", () => HttpResponse.json({ places: [], total: 0 })),
+  http.get("/api/v1/place-types", () => HttpResponse.json([])),
   http.get("/api/v1/places/:placeId/verses", () => HttpResponse.json([])),
+  http.get("/api/v1/places/:placeId", () => HttpResponse.json({})),
   http.get("/api/v1/semantic-search", () => HttpResponse.json([])),
   // Study notes default to empty — the public image ships none, so the Search page's "Study notes"
   // section stays hidden; study-notes tests override per-case via server.use().
