@@ -9,6 +9,7 @@ const DEFAULT_USER = {
   last_translation: null,
   last_book: null,
   last_chapter: null,
+  theme: null,
   created_at: "2026-01-01T00:00:00Z",
 };
 

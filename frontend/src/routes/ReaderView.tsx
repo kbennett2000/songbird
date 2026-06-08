@@ -455,15 +455,15 @@ export function ReaderView(): JSX.Element {
   };
 
   return (
-    <div className="min-h-screen bg-stone-50">
+    <div className="min-h-screen bg-stone-50 dark:bg-gray-900">
       <TopNav
         compareHref={`/compare?translation=${encodeURIComponent(translation)}&book=${encodeURIComponent(book)}&chapter=${chapter}`}
       >
         <div className="flex flex-wrap items-center gap-2 text-sm">
               <label className="flex items-center gap-1">
-                <span className="text-gray-500">Book</span>
+                <span className="text-gray-500 dark:text-gray-400">Book</span>
                 <select
-                  className="rounded border border-gray-300 px-2 py-1"
+                  className="rounded border border-gray-300 dark:border-gray-600 px-2 py-1"
                   value={book}
                   onChange={(e) => navigate(e.target.value, 1)}
                   aria-label="Book"
@@ -476,9 +476,9 @@ export function ReaderView(): JSX.Element {
                 </select>
               </label>
               <label className="flex items-center gap-1">
-                <span className="text-gray-500">Chapter</span>
+                <span className="text-gray-500 dark:text-gray-400">Chapter</span>
                 <select
-                  className="rounded border border-gray-300 px-2 py-1"
+                  className="rounded border border-gray-300 dark:border-gray-600 px-2 py-1"
                   value={chapter}
                   onChange={(e) => navigate(book, Number(e.target.value))}
                   aria-label="Chapter"
@@ -491,9 +491,9 @@ export function ReaderView(): JSX.Element {
                 </select>
               </label>
               <label className="flex items-center gap-1">
-                <span className="text-gray-500">Translation</span>
+                <span className="text-gray-500 dark:text-gray-400">Translation</span>
                 <select
-                  className="rounded border border-gray-300 px-2 py-1"
+                  className="rounded border border-gray-300 dark:border-gray-600 px-2 py-1"
                   value={translation}
                   onChange={(e) => changeTranslation(e.target.value)}
                   aria-label="Translation"
@@ -518,7 +518,7 @@ export function ReaderView(): JSX.Element {
                 onChange={(e) => setRefInput(e.target.value)}
                 placeholder="Jump to… e.g. John 3, Gen 1:1"
                 aria-label="Jump to reference"
-                className="min-w-0 flex-1 rounded border border-gray-300 px-2 py-1 text-sm sm:w-56 sm:flex-none"
+                className="min-w-0 flex-1 rounded border border-gray-300 dark:border-gray-600 px-2 py-1 text-sm sm:w-56 sm:flex-none"
               />
               <button
                 type="submit"
@@ -527,13 +527,13 @@ export function ReaderView(): JSX.Element {
               >
                 Go
               </button>
-              {resolveError && <span className="text-sm text-red-600">{resolveError}</span>}
+              {resolveError && <span className="text-sm text-red-600 dark:text-red-400">{resolveError}</span>}
             </form>
 
             <div className="ml-auto flex items-center gap-2">
               <button
                 type="button"
-                className="rounded border border-gray-300 px-3 py-1 text-sm hover:bg-gray-100 disabled:opacity-40"
+                className="rounded border border-gray-300 dark:border-gray-600 px-3 py-1 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-40"
                 onClick={() => prev && navigate(prev.book, prev.chapter)}
                 disabled={!prev}
                 aria-label="Previous chapter"
@@ -542,7 +542,7 @@ export function ReaderView(): JSX.Element {
               </button>
               <button
                 type="button"
-                className="rounded border border-gray-300 px-3 py-1 text-sm hover:bg-gray-100 disabled:opacity-40"
+                className="rounded border border-gray-300 dark:border-gray-600 px-3 py-1 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-40"
                 onClick={() => next && navigate(next.book, next.chapter)}
                 disabled={!next}
                 aria-label="Next chapter"
@@ -554,9 +554,9 @@ export function ReaderView(): JSX.Element {
       </TopNav>
 
       <main className="mx-auto max-w-3xl p-6">
-        {chapterQuery.isPending && <p className="text-gray-500">Loading chapter…</p>}
+        {chapterQuery.isPending && <p className="text-gray-500 dark:text-gray-400">Loading chapter…</p>}
         {chapterQuery.isError && (
-          <p className="text-red-600">Couldn&rsquo;t load this chapter. Is Concord reachable?</p>
+          <p className="text-red-600 dark:text-red-400">Couldn&rsquo;t load this chapter. Is Concord reachable?</p>
         )}
         {chapterQuery.data && (
           <article className="font-serif text-lg leading-8">
@@ -564,7 +564,7 @@ export function ReaderView(): JSX.Element {
               <h2 className="font-sans text-xl font-semibold">{chapterQuery.data.reference}</h2>
               <button
                 type="button"
-                className="rounded border border-gray-300 px-2 py-0.5 font-sans text-xs text-gray-600 hover:bg-gray-100 disabled:opacity-40 disabled:hover:bg-transparent"
+                className="rounded border border-gray-300 dark:border-gray-600 px-2 py-0.5 font-sans text-xs text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-40 disabled:hover:bg-transparent"
                 onClick={openGeo}
                 disabled={!hasPlaces}
                 title={hasPlaces ? "Places in this chapter" : "No places in this passage"}
@@ -573,7 +573,7 @@ export function ReaderView(): JSX.Element {
               </button>
               <button
                 type="button"
-                className="rounded border border-gray-300 px-2 py-0.5 font-sans text-xs text-gray-600 hover:bg-gray-100 disabled:opacity-40 disabled:hover:bg-transparent"
+                className="rounded border border-gray-300 dark:border-gray-600 px-2 py-0.5 font-sans text-xs text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-40 disabled:hover:bg-transparent"
                 onClick={openMap}
                 disabled={!hasMappable}
                 aria-label="Show map"
@@ -583,7 +583,7 @@ export function ReaderView(): JSX.Element {
               </button>
             </div>
             {notesUnreachable && (
-              <p className="mb-3 font-sans text-sm text-red-600">
+              <p className="mb-3 font-sans text-sm text-red-600 dark:text-red-400">
                 Translator&rsquo;s notes unavailable (is Concord reachable?).
               </p>
             )}
@@ -600,7 +600,7 @@ export function ReaderView(): JSX.Element {
                 >
                   <button
                     type="button"
-                    className="mr-1 align-super text-xs font-sans font-semibold text-blue-700 hover:underline"
+                    className="mr-1 align-super text-xs font-sans font-semibold text-blue-700 dark:text-blue-400 hover:underline"
                     onClick={() => openNew(v)}
                     aria-label={`Annotate verse ${v.verse}`}
                   >
@@ -625,7 +625,7 @@ export function ReaderView(): JSX.Element {
                   {outScope.length > 0 && (
                     <button
                       type="button"
-                      className="ml-2 align-middle text-gray-400 hover:text-gray-600"
+                      className="ml-2 align-middle text-gray-400 dark:text-gray-500 hover:text-gray-600"
                       onClick={() => openExisting(v, outScope[0]!)}
                       aria-label={`View out-of-scope note on verse ${v.verse}`}
                       title={`Written for ${outScope[0]!.scope_translations.join(", ")}`}
@@ -696,7 +696,7 @@ export function ReaderView(): JSX.Element {
           <div className="flex flex-col gap-4">
             {/* Type toggle — only for a brand-new note (an existing note's kind is fixed). */}
             {editing.annotationId === null && editing.sermonId === null && (
-              <div className="flex gap-1 rounded-lg bg-gray-100 p-1" role="tablist">
+              <div className="flex gap-1 rounded-lg bg-gray-100 dark:bg-gray-700 p-1" role="tablist">
                 {(["annotation", "sermon"] as const).map((k) => (
                   <button
                     key={k}
@@ -705,8 +705,8 @@ export function ReaderView(): JSX.Element {
                     aria-selected={editing.kind === k}
                     className={`flex-1 rounded-md px-3 py-1 text-sm font-medium ${
                       editing.kind === k
-                        ? "bg-white text-gray-900 shadow"
-                        : "text-gray-500 hover:text-gray-700"
+                        ? "bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 shadow"
+                        : "text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
                     }`}
                     onClick={() => setEditing({ ...editing, kind: k })}
                   >

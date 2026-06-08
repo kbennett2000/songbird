@@ -115,13 +115,13 @@ export function CompareView(): JSX.Element {
     data?.verses.find((v) => v.verse === verse);
 
   return (
-    <div className="min-h-screen bg-stone-50">
+    <div className="min-h-screen bg-stone-50 dark:bg-gray-900">
       <TopNav maxWidth="max-w-6xl">
         <div className="flex flex-wrap items-center gap-3 text-sm">
             <label className="flex items-center gap-1">
-              <span className="text-gray-500">Book</span>
+              <span className="text-gray-500 dark:text-gray-400">Book</span>
               <select
-                className="rounded border border-gray-300 px-2 py-1"
+                className="rounded border border-gray-300 dark:border-gray-600 px-2 py-1"
                 value={book}
                 onChange={(e) => navigate(e.target.value, 1)}
                 aria-label="Book"
@@ -134,9 +134,9 @@ export function CompareView(): JSX.Element {
               </select>
             </label>
             <label className="flex items-center gap-1">
-              <span className="text-gray-500">Chapter</span>
+              <span className="text-gray-500 dark:text-gray-400">Chapter</span>
               <select
-                className="rounded border border-gray-300 px-2 py-1"
+                className="rounded border border-gray-300 dark:border-gray-600 px-2 py-1"
                 value={chapter}
                 onChange={(e) => navigate(book, Number(e.target.value))}
                 aria-label="Chapter"
@@ -151,7 +151,7 @@ export function CompareView(): JSX.Element {
             <div className="flex items-center gap-2">
               <button
                 type="button"
-                className="rounded border border-gray-300 px-3 py-1 hover:bg-gray-100 disabled:opacity-40"
+                className="rounded border border-gray-300 dark:border-gray-600 px-3 py-1 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-40"
                 onClick={() => prev && navigate(prev.book, prev.chapter)}
                 disabled={!prev}
                 aria-label="Previous chapter"
@@ -160,7 +160,7 @@ export function CompareView(): JSX.Element {
               </button>
               <button
                 type="button"
-                className="rounded border border-gray-300 px-3 py-1 hover:bg-gray-100 disabled:opacity-40"
+                className="rounded border border-gray-300 dark:border-gray-600 px-3 py-1 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-40"
                 onClick={() => next && navigate(next.book, next.chapter)}
                 disabled={!next}
                 aria-label="Next chapter"
@@ -170,9 +170,9 @@ export function CompareView(): JSX.Element {
             </div>
             {columns.length < MAX_COLUMNS && unusedTranslations.length > 0 && (
               <label className="ml-auto flex items-center gap-1">
-                <span className="text-gray-500">Add</span>
+                <span className="text-gray-500 dark:text-gray-400">Add</span>
                 <select
-                  className="rounded border border-gray-300 px-2 py-1"
+                  className="rounded border border-gray-300 dark:border-gray-600 px-2 py-1"
                   value=""
                   onChange={(e) => addColumn(e.target.value)}
                   aria-label="Add translation"
@@ -196,9 +196,9 @@ export function CompareView(): JSX.Element {
 
         <h2 className="mb-4 font-sans text-xl font-semibold">{reference}</h2>
 
-        {allPending && <p className="text-gray-500">Loading chapter…</p>}
+        {allPending && <p className="text-gray-500 dark:text-gray-400">Loading chapter…</p>}
         {anyError && (
-          <p className="mb-3 text-sm text-red-600">
+          <p className="mb-3 text-sm text-red-600 dark:text-red-400">
             Couldn&rsquo;t load one of the translations. Is Concord reachable?
           </p>
         )}
@@ -216,10 +216,10 @@ export function CompareView(): JSX.Element {
               {columns.map((code, i) => (
                 <div
                   key={`head-${i}`}
-                  className="flex items-center gap-2 border-b border-gray-200 pb-2"
+                  className="flex items-center gap-2 border-b border-gray-200 dark:border-gray-700 pb-2"
                 >
                   <select
-                    className="rounded border border-gray-300 px-2 py-1 text-sm"
+                    className="rounded border border-gray-300 dark:border-gray-600 px-2 py-1 text-sm"
                     value={code}
                     onChange={(e) => setColumn(i, e.target.value)}
                     aria-label={`Translation column ${i + 1}`}
@@ -235,7 +235,7 @@ export function CompareView(): JSX.Element {
                   {columns.length > 1 && (
                     <button
                       type="button"
-                      className="rounded px-1.5 text-gray-400 hover:bg-gray-100 hover:text-red-600"
+                      className="rounded px-1.5 text-gray-400 dark:text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-red-600"
                       onClick={() => removeColumn(i)}
                       aria-label={`Remove column ${i + 1}`}
                       title="Remove column"
@@ -249,7 +249,7 @@ export function CompareView(): JSX.Element {
               {/* Verse rows: the canonical verse number, then each translation's rendering of it. */}
               {verseNumbers.map((n) => (
                 <Fragment key={n}>
-                  <div className="pt-1 text-right font-sans text-xs tabular-nums text-gray-400">
+                  <div className="pt-1 text-right font-sans text-xs tabular-nums text-gray-400 dark:text-gray-500">
                     {n}
                   </div>
                   {columns.map((code, i) => {
@@ -282,7 +282,7 @@ export function CompareView(): JSX.Element {
                             {outScope.length > 0 && (
                               <button
                                 type="button"
-                                className="ml-2 align-middle text-gray-400 hover:text-gray-600"
+                                className="ml-2 align-middle text-gray-400 dark:text-gray-500 hover:text-gray-600"
                                 onClick={(e) =>
                                   setOpenNote({ annotation: outScope[0]!, anchor: e.currentTarget })
                                 }

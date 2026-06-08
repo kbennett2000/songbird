@@ -223,6 +223,45 @@ async def test_patch_me_rejects_chapter_below_one(
     assert resp.status_code == 422
 
 
+async def test_me_theme_defaults_null(
+    make_concord: type[FakeConcordClient],
+    unauth_client: Callable[[FakeConcordClient], httpx.AsyncClient],
+) -> None:
+    # Null until the user picks → the frontend follows the OS (#60).
+    async with unauth_client(make_concord()) as client:
+        await client.post("/api/v1/auth/register", json=CREDS)
+        me = await client.get("/api/v1/auth/me")
+    assert me.json()["user"]["theme"] is None
+
+
+async def test_patch_me_sets_theme_and_does_not_clobber_position(
+    make_concord: type[FakeConcordClient],
+    unauth_client: Callable[[FakeConcordClient], httpx.AsyncClient],
+) -> None:
+    async with unauth_client(make_concord()) as client:
+        await client.post("/api/v1/auth/register", json=CREDS)
+        await client.patch(
+            "/api/v1/auth/me",
+            json={"last_translation": "WEB", "last_book": "JHN", "last_chapter": 3},
+        )
+        patch = await client.patch("/api/v1/auth/me", json={"theme": "dark"})
+        assert patch.status_code == 200
+        user = patch.json()["user"]
+    # The theme persists, and the reading position the partial patch didn't touch survives.
+    assert user["theme"] == "dark"
+    assert (user["last_translation"], user["last_book"], user["last_chapter"]) == ("WEB", "JHN", 3)
+
+
+async def test_patch_me_rejects_unknown_theme(
+    make_concord: type[FakeConcordClient],
+    unauth_client: Callable[[FakeConcordClient], httpx.AsyncClient],
+) -> None:
+    async with unauth_client(make_concord()) as client:
+        await client.post("/api/v1/auth/register", json=CREDS)
+        resp = await client.patch("/api/v1/auth/me", json={"theme": "neon"})
+    assert resp.status_code == 422
+
+
 def test_argon2_hash_verifies() -> None:
     hashed = hash_password("supersecret")
     assert hashed != "supersecret"

@@ -4,6 +4,22 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>songbird</title>
+    <script>
+      // Apply the saved colour scheme before paint to avoid a flash (#60). The React theme hook
+      // keeps localStorage + the profile in sync; this just reads the last-known value.
+      (function () {
+        try {
+          var t = localStorage.getItem("songbird-theme");
+          var dark =
+            t === "dark" ||
+            ((!t || t === "system") &&
+              window.matchMedia("(prefers-color-scheme: dark)").matches);
+          if (dark) document.documentElement.classList.add("dark");
+        } catch (e) {
+          /* ignore */
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

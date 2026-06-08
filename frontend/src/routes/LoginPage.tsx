@@ -51,40 +51,40 @@ export function LoginPage(): JSX.Element {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-stone-50 p-4">
-      <div className="w-full max-w-sm rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+    <div className="flex min-h-screen items-center justify-center bg-stone-50 dark:bg-gray-900 p-4">
+      <div className="w-full max-w-sm rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-6 shadow-sm">
         <h1 className="mb-1 text-2xl font-bold tracking-tight">songbird</h1>
-        <p className="mb-6 text-sm text-gray-500">
+        <p className="mb-6 text-sm text-gray-500 dark:text-gray-400">
           {mode === "login" ? "Sign in to your notes." : "Create an account."}
         </p>
 
         <form onSubmit={submit} className="flex flex-col gap-4">
           <label className="flex flex-col gap-1 text-sm">
-            <span className="text-gray-600">Username</span>
+            <span className="text-gray-600 dark:text-gray-300">Username</span>
             <input
               type="text"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               autoComplete="username"
               aria-label="Username"
-              className="rounded border border-gray-300 px-3 py-2"
+              className="rounded border border-gray-300 dark:border-gray-600 px-3 py-2"
               required
             />
           </label>
           <label className="flex flex-col gap-1 text-sm">
-            <span className="text-gray-600">Password</span>
+            <span className="text-gray-600 dark:text-gray-300">Password</span>
             <input
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               autoComplete={mode === "login" ? "current-password" : "new-password"}
               aria-label="Password"
-              className="rounded border border-gray-300 px-3 py-2"
+              className="rounded border border-gray-300 dark:border-gray-600 px-3 py-2"
               required
             />
           </label>
 
-          {error && <p className="text-sm text-red-600">{error}</p>}
+          {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
 
           <button
             type="submit"
@@ -97,7 +97,7 @@ export function LoginPage(): JSX.Element {
 
         <button
           type="button"
-          className="mt-4 text-sm text-blue-700 hover:underline"
+          className="mt-4 text-sm text-blue-700 dark:text-blue-400 hover:underline"
           onClick={() => {
             setMode(mode === "login" ? "register" : "login");
             setError(null);

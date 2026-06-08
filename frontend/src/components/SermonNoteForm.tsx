@@ -16,7 +16,7 @@ interface SermonNoteFormProps {
 }
 
 const fieldClass =
-  "mt-1 w-full rounded border border-gray-300 px-2 py-1 text-sm outline-none focus:border-blue-500";
+  "mt-1 w-full rounded border border-gray-300 dark:border-gray-600 px-2 py-1 text-sm outline-none focus:border-blue-500";
 
 /**
  * Author / edit a sermon note: title, the sermon URL (the body — an external link, invariant 6
@@ -50,7 +50,7 @@ export function SermonNoteForm({
 
   return (
     <div className="flex flex-col gap-3">
-      <label className="block text-sm font-medium text-gray-700">
+      <label className="block text-sm font-medium text-gray-700 dark:text-gray-200">
         Title
         <input
           type="text"
@@ -61,7 +61,7 @@ export function SermonNoteForm({
         />
       </label>
 
-      <label className="block text-sm font-medium text-gray-700">
+      <label className="block text-sm font-medium text-gray-700 dark:text-gray-200">
         Sermon URL
         <input
           type="url"
@@ -72,7 +72,7 @@ export function SermonNoteForm({
         />
       </label>
 
-      <label className="block text-sm font-medium text-gray-700">
+      <label className="block text-sm font-medium text-gray-700 dark:text-gray-200">
         Reference
         <input
           type="text"
@@ -83,7 +83,7 @@ export function SermonNoteForm({
         />
       </label>
 
-      <label className="block text-sm font-medium text-gray-700">
+      <label className="block text-sm font-medium text-gray-700 dark:text-gray-200">
         Date
         <input
           type="date"
@@ -104,7 +104,7 @@ export function SermonNoteForm({
         </button>
         <button
           type="button"
-          className="rounded border border-gray-300 px-3 py-1 text-sm hover:bg-gray-100"
+          className="rounded border border-gray-300 dark:border-gray-600 px-3 py-1 text-sm hover:bg-gray-100 dark:hover:bg-gray-700"
           onClick={onCancel}
         >
           Cancel
@@ -112,7 +112,7 @@ export function SermonNoteForm({
         {onDelete && (
           <button
             type="button"
-            className="ml-auto rounded px-3 py-1 text-sm text-red-600 hover:bg-red-50"
+            className="ml-auto rounded px-3 py-1 text-sm text-red-600 dark:text-red-400 hover:bg-red-50"
             onClick={onDelete}
           >
             Delete

@@ -319,6 +319,9 @@ export const userSchema = z.object({
   last_translation: z.string().nullable(),
   last_book: z.string().nullable(),
   last_chapter: z.number().nullable(),
+  // UI colour scheme (#60): "light" | "dark" | "system". Null/absent until the user picks → the
+  // app follows the OS. Tolerant (optional) so older fixtures parse.
+  theme: z.string().nullable().optional(),
   created_at: z.string(),
 });
 export const authEnvelopeSchema = z.object({

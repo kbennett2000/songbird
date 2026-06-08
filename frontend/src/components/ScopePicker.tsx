@@ -33,8 +33,8 @@ export function ScopePicker({
   };
 
   return (
-    <fieldset className="flex flex-col gap-2 rounded border border-gray-200 p-3">
-      <legend className="px-1 text-sm font-medium text-gray-700">Shows in</legend>
+    <fieldset className="flex flex-col gap-2 rounded border border-gray-200 dark:border-gray-700 p-3">
+      <legend className="px-1 text-sm font-medium text-gray-700 dark:text-gray-200">Shows in</legend>
 
       <label className="flex items-center gap-2 text-sm">
         <input

@@ -31,21 +31,21 @@ export function NotePopover({ note, anchor, onClose, onJump }: NotePopoverProps)
         </span>
         <button
           type="button"
-          className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700"
+          className="rounded p-1 text-gray-400 dark:text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-700 dark:hover:text-gray-200"
           onClick={onClose}
           aria-label="Close"
         >
           ✕
         </button>
       </div>
-      <p className="whitespace-pre-wrap break-words text-gray-800">{note.text}</p>
+      <p className="whitespace-pre-wrap break-words text-gray-800 dark:text-gray-100">{note.text}</p>
       {note.cross_references.length > 0 && (
         <ul className="mt-2 flex flex-col gap-1 border-t border-gray-100 pt-2">
           {note.cross_references.map((ref) => (
             <li key={`${ref.to_book}-${ref.to_chapter}-${ref.to_verse_start}`}>
               <button
                 type="button"
-                className="font-medium text-blue-700 hover:underline"
+                className="font-medium text-blue-700 dark:text-blue-400 hover:underline"
                 onClick={() => onJump(ref.to_book, ref.to_chapter, ref.to_verse_start)}
               >
                 → {ref.reference}
