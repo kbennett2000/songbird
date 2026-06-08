@@ -4,6 +4,57 @@ A running log of per-slice decisions, gotchas, and how each slice was verified. 
 
 ---
 
+## Slice 2 (v1.3) — Notes ("Study notes") keyword search
+
+- **Date:** 2026-06-07
+- **Branch:** `slice/2-study-notes-search`
+- **Scope:** a third Search-page section, **"Study notes"**, keyword-searching Concord's
+  translator's/study notes via `/v1/notes/search` (v1.1.0). Pure songbird; no Concord change.
+  Distinct from "Scripture" (Concord verse text) and "Your notes" (the user's own annotations).
+
+### What changed
+- **Client** (`concord/client.py`): `search_notes(q, limit=20)` → `/v1/notes/search` (q-only;
+  filters deferred), reusing `_SEARCH_TIMEOUT` and the same error mapping as keyword search.
+- **Schemas**: Concord `NoteSearchHit`/`NoteSearchResponse`; API `StudyNoteResult`
+  (book, chapter, verse, reference, translation, type, snippet); frontend `studyNoteResultSchema`.
+- **API** (`api/search.py`): `GET /api/v1/study-notes-search?q=` — **best-effort**: swallows BOTH
+  `ConcordNotFoundError` and `ConcordUnreachableError` to `[]` (deliberate divergence from the
+  Scripture endpoints, which surface a 502 — the Scripture section stays the page's Concord-health
+  signal, so a redundant error here would be noise).
+- **Frontend**: `searchStudyNotes(q)`; a "Study notes" `<section>` after "Your notes" that
+  **renders only on ≥1 hit** (its own query key `["study-notes-search", query]`, independent of the
+  Scripture mode/picker); snippets via the existing `markSegments`. Extracted the reader's note
+  type→label map to `lib/notes.ts` as `NOTE_TYPE_LABELS` (one home; `NotePopover` now imports it).
+
+### Clarifications (open-question answers)
+1. **Section header = "Study notes"** (not the reader's "Translator's notes" umbrella): matches
+   spec §2 / the endpoint name, and avoids a redundant `tn`→"Translator's note" badge under a
+   same-named header. Per-type badges reuse the reader's exact labels; **unknown/null type → a
+   neutral "Note" badge** (never a raw code, never a crash).
+2. **"Open in reader" jumps to the verse only** (book/chapter/verse) — no auto-switch to the note's
+   translation (the snippet already shows the text; cross-translation marker deep-linking deferred).
+3. **Independent section** — fires on any query like "Your notes", with its own query key (distinct
+   from the annotations `["note-search", …]`); endpoint named `study-notes-search` to avoid
+   colliding with the user's-own-notes search (`/annotations?q=`).
+4. Labels as in (1).
+
+### Verification reality (drove the test strategy)
+The **stock v1.1.0 image ships zero notes** (`/v1/notes/search` → `total: 0`), so the hit-rendering
+path **can't** be exercised end-to-end against it. So: the **happy path is verified by tests**
+(`FakeConcordClient` hits + an MSW fixture — type badge, `<mark>` highlight, verse jump, the "Note"
+fallback); the **live stack verifies only graceful absence** — the section is hidden, no error,
+Scripture + Your notes unaffected. We do **not** chase real hits against a notes-less Concord.
+
+### Verify
+- Backend `pytest` 170 passed (new `notes_search_test.py` incl. both best-effort swallow cases, a
+  client-level `search_notes` test, and the contract test now pinning `/v1/notes/search`);
+  Pyright-strict + Ruff clean. Frontend `vitest` 138 passed (4 new SearchView cases:
+  hidden-on-empty, shown-with-hits, "Note" fallback, best-effort-on-error); `tsc` + lint clean.
+- End-to-end (`docker compose up`, v1.1.0 stock): `GET /api/v1/study-notes-search?q=love` → `200
+  []` → section absent; `keyword-search` + `annotations?q=` still 200. Canonical bridge untouched.
+
+---
+
 ## Slice 1 (v1.3) — Multi-translation keyword search
 
 - **Date:** 2026-06-07
