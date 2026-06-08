@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
@@ -184,5 +184,126 @@ describe("SearchView", () => {
     // Switched to semantic for the same query → results appear; the toggle reflects the new mode.
     expect(await screen.findByText("1 John 4:7")).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Semantic" })).toHaveAttribute("aria-selected", "true");
+  });
+
+  it("keyword search defaults to ALL translations (no translations param sent)", async () => {
+    let sentTranslations: string | null = "unset";
+    server.use(
+      http.get("/api/v1/keyword-search", ({ request }) => {
+        sentTranslations = new URL(request.url).searchParams.get("translations");
+        return HttpResponse.json([]);
+      }),
+      http.get("/api/v1/annotations", () => HttpResponse.json([])),
+    );
+    const user = userEvent.setup();
+    renderSearch();
+
+    await user.click(screen.getByRole("tab", { name: "Keyword" }));
+    // The scope control defaults to "All translations".
+    expect(screen.getByRole("button", { name: /Translations:/ })).toHaveTextContent(
+      "All translations",
+    );
+    await user.type(screen.getByLabelText("Search query"), "wept");
+    await user.click(screen.getByRole("button", { name: "Search" }));
+
+    await screen.findByText("No matching verses.");
+    // "All" → the param is omitted entirely (backend defaults to all).
+    expect(sentTranslations).toBeNull();
+  });
+
+  it("narrowing the picker to one translation sends translations=WEB", async () => {
+    let sentTranslations: string | null = null;
+    server.use(
+      http.get("/api/v1/keyword-search", ({ request }) => {
+        sentTranslations = new URL(request.url).searchParams.get("translations");
+        return HttpResponse.json([]);
+      }),
+      http.get("/api/v1/annotations", () => HttpResponse.json([])),
+    );
+    const user = userEvent.setup();
+    renderSearch();
+
+    await user.click(screen.getByRole("tab", { name: "Keyword" }));
+    await user.click(screen.getByRole("button", { name: /Translations:/ }));
+    await user.click(await screen.findByRole("checkbox", { name: "WEB" }));
+    await user.type(screen.getByLabelText("Search query"), "wept");
+    await user.click(screen.getByRole("button", { name: "Search" }));
+
+    await screen.findByText("No matching verses.");
+    expect(sentTranslations).toBe("WEB");
+  });
+
+  it("renders a multi-translation hit with a labeled, highlighted snippet per match, reading-translation first", async () => {
+    server.use(
+      // The verse matched in two translations. WEB is listed first in the payload to prove the UI
+      // hoists the reading translation (KJV, the default) to the top regardless of payload order.
+      http.get("/api/v1/keyword-search", () =>
+        HttpResponse.json([
+          {
+            book: "JHN",
+            chapter: 11,
+            verse: 35,
+            reference: "John 11:35",
+            snippet: "WEB Jesus <mark>wept</mark>.",
+            matches: {
+              WEB: "WEB Jesus <mark>wept</mark>.",
+              KJV: "KJV Jesus <mark>wept</mark>.",
+            },
+          },
+        ]),
+      ),
+      http.get("/api/v1/annotations", () => HttpResponse.json([])),
+    );
+    const user = userEvent.setup();
+    renderSearch();
+
+    await user.click(screen.getByRole("tab", { name: "Keyword" }));
+    await user.type(screen.getByLabelText("Search query"), "wept");
+    await user.click(screen.getByRole("button", { name: "Search" }));
+
+    expect(await screen.findByText("John 11:35")).toBeInTheDocument();
+    // Both translations' snippets render, each highlighted (two <mark>s) and id-labeled.
+    expect(screen.getAllByText("wept").every((m) => m.tagName === "MARK")).toBe(true);
+    expect(screen.getAllByText("wept")).toHaveLength(2);
+    const kjvBadge = screen.getByText("KJV");
+    const webBadge = screen.getByText("WEB");
+    // Reading translation (KJV) leads, even though WEB came first in the payload.
+    expect(kjvBadge.compareDocumentPosition(webBadge) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("semantic search now displays in the reading translation, not hardcoded KJV (behavior change)", async () => {
+    let sentTranslation: string | null = null;
+    server.use(
+      // Profile's reading translation is WEB.
+      http.get("/api/v1/auth/me", () =>
+        HttpResponse.json({
+          user: {
+            id: 1,
+            username: "tester",
+            is_admin: true,
+            last_translation: "WEB",
+            last_book: null,
+            last_chapter: null,
+            created_at: "2026-01-01T00:00:00Z",
+          },
+        }),
+      ),
+      http.get("/api/v1/semantic-search", ({ request }) => {
+        sentTranslation = new URL(request.url).searchParams.get("translation");
+        return HttpResponse.json([
+          { book: "PSA", chapter: 23, verse: 1, reference: "Psalm 23:1", score: 0.9, text: "…" },
+        ]);
+      }),
+      http.get("/api/v1/annotations", () => HttpResponse.json([])),
+    );
+    const user = userEvent.setup();
+    renderSearch();
+
+    await user.type(screen.getByLabelText("Search query"), "shepherd");
+    await user.click(screen.getByRole("button", { name: "Search" }));
+
+    expect(await screen.findByText("Psalm 23:1")).toBeInTheDocument();
+    // The display translation follows the profile (WEB), not the old hardcoded KJV.
+    await waitFor(() => expect(sentTranslation).toBe("WEB"));
   });
 });

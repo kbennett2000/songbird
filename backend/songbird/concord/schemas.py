@@ -125,10 +125,15 @@ class KeywordResult(BaseModel):
     verse: int
     reference: str
     snippet: str | None = None  # verse text with <mark>…</mark> around the matched term(s)
+    # In multi-translation mode, the highlighted snippet per translation that matched (id →
+    # snippet), top-ranked first. Absent for legacy single-translation responses.
+    matches: dict[str, str] | None = None
 
 
 class KeywordSearchResponse(BaseModel):
     hits: list[KeywordResult]
+    # The translations actually searched (Concord echoes this back; `*` expands to all loaded).
+    translations: list[str] | None = None
 
 
 class NoteCrossReference(BaseModel):

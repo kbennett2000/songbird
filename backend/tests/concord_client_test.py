@@ -286,21 +286,26 @@ async def test_semantic_search_404_is_not_found() -> None:
     await client.aclose()
 
 
-async def test_keyword_search_hits_v1_search_and_parses() -> None:
+async def test_keyword_search_all_translations_sends_star_and_parses_matches() -> None:
     seen: dict[str, str] = {}
 
     def handler(request: httpx.Request) -> httpx.Response:
         seen["path"] = request.url.path
         seen["q"] = request.url.params.get("q", "")
-        seen["translation"] = request.url.params.get("translation", "")
+        # No `translations` arg → the client searches all loaded translations (`*`); the old
+        # singular `translation` param is gone.
+        seen["translations"] = request.url.params.get("translations", "")
+        seen["translation"] = request.url.params.get("translation", "<absent>")
         seen["limit"] = request.url.params.get("limit", "")
-        # The real Concord /v1/search body: a `hits` array whose items carry a `snippet` with the
-        # matched term wrapped in <mark>…</mark> (captured live from Concord 192.168.1.62:8000).
+        # The real multi-translation /v1/search body: each hit carries a flat top-ranked `snippet`
+        # plus a `matches` map (translation id → snippet, top-ranked first) and the response echoes
+        # the `translations` searched (captured live from Concord v1.1.0).
         return httpx.Response(
             200,
             json={
                 "query": "living water",
                 "translation": "KJV",
+                "translations": ["KJV", "WEB"],
                 "book": None,
                 "limit": 5,
                 "offset": 0,
@@ -312,23 +317,65 @@ async def test_keyword_search_hits_v1_search_and_parses() -> None:
                         "verse": 38,
                         "reference": "John 7:38",
                         "snippet": "rivers of <mark>living</mark> <mark>water</mark>.",
+                        "matches": {
+                            "KJV": "rivers of <mark>living</mark> <mark>water</mark>.",
+                            "WEB": "rivers of <mark>living</mark> <mark>water</mark>.",
+                        },
                     }
                 ],
             },
         )
 
     client = ConcordClient("http://concord.test", transport=httpx.MockTransport(handler))
-    result = await client.keyword_search("living water", "KJV", limit=5)
+    result = await client.keyword_search("living water", None, limit=5)
     await client.aclose()
     assert seen == {
         "path": "/v1/search",
         "q": "living water",
-        "translation": "KJV",
+        "translations": "*",
+        "translation": "<absent>",
         "limit": "5",
     }
     assert result.hits[0].book == "JHN"
     assert result.hits[0].snippet is not None
     assert "<mark>living</mark>" in result.hits[0].snippet
+    assert result.hits[0].matches == {
+        "KJV": "rivers of <mark>living</mark> <mark>water</mark>.",
+        "WEB": "rivers of <mark>living</mark> <mark>water</mark>.",
+    }
+    assert result.translations == ["KJV", "WEB"]
+
+
+async def test_keyword_search_narrowed_sends_csv() -> None:
+    seen: dict[str, str] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["translations"] = request.url.params.get("translations", "")
+        return httpx.Response(200, json={"hits": []})
+
+    client = ConcordClient("http://concord.test", transport=httpx.MockTransport(handler))
+    await client.keyword_search("living water", ["KJV", "WEB"], limit=5)
+    await client.aclose()
+    assert seen["translations"] == "KJV,WEB"
+
+
+async def test_keyword_search_uses_a_generous_read_timeout() -> None:
+    # Concord's keyword search can take 6–8s cold; the read budget must exceed the client's default
+    # 5s so a *slow* search isn't misreported as an outage, while connect stays tight (fail fast if
+    # Concord is genuinely down). Guards the fix for the single-translation 502 regression.
+    seen: dict[str, object] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["timeout"] = request.extensions.get("timeout")
+        return httpx.Response(200, json={"hits": []})
+
+    client = ConcordClient("http://concord.test", transport=httpx.MockTransport(handler))
+    await client.keyword_search("living water", ["KJV"], limit=5)
+    await client.aclose()
+    timeout = seen["timeout"]
+    assert isinstance(timeout, dict)
+    assert timeout["read"] == 30.0
+    assert timeout["connect"] == 5.0
 
 
 async def test_keyword_search_404_is_not_found() -> None:
