@@ -8,7 +8,10 @@
 > [ADR 0003](../adr/0003-maplibre-offline-pmtiles-basemap.md) for that evolution. The design intent
 > below — the honesty model (§6), the globe affordance (§5), off-map/unknown listing, scope (§8),
 > and the mobile constraints (§7) — **still holds**; only the projection/asset/no-pan-zoom mechanics
-> described in §3, §4, §7, and §11 were superseded. Those passages are flagged inline.
+> described in §3, §4, §7, and §11 were superseded. Those passages are flagged inline. Two later
+> rendering refinements are also folded in below: inland seas/lakes now render **filled** rather than
+> as hollow outlines (issue #83, §3), and each unclustered pin now carries its **place name** beside
+> it so the map reads at a glance (issue #86, §7).
 
 > songbird is built on **[Concord](https://github.com/kbennett2000/concord)**, which provides
 > the places data this feature renders. See [the design spec](../v1/SPEC.md) for that relationship.
@@ -55,6 +58,11 @@ the README promises "works without an internet connection"). Therefore:
 - The map's data is **shipped inside songbird** and served by its own backend; **zero outbound
   calls at runtime**. *(v1.1: a single bundled static image. Now: bundled `relief.pmtiles` +
   `bible-physical.geojson` — still local-only. See ADR 0003.)*
+
+> **Rendering refinement (issue #83).** The physical overlay's inland waters — the **Dead Sea** and
+> **Sea of Galilee** — are polygons sitting atop the land-colored relief, so without a fill they read
+> as empty outlines. A `lakes-fill` layer paints them the same water tone as the open Mediterranean,
+> so all water reads as one body. (`frontend/src/lib/map/style.ts`.)
 
 ## 4. The atlas asset — the load-bearing requirement
 
@@ -130,6 +138,13 @@ constraint** (songbird has a mobile audience):
   on hover to reveal pin detail, unlike the desktop cross-refs surface). A selected pin shows a
   small card: **place name, status, confidence, and "jump to verses"** (reusing the existing
   jump — selecting a place → its verses, navigating the reader and closing the modal).
+- **Place names at a glance (issue #86):** each *unclustered* pin shows its **name beside it by
+  default**, so a reader can scan the map without tapping every pin to find out what each one is.
+  The names are DOM markers (no glyph font — same offline-safe path as the curated labels, ADR
+  0003) and are non-interactive, so a tap still falls through to the pin and opens the full card
+  above. They appear only when there's room: crowded pins collapse into a counted cluster (no
+  names), and the names show as the cluster expands. The single **"Aa"** control toggles the place
+  names together with the curated context labels.
 - **Finger-sized hit targets:** pins/markers are large enough to tap reliably (not 4px dots);
   overlapping pins in dense areas degrade gracefully (e.g. slight offset or a "+N here").
 - **Obvious close:** a clear close control; tapping the backdrop or pressing Esc closes
