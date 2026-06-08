@@ -922,4 +922,45 @@ describe("ReaderView", () => {
     await screen.findByRole("button", { name: "Annotate verse 16" });
     expect(captured).toMatchObject({ tags: ["grace"] });
   });
+
+  it("surfaces the notes notice only on a genuine Concord outage (502)", async () => {
+    server.use(
+      http.get("/api/v1/notes/:translation/:book/:chapter", () =>
+        HttpResponse.json({ detail: { code: "CONCORD_UNREACHABLE", message: "down" } }, {
+          status: 502,
+        }),
+      ),
+    );
+    renderReader();
+
+    // The chapter still renders (the notes call is non-blocking)…
+    expect(await screen.findByText(/JHN 3:16/)).toBeInTheDocument();
+    // …and the outage surfaces the notice.
+    expect(await screen.findByText(/Translator.*notes unavailable/)).toBeInTheDocument();
+  });
+
+  it("treats a 404 from the notes route as 'no notes' — no notice (Concord v1.1.0 pin)", async () => {
+    server.use(
+      http.get("/api/v1/notes/:translation/:book/:chapter", () =>
+        HttpResponse.json({ detail: { code: "NOT_FOUND", message: "no notes here" } }, {
+          status: 404,
+        }),
+      ),
+    );
+    renderReader();
+
+    expect(await screen.findByText(/JHN 3:16/)).toBeInTheDocument();
+    // A 404 means genuinely-not-found, not an outage — markers simply absent, no scary message.
+    expect(screen.queryByText(/Translator.*notes unavailable/)).not.toBeInTheDocument();
+  });
+
+  it("shows no notice when the notes route returns an empty 200 (stock no-notes image)", async () => {
+    server.use(
+      http.get("/api/v1/notes/:translation/:book/:chapter", () => HttpResponse.json([])),
+    );
+    renderReader();
+
+    expect(await screen.findByText(/JHN 3:16/)).toBeInTheDocument();
+    expect(screen.queryByText(/Translator.*notes unavailable/)).not.toBeInTheDocument();
+  });
 });

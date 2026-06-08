@@ -57,7 +57,7 @@ def test_fixture_is_the_pinned_concord_version() -> None:
     # Guards against the fixture silently drifting from the docker-compose pin (CONCORD_VERSION).
     info = _spec()["info"]
     assert isinstance(info, dict)
-    assert info["version"] == "1.0.2"
+    assert info["version"] == "1.1.0"
 
 
 def test_endpoints_songbird_calls_exist_in_concord_spec() -> None:

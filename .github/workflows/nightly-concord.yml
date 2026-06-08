@@ -25,7 +25,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       concord:
-        image: ghcr.io/kbennett2000/concord:v1.0.2
+        image: ghcr.io/kbennett2000/concord:v1.1.0
         ports:
           - 8000:8000
         options: >-
