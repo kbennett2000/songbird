@@ -63,6 +63,7 @@ export function TagInput({ value, suggestions, onChange }: TagInputProps): JSX.E
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={onKeyDown}
+          onBlur={() => add(draft)}
           placeholder="Add a tag…"
           aria-label="Add a tag"
           className="min-w-[6rem] flex-1 text-sm outline-none"
@@ -75,6 +76,8 @@ export function TagInput({ value, suggestions, onChange }: TagInputProps): JSX.E
               <button
                 type="button"
                 className="rounded border border-gray-200 dark:border-gray-700 px-2 py-0.5 text-xs text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                // Keep focus on the input so the blur-commit doesn't also add the partial draft.
+                onMouseDown={(e) => e.preventDefault()}
                 onClick={() => add(s)}
               >
                 {s}
