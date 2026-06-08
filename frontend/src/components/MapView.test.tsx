@@ -10,6 +10,7 @@ import { server } from "@/test/msw/server";
 // (constructor options, sources/handlers, the click → PlaceCard path). Real rendering is covered
 // by the Playwright e2e pass.
 const created: FakeMap[] = [];
+const markers: FakeMarker[] = [];
 
 class FakeSource {
   setData = vi.fn();
@@ -18,10 +19,36 @@ class FakeSource {
   getClusterExpansionZoom = vi.fn(() => Promise.resolve(6));
 }
 
+// A MapLibre HTML marker — records itself so tests can read the place-name labels / cluster badges
+// the component creates (real rendering is the Playwright/manual gate; here we assert the wiring).
+class FakeMarker {
+  el: HTMLElement;
+  constructor(o?: { element?: HTMLElement }) {
+    this.el = o?.element ?? document.createElement("div");
+    markers.push(this);
+  }
+  setLngLat(): this {
+    return this;
+  }
+  addTo(): this {
+    return this;
+  }
+  getElement(): HTMLElement {
+    return this.el;
+  }
+  remove(): void {
+    const i = markers.indexOf(this);
+    if (i >= 0) markers.splice(i, 1);
+  }
+}
+
 class FakeMap {
   opts: Record<string, unknown>;
   handlers = new Map<string, (arg?: unknown) => void>();
   source = new FakeSource();
+  // querySourceFeatures returns these, picked by filter: clusters vs unclustered points.
+  clusterFeatures: unknown[] = [];
+  pointFeatures: unknown[] = [];
   fitBounds = vi.fn();
   setFilter = vi.fn();
   addControl = vi.fn();
@@ -45,8 +72,11 @@ class FakeMap {
   getCanvas(): { style: Record<string, string> } {
     return { style: {} };
   }
-  querySourceFeatures(): unknown[] {
-    return [];
+  querySourceFeatures(_source: string, opts?: { filter?: unknown[] }): unknown[] {
+    // The component queries clusters with ["has", "point_count"] and points with its negation.
+    const filter = opts?.filter;
+    const isPoints = Array.isArray(filter) && filter[0] === "!";
+    return isPoints ? this.pointFeatures : this.clusterFeatures;
   }
   isSourceLoaded(): boolean {
     return true;
@@ -59,22 +89,7 @@ class FakeMap {
 vi.mock("maplibre-gl", () => ({
   default: {
     Map: FakeMap,
-    Marker: class {
-      el: HTMLElement;
-      constructor(o?: { element?: HTMLElement }) {
-        this.el = o?.element ?? document.createElement("div");
-      }
-      setLngLat() {
-        return this;
-      }
-      addTo() {
-        return this;
-      }
-      getElement() {
-        return this.el;
-      }
-      remove() {}
-    },
+    Marker: FakeMarker,
     NavigationControl: class {},
     addProtocol: vi.fn(),
   },
@@ -130,6 +145,7 @@ async function loadMap(): Promise<FakeMap> {
 
 beforeEach(() => {
   created.length = 0;
+  markers.length = 0;
 });
 afterEach(() => {
   vi.clearAllMocks();
@@ -192,6 +208,33 @@ describe("MapView (MapLibre)", () => {
     expect(card).toHaveTextContent("Jerusalem");
     await user.click(await within(card).findByRole("button", { name: "John 3:16" }));
     expect(onJump).toHaveBeenCalledWith("JHN", 3, 16);
+  });
+
+  it("labels each unclustered pin with its place name, toggled by the 'Aa' control (#86)", async () => {
+    mockPlaces([JERUSALEM]);
+    const user = userEvent.setup();
+    renderMap();
+    const map = await loadMap();
+
+    // One unclustered point in view → its name label is created beside the pin, visible by default.
+    map.pointFeatures = [
+      {
+        geometry: { type: "Point", coordinates: [35.23, 31.78] },
+        properties: { id: "jeru", name: "Jerusalem" },
+      },
+    ];
+    await act(async () => {
+      map.emit("moveend", "");
+    });
+    const label = markers
+      .map((m) => m.getElement())
+      .find((el) => el.dataset.testid === "map-place-label");
+    expect(label?.textContent).toBe("Jerusalem");
+    expect(label?.style.display).toBe("");
+
+    // The single "Aa" toggle hides the place names (along with the curated context labels).
+    await user.click(screen.getByRole("button", { name: "Hide labels" }));
+    expect(label?.style.display).toBe("none");
   });
 
   it("clicking a cluster lists its members and clears a stale place card", async () => {

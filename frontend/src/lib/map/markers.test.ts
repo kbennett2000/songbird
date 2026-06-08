@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { MAP_LABELS } from "@/lib/map/labels";
-import { buildClusterBadge, buildLabelElement } from "@/lib/map/markers";
+import { buildClusterBadge, buildLabelElement, buildPlaceLabel } from "@/lib/map/markers";
 
 describe("map labels (curated)", () => {
   it("are all within the atlas extent (so they actually place)", () => {
@@ -32,5 +32,12 @@ describe("marker DOM builders", () => {
     expect(el.textContent).toBe("Mediterranean Sea");
     expect(el.dataset.kind).toBe("sea");
     expect(el.dataset.testid).toBe("map-label");
+  });
+
+  it("a place label shows the name and doesn't intercept clicks (taps reach the pin)", () => {
+    const el = buildPlaceLabel("Jerusalem");
+    expect(el.textContent).toBe("Jerusalem");
+    expect(el.dataset.testid).toBe("map-place-label");
+    expect(el.className).toContain("pointer-events-none");
   });
 });
