@@ -23,6 +23,54 @@ vi.mock("@/components/NoteEditor", () => ({
   ),
 }));
 
+// MapLibre needs WebGL (unavailable in happy-dom). The map's own behavior is covered in
+// MapView.test.tsx; here we only need the map modal to mount without crashing.
+vi.mock("maplibre-gl", () => ({
+  default: {
+    Map: class {
+      on() {
+        return this;
+      }
+      addControl() {
+        return this;
+      }
+      getSource() {
+        return { setData() {} };
+      }
+      getCanvas() {
+        return { style: {} as Record<string, string> };
+      }
+      querySourceFeatures() {
+        return [];
+      }
+      isSourceLoaded() {
+        return true;
+      }
+      fitBounds() {}
+      setFilter() {}
+      easeTo() {}
+      resize() {}
+      remove() {}
+      touchZoomRotate = { disableRotation() {} };
+    },
+    Marker: class {
+      setLngLat() {
+        return this;
+      }
+      addTo() {
+        return this;
+      }
+      getElement() {
+        return document.createElement("div");
+      }
+      remove() {}
+    },
+    NavigationControl: class {},
+    addProtocol() {},
+  },
+}));
+vi.mock("pmtiles", () => ({ Protocol: class { tile() {} } }));
+
 import { ReaderView } from "@/routes/ReaderView";
 import { server } from "@/test/msw/server";
 
@@ -799,7 +847,8 @@ describe("ReaderView", () => {
     await user.click(globe);
 
     expect(await screen.findByRole("dialog", { name: "Map — JHN 3" })).toBeInTheDocument();
-    expect(await screen.findByRole("button", { name: "Jerusalem" })).toBeInTheDocument();
+    // Pins are now GL-rendered (not DOM nodes); assert the map canvas mounted instead.
+    expect(await screen.findByTestId("map-canvas")).toBeInTheDocument();
   });
 
   it("defaults the note-type toggle to Standard (the annotation editor)", async () => {

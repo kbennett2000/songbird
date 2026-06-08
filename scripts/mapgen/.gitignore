@@ -1,6 +1,0 @@
-# Natural Earth source vectors — downloaded on demand, never committed. Only the rendered
-# PNG (frontend/src/assets/bible-map.png) is committed. See README.md.
-data/
-
-# Local dev virtualenv for running generate_map.py.
-.venv/

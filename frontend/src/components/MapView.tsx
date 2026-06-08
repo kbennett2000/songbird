@@ -1,20 +1,21 @@
 import { useQuery } from "@tanstack/react-query";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import maplibregl, { type GeoJSONSource, type MapLayerMouseEvent } from "maplibre-gl";
+import "maplibre-gl/dist/maplibre-gl.css";
+import { Protocol } from "pmtiles";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import bibleMapSvg from "@/assets/bible-map.svg?raw";
-import { cluster } from "@/lib/cluster";
-import { MAP_PX } from "@/lib/mapBounds";
-import { MAP_LABELS } from "@/lib/mapLabels";
-import { project } from "@/lib/projection";
 import {
-  applyZoomAt,
-  clampTransform,
-  fitToBounds,
-  screenPos,
-  type ImagePoint,
-  type Size,
-  type Transform,
-} from "@/lib/mapTransform";
+  BIBLE_WORLD_BOUNDS,
+  FIT_MAX_ZOOM,
+  MAX_BOUNDS,
+  MAX_ZOOM,
+  MIN_ZOOM,
+} from "@/lib/map/config";
+import { MAP_LABELS } from "@/lib/map/labels";
+import { buildClusterBadge, buildLabelElement } from "@/lib/map/markers";
+import { boundsForPlaces } from "@/lib/map/bounds";
+import { partitionPlaces, placesToGeoJSON } from "@/lib/map/places";
+import { buildStyle, MATCH_NONE } from "@/lib/map/style";
 import { fetchPlaceVerses, fetchPlaces } from "@/lib/reader";
 import type { Place } from "@/schemas";
 
@@ -25,106 +26,22 @@ interface MapViewProps {
   onJump: (book: string, chapter: number, verse: number) => void;
 }
 
-type ConfidenceTier = "solid" | "hollow" | "disputed";
-
-/** Pixels within which two pins collapse into a cluster (screen space). */
-const CLUSTER_RADIUS_PX = 28;
-
-/** Fallback container size before/without a real measurement (e.g. in tests). 5:4, like the atlas. */
-const DEFAULT_SIZE: Size = { width: 500, height: 400 };
-
-/**
- * The bundled atlas, inlined so it scales as true vector under the CSS transform (an <img> would
- * rasterize and blur when zoomed). We size it to fill its wrapper; the wrapper carries the
- * transform. The width/height are injected because the committed SVG declares only a viewBox.
- */
-const BASEMAP_MARKUP = bibleMapSvg.replace(
-  "<svg ",
-  '<svg width="100%" height="100%" focusable="false" ',
-);
-
-/** Curated labels with their image-space position precomputed once (all are in-bounds by design). */
-const PROJECTED_LABELS = MAP_LABELS.flatMap((label) => {
-  const px = project(label.lat, label.lon);
-  return px === null ? [] : [{ ...label, x: px.x, y: px.y }];
-});
-
-/**
- * Map a place's status/confidence to a marker tier — the honesty model, made visual.
- * Confidence is the primary signal (a medium-confidence place reads as less certain even if it's
- * "identified"); status only decides when Concord gives no confidence value.
- */
-function tierFor(place: Place): ConfidenceTier {
-  if (place.status === "disputed") return "disputed";
-  if (place.confidence === "high") return "solid";
-  if (place.confidence === "medium" || place.confidence === "low") return "hollow";
-  return place.status === "identified" ? "solid" : "hollow";
+/** A cluster member as listed in the card — id + name is all the chooser needs. */
+interface MemberRef {
+  id: string;
+  name: string;
 }
 
-const MARKER_CLASS: Record<ConfidenceTier, string> = {
-  solid: "border-blue-700 bg-blue-600 text-white",
-  hollow: "border-blue-400 bg-white dark:bg-gray-800 text-blue-400 opacity-80",
-  disputed: "border-amber-600 bg-white dark:bg-gray-800 text-amber-700",
-};
-
-/** A located, in-bounds place with its position in image space (0..MAP_PX). */
-interface PlacePoint extends ImagePoint {
-  place: Place;
+// Register the pmtiles:// protocol exactly once, so the relief raster reads from the bundled,
+// same-origin archive over HTTP Range (no tile server, no outbound call — ADR 0003).
+let pmtilesRegistered = false;
+function ensurePmtiles(): void {
+  if (pmtilesRegistered) return;
+  maplibregl.addProtocol("pmtiles", new Protocol().tile);
+  pmtilesRegistered = true;
 }
 
-/**
- * Split the chapter's places into located in-bounds points, an "off this map" list (located but
- * outside the atlas extent), and an "unknown" list (no coordinates — never a fabricated pin).
- * Overlap is handled at render time by clustering, not by nudging pins — so this is pure math.
- */
-function layout(places: Place[]): {
-  points: PlacePoint[];
-  offMap: Place[];
-  unknown: Place[];
-} {
-  const points: PlacePoint[] = [];
-  const offMap: Place[] = [];
-  const unknown: Place[] = [];
-
-  for (const place of places) {
-    if (place.latitude === null || place.longitude === null) {
-      unknown.push(place);
-      continue;
-    }
-    const px = project(place.latitude, place.longitude);
-    if (px === null) {
-      offMap.push(place);
-      continue;
-    }
-    points.push({ place, x: px.x, y: px.y });
-  }
-
-  return { points, offMap, unknown };
-}
-
-/** Measure a container and keep its CSS-pixel size in sync as it resizes. */
-function useContainerSize(): [React.RefObject<HTMLDivElement>, Size] {
-  const ref = useRef<HTMLDivElement>(null);
-  const [size, setSize] = useState<Size>({ width: 0, height: 0 });
-
-  useLayoutEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const measure = (): void => {
-      const rect = el.getBoundingClientRect();
-      setSize({ width: rect.width, height: rect.height });
-    };
-    measure();
-    if (typeof ResizeObserver === "undefined") return;
-    const ro = new ResizeObserver(measure);
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
-
-  return [ref, size];
-}
-
-/** The card shown when a pin is tapped: name / status / confidence + the verses that name it. */
+/** The card shown when a point is selected: name / status / confidence + the verses that name it. */
 function PlaceCard({
   place,
   onJump,
@@ -175,8 +92,8 @@ function ClusterCard({
   members,
   onPick,
 }: {
-  members: Place[];
-  onPick: (place: Place) => void;
+  members: MemberRef[];
+  onPick: (id: string) => void;
 }): JSX.Element {
   return (
     <div data-testid="cluster-card" className="mt-3 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-3 shadow-sm">
@@ -184,15 +101,15 @@ function ClusterCard({
         {members.length} places here — pick one:
       </p>
       <ul className="flex flex-wrap gap-1">
-        {members.map((place) => (
-          <li key={place.id}>
+        {members.map((m) => (
+          <li key={m.id}>
             <button
               type="button"
               data-testid="cluster-member"
               className="rounded border border-gray-200 dark:border-gray-700 px-2 py-1 text-xs text-blue-700 dark:text-blue-400 hover:bg-gray-50 dark:hover:bg-gray-700"
-              onClick={() => onPick(place)}
+              onClick={() => onPick(m.id)}
             >
-              {place.name}
+              {m.name}
             </button>
           </li>
         ))}
@@ -211,7 +128,7 @@ function PlaceList({ label, places }: { label: string; places: Place[] }): JSX.E
   );
 }
 
-/** A small round control button for the zoom toolbar. */
+/** A small overlay control button (zoom is handled by MapLibre's NavigationControl). */
 function ControlButton({
   label,
   onClick,
@@ -227,7 +144,6 @@ function ControlButton({
       aria-label={label}
       title={label}
       onClick={onClick}
-      onPointerDown={(e) => e.stopPropagation()}
       className="flex h-8 w-8 items-center justify-center rounded border border-gray-300 dark:border-gray-600 bg-white/90 dark:bg-gray-800/90 text-gray-700 dark:text-gray-200 shadow hover:bg-white dark:hover:bg-gray-700"
     >
       {children}
@@ -236,247 +152,195 @@ function ControlButton({
 }
 
 /**
- * The chapter's located places, plotted on the bundled offline atlas. The view auto-frames each
- * chapter to its own places (so chapters look distinct), can be panned and zoomed entirely
- * client-side (no tile service — the offline promise is intact), and collapses overlapping pins
- * into clusters that split apart as you zoom in. Confidence is encoded visually; unknown and
- * off-extent places are listed (never plotted, never fabricated).
+ * The chapter's located places, plotted on a MapLibre map drawing natural-color relief + crisp
+ * physical vectors from bundled, same-origin offline tiles (ADR 0003). Pins/clusters are GL circle
+ * layers (tier-colored); cluster counts and curated labels are DOM markers (so no glyph font is
+ * needed). The view auto-frames each chapter (fitBounds), can't be panned off (maxBounds), and
+ * clusters expand on click — listing their members so a tap reaches each place card.
  */
 export function MapView({ book, chapter, onJump }: MapViewProps): JSX.Element {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const mapRef = useRef<maplibregl.Map | null>(null);
+  const labelMarkers = useRef<maplibregl.Marker[]>([]);
+  const badgeMarkers = useRef<Record<string, maplibregl.Marker>>({});
+  const [mapReady, setMapReady] = useState(false);
+
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [clusterMembers, setClusterMembers] = useState<Place[] | null>(null);
+  const [clusterMembers, setClusterMembers] = useState<MemberRef[] | null>(null);
   const [showLabels, setShowLabels] = useState(true);
-  const [containerRef, size] = useContainerSize();
-  const [transform, setTransform] = useState<Transform | null>(null);
 
   const query = useQuery({
     queryKey: ["places", book, chapter],
     queryFn: () => fetchPlaces(book, chapter),
   });
-
-  const effSize = useMemo<Size>(
-    () => (size.width > 0 && size.height > 0 ? size : DEFAULT_SIZE),
-    [size],
-  );
-
   const data = query.data;
-  const { points, offMap, unknown } = useMemo(
-    () => (data ? layout(data) : { points: [], offMap: [], unknown: [] }),
+  const { located, unknown, offMap } = useMemo(
+    () => (data ? partitionPlaces(data) : { located: [], unknown: [], offMap: [] }),
     [data],
   );
 
-  // Auto-frame the chapter to its own places — refit when the chapter or the container changes.
-  const fitKey = `${book}:${chapter}`;
-  useEffect(() => {
-    if (!data) return;
-    setTransform(fitToBounds(points, effSize));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fitKey, data, effSize.width, effSize.height]);
+  // Keep cluster-count DOM badges in sync with the GL cluster circles (rebuilt as clusters change).
+  const syncClusterBadges = useCallback(() => {
+    const map = mapRef.current;
+    if (!map || !map.isSourceLoaded("places")) return;
+    const feats = map.querySourceFeatures("places", { filter: ["has", "point_count"] });
+    const present = new Set<string>();
+    for (const f of feats) {
+      const props = f.properties as { cluster_id: number; point_count: number };
+      const id = String(props.cluster_id);
+      if (present.has(id)) continue;
+      present.add(id);
+      if (!badgeMarkers.current[id] && f.geometry.type === "Point") {
+        const el = buildClusterBadge(props.point_count);
+        badgeMarkers.current[id] = new maplibregl.Marker({ element: el })
+          .setLngLat(f.geometry.coordinates as [number, number])
+          .addTo(map);
+      }
+    }
+    for (const id of Object.keys(badgeMarkers.current)) {
+      if (!present.has(id)) {
+        badgeMarkers.current[id]?.remove();
+        delete badgeMarkers.current[id];
+      }
+    }
+  }, []);
 
-  // Clear any open selection when the chapter changes (no stale card from the previous chapter).
+  const handlePointClick = useCallback((e: MapLayerMouseEvent) => {
+    const f = e.features?.[0];
+    if (!f) return;
+    setSelectedId((f.properties as { id: string }).id);
+    setClusterMembers(null);
+  }, []);
+
+  const handleClusterClick = useCallback((e: MapLayerMouseEvent) => {
+    const map = mapRef.current;
+    const f = e.features?.[0];
+    if (!map || !f || f.geometry.type !== "Point") return;
+    const src = map.getSource("places") as GeoJSONSource;
+    const clusterId = (f.properties as { cluster_id: number }).cluster_id;
+    const center = f.geometry.coordinates as [number, number];
+    // Clear any open single-place card, list the members, and zoom to expand.
+    setSelectedId(null);
+    void src
+      .getClusterLeaves(clusterId, 100, 0)
+      .then((leaves) =>
+        setClusterMembers(
+          leaves.map((l) => ({
+            id: (l.properties as { id: string }).id,
+            name: (l.properties as { name: string }).name,
+          })),
+        ),
+      )
+      .catch(() => {});
+    void src
+      .getClusterExpansionZoom(clusterId)
+      .then((zoom) => map.easeTo({ center, zoom }))
+      .catch(() => {});
+  }, []);
+
+  // Create the map once.
+  useEffect(() => {
+    ensurePmtiles();
+    if (!containerRef.current) return;
+    const map = new maplibregl.Map({
+      container: containerRef.current,
+      style: buildStyle(window.location.origin),
+      bounds: BIBLE_WORLD_BOUNDS,
+      maxBounds: MAX_BOUNDS,
+      minZoom: MIN_ZOOM,
+      maxZoom: MAX_ZOOM,
+      attributionControl: false,
+      dragRotate: false,
+    });
+    mapRef.current = map;
+    map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
+    map.touchZoomRotate.disableRotation();
+
+    const setPointer = (on: boolean) => () => {
+      map.getCanvas().style.cursor = on ? "pointer" : "";
+    };
+
+    map.on("load", () => {
+      for (const l of MAP_LABELS) {
+        const m = new maplibregl.Marker({ element: buildLabelElement(l.name, l.kind) })
+          .setLngLat([l.lon, l.lat])
+          .addTo(map);
+        labelMarkers.current.push(m);
+      }
+      map.on("click", "unclustered-point", handlePointClick);
+      map.on("click", "clusters", handleClusterClick);
+      map.on("mouseenter", "unclustered-point", setPointer(true));
+      map.on("mouseleave", "unclustered-point", setPointer(false));
+      map.on("mouseenter", "clusters", setPointer(true));
+      map.on("mouseleave", "clusters", setPointer(false));
+      map.on("moveend", syncClusterBadges);
+      map.on("data", (e) => {
+        const ev = e as { sourceId?: string; isSourceLoaded?: boolean };
+        if (ev.sourceId === "places" && ev.isSourceLoaded) syncClusterBadges();
+      });
+      // The modal lays out around us; make sure the GL canvas matches the final container size.
+      map.resize();
+      setMapReady(true);
+    });
+
+    return () => {
+      map.remove();
+      mapRef.current = null;
+      labelMarkers.current = [];
+      badgeMarkers.current = {};
+      setMapReady(false);
+    };
+  }, [handlePointClick, handleClusterClick, syncClusterBadges]);
+
+  // Feed the chapter's places to the source and frame them (per-chapter auto-fit).
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady) return;
+    (map.getSource("places") as GeoJSONSource).setData(placesToGeoJSON(located));
+    map.fitBounds(boundsForPlaces(located) ?? BIBLE_WORLD_BOUNDS, {
+      padding: 48,
+      maxZoom: FIT_MAX_ZOOM,
+      duration: 0,
+    });
+  }, [located, mapReady]);
+
+  // The selection ring follows the selected place.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady) return;
+    map.setFilter("selected-point", selectedId ? ["==", ["get", "id"], selectedId] : MATCH_NONE);
+  }, [selectedId, mapReady]);
+
+  // Labels on/off.
+  useEffect(() => {
+    for (const m of labelMarkers.current) m.getElement().style.display = showLabels ? "" : "none";
+  }, [showLabels, mapReady]);
+
+  // Clear selection when the chapter changes (no stale card from the previous chapter).
   useEffect(() => {
     setSelectedId(null);
     setClusterMembers(null);
-  }, [fitKey]);
+  }, [book, chapter]);
 
-  // Latest transform/size for the non-passive wheel listener, without rebinding it each render.
-  const transformRef = useRef<Transform | null>(transform);
-  transformRef.current = transform;
-  const sizeRef = useRef<Size>(effSize);
-  sizeRef.current = effSize;
+  const fitChapter = useCallback(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    map.fitBounds(boundsForPlaces(located) ?? BIBLE_WORLD_BOUNDS, { padding: 48, maxZoom: FIT_MAX_ZOOM });
+  }, [located]);
 
-  const zoomBy = useCallback((factor: number, anchor?: { x: number; y: number }) => {
-    setTransform((t) => {
-      if (!t) return t;
-      const c = sizeRef.current;
-      const center = anchor ?? { x: c.width / 2, y: c.height / 2 };
-      return applyZoomAt(t, factor, center, c);
-    });
-  }, []);
+  const selected = located.find((p) => p.id === selectedId) ?? null;
 
-  // Wheel-to-zoom. Bound manually as non-passive so we can preventDefault the page scroll.
-  useEffect(() => {
-    const el = containerRef.current;
-    if (!el) return;
-    const onWheel = (e: WheelEvent): void => {
-      if (!transformRef.current) return;
-      e.preventDefault();
-      const rect = el.getBoundingClientRect();
-      zoomBy(e.deltaY < 0 ? 1.15 : 1 / 1.15, { x: e.clientX - rect.left, y: e.clientY - rect.top });
-    };
-    el.addEventListener("wheel", onWheel, { passive: false });
-    return () => el.removeEventListener("wheel", onWheel);
-  }, [containerRef, zoomBy]);
-
-  // Pointer-driven pan + pinch-zoom. Pointers are tracked so two-finger pinch can zoom on touch.
-  const pointers = useRef<Map<number, { x: number; y: number }>>(new Map());
-  const pinchDist = useRef<number | null>(null);
-
-  const onPointerDown = (e: React.PointerEvent): void => {
-    pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
-    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-  };
-
-  const onPointerMove = (e: React.PointerEvent): void => {
-    const prev = pointers.current.get(e.pointerId);
-    if (!prev) return;
-    const cur = { x: e.clientX, y: e.clientY };
-
-    if (pointers.current.size >= 2) {
-      // Pinch: zoom by the change in distance between the first two pointers, about their midpoint.
-      pointers.current.set(e.pointerId, cur);
-      const [a, b] = [...pointers.current.values()];
-      if (!a || !b) return;
-      const dist = Math.hypot(a.x - b.x, a.y - b.y);
-      if (pinchDist.current !== null && pinchDist.current > 0) {
-        const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-        const mid = { x: (a.x + b.x) / 2 - rect.left, y: (a.y + b.y) / 2 - rect.top };
-        zoomBy(dist / pinchDist.current, mid);
-      }
-      pinchDist.current = dist;
-      return;
-    }
-
-    // Single pointer: pan by the drag delta, clamped so the map can't be dragged off-screen.
-    pointers.current.set(e.pointerId, cur);
-    const dx = cur.x - prev.x;
-    const dy = cur.y - prev.y;
-    setTransform((t) =>
-      t ? clampTransform({ ...t, tx: t.tx + dx, ty: t.ty + dy }, sizeRef.current) : t,
-    );
-  };
-
-  const endPointer = (e: React.PointerEvent): void => {
-    pointers.current.delete(e.pointerId);
-    if (pointers.current.size < 2) pinchDist.current = null;
-  };
-
-  if (query.isPending) return <p className="text-sm text-gray-500 dark:text-gray-400">Loading places…</p>;
-  if (query.isError)
-    return <p className="text-sm text-red-600 dark:text-red-400">Couldn&rsquo;t load (is Concord reachable?).</p>;
-
-  const t = transform ?? fitToBounds(points, effSize);
-  const clusters = cluster(points, t, CLUSTER_RADIUS_PX);
-  const selected = points.find((p) => p.place.id === selectedId)?.place ?? null;
-
+  // The basemap (relief + vectors) always renders; the places query only populates pins/lists, so
+  // its loading/error states are notes below the map — never an early return that would unmount the
+  // map container before the (once-only) creation effect can attach to it.
   return (
     <div>
-      <div
-        ref={containerRef}
-        data-testid="map-canvas"
-        onPointerDown={onPointerDown}
-        onPointerMove={onPointerMove}
-        onPointerUp={endPointer}
-        onPointerCancel={endPointer}
-        className="relative w-full overflow-hidden rounded border border-gray-200 dark:border-gray-700 aspect-[5/4] touch-none cursor-grab active:cursor-grabbing"
-      >
-        {/* Base layer: the atlas, transformed (translate + scale). Inline vector SVG stays crisp
-            at any zoom. Pins and labels ride separate, un-scaled layers. */}
-        <div
-          className="absolute left-0 top-0 origin-top-left"
-          style={{
-            width: MAP_PX.width,
-            height: MAP_PX.height,
-            transform: `translate(${t.tx}px, ${t.ty}px) scale(${t.scale})`,
-            pointerEvents: "none",
-          }}
-          // The atlas is a bundled, build-time-generated asset — no user input flows into it.
-          dangerouslySetInnerHTML={{ __html: BASEMAP_MARKUP }}
-        />
-
-        {/* Label layer: curated context (seas, regions). Un-scaled, so text stays legible at any
-            zoom; positioned by the same transform as the pins. */}
-        {showLabels && (
-          <div className="pointer-events-none absolute inset-0 select-none" aria-hidden="true">
-            {PROJECTED_LABELS.map((label) => {
-              const pos = screenPos(label, t);
-              return (
-                <span
-                  key={label.name}
-                  data-testid="map-label"
-                  data-kind={label.kind}
-                  style={{ left: `${pos.x}px`, top: `${pos.y}px` }}
-                  className={`absolute -translate-x-1/2 -translate-y-1/2 whitespace-nowrap ${
-                    label.kind === "sea"
-                      ? "text-[11px] italic text-slate-500/80 dark:text-slate-400/80"
-                      : "text-[10px] font-medium uppercase tracking-widest text-stone-500/80 dark:text-stone-400/80"
-                  }`}
-                >
-                  {label.name}
-                </span>
-              );
-            })}
-          </div>
-        )}
-
-        {/* Marker layer: not scaled, so pins stay a constant size; only their positions move. */}
-        <div className="pointer-events-none absolute inset-0">
-          {clusters.map((c) => {
-            const pos = screenPos(c, t);
-            const first = c.members[0];
-            if (first && c.members.length === 1) {
-              const { place } = first;
-              const tier = tierFor(place);
-              const isSelected = place.id === selectedId;
-              return (
-                <button
-                  key={place.id}
-                  type="button"
-                  data-testid="map-pin"
-                  data-place-id={place.id}
-                  data-tier={tier}
-                  aria-label={place.name}
-                  title={place.name}
-                  onPointerDown={(e) => e.stopPropagation()}
-                  onClick={() => {
-                    setSelectedId(place.id);
-                    setClusterMembers(null);
-                  }}
-                  style={{ left: `${pos.x}px`, top: `${pos.y}px` }}
-                  className={`pointer-events-auto absolute flex h-6 w-6 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-2 text-xs font-bold shadow ${
-                    MARKER_CLASS[tier]
-                  } ${isSelected ? "ring-2 ring-blue-500 ring-offset-1" : ""}`}
-                >
-                  {tier === "disputed" ? "?" : ""}
-                </button>
-              );
-            }
-            const key = c.members.map((m) => m.place.id).join("+");
-            return (
-              <button
-                key={key}
-                type="button"
-                data-testid="map-cluster"
-                data-count={c.members.length}
-                aria-label={`${c.members.length} clustered places`}
-                title={c.members.map((m) => m.place.name).join(", ")}
-                onPointerDown={(e) => e.stopPropagation()}
-                onClick={() => {
-                  // Show this cluster's members in the pane (clearing any single-place card), and
-                  // zoom to expand. If they can't split further (shared point), the list is how the
-                  // user reaches each place.
-                  setSelectedId(null);
-                  setClusterMembers(c.members.map((m) => m.place));
-                  setTransform(fitToBounds(c.members, sizeRef.current));
-                }}
-                style={{ left: `${pos.x}px`, top: `${pos.y}px` }}
-                className="pointer-events-auto absolute flex h-7 w-7 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-2 border-blue-700 bg-blue-600 text-xs font-bold text-white shadow"
-              >
-                {c.members.length}
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Zoom toolbar. */}
-        <div className="absolute right-2 top-2 flex flex-col gap-1">
-          <ControlButton label="Zoom in" onClick={() => zoomBy(1.3)}>
-            +
-          </ControlButton>
-          <ControlButton label="Zoom out" onClick={() => zoomBy(1 / 1.3)}>
-            −
-          </ControlButton>
-          <ControlButton label="Fit chapter" onClick={() => setTransform(fitToBounds(points, sizeRef.current))}>
+      <div className="relative w-full overflow-hidden rounded border border-gray-200 dark:border-gray-700 h-[70vh] max-h-[560px] min-h-[360px]">
+        {/* h-full (not absolute inset-0): MapLibre sets .maplibregl-map{position:relative}, which
+            would override `absolute` and collapse an inset-0 box to height 0. */}
+        <div ref={containerRef} data-testid="map-canvas" className="h-full w-full" />
+        <div className="absolute left-2 top-2 z-10 flex flex-col gap-1">
+          <ControlButton label="Fit chapter" onClick={fitChapter}>
             ⤢
           </ControlButton>
           <ControlButton
@@ -488,21 +352,25 @@ export function MapView({ book, chapter, onJump }: MapViewProps): JSX.Element {
         </div>
       </div>
 
+      {query.isPending && <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">Loading places…</p>}
+      {query.isError && (
+        <p className="mt-2 text-sm text-red-600 dark:text-red-400">
+          Couldn&rsquo;t load places (is Concord reachable?).
+        </p>
+      )}
+
       {selected && <PlaceCard place={selected} onJump={onJump} />}
       {!selected && clusterMembers && (
-        <ClusterCard
-          members={clusterMembers}
-          onPick={(place) => {
-            setSelectedId(place.id);
-            setClusterMembers(null);
-          }}
-        />
+        <ClusterCard members={clusterMembers} onPick={(id) => {
+          setSelectedId(id);
+          setClusterMembers(null);
+        }} />
       )}
 
       <PlaceList label="Also mentioned, location unknown" places={unknown} />
       <PlaceList label="Off this map" places={offMap} />
 
-      {points.length === 0 && (
+      {located.length === 0 && (
         <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">No places in this chapter fall on the map.</p>
       )}
     </div>

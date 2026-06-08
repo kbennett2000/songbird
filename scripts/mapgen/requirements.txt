@@ -1,5 +1,0 @@
-# Dev/build-time ONLY — used to render frontend/src/assets/bible-map.svg from Natural Earth
-# vectors. The committed SVG is what ships; songbird's runtime never imports this. Deliberately
-# kept out of backend/requirements.txt and backend/requirements-dev.txt to keep the runtime lean
-# (no heavy geo/ML stack in songbird).
-pyshp>=2.3

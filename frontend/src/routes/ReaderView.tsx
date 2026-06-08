@@ -1,10 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { type FormEvent, lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
 import { CrossReferences } from "@/components/CrossReferences";
 import { Geography } from "@/components/Geography";
-import { MapView } from "@/components/MapView";
 import { Modal } from "@/components/Modal";
 import { NoteEditor } from "@/components/NoteEditor";
 import { NotePopover } from "@/components/NotePopover";
@@ -17,6 +16,9 @@ import { TagInput } from "@/components/TagInput";
 import { TopNav } from "@/components/TopNav";
 import { VerseText } from "@/components/VerseText";
 import { useAuth } from "@/hooks/useAuth";
+
+// Lazy-loaded: the map pulls in MapLibre (~300 KB gz), only needed when the map modal opens.
+const MapView = lazy(() => import("@/components/MapView").then((m) => ({ default: m.MapView })));
 import { ApiError } from "@/lib/api";
 import { saveReadingPosition } from "@/lib/auth";
 import { nextChapter, prevChapter } from "@/lib/navigation";
@@ -788,7 +790,11 @@ export function ReaderView(): JSX.Element {
         title={`Map — ${chapterQuery.data?.reference ?? ""}`}
         onClose={() => setMap(false)}
       >
-        <MapView book={chapterBook} chapter={chapter} onJump={(b, c, v) => navigate(b, c, v)} />
+        {map && (
+          <Suspense fallback={<p className="text-sm text-gray-500 dark:text-gray-400">Loading map…</p>}>
+            <MapView book={chapterBook} chapter={chapter} onJump={(b, c, v) => navigate(b, c, v)} />
+          </Suspense>
+        )}
       </Modal>
 
       {openNote && (

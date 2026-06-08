@@ -1,11 +1,88 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { MapView } from "@/components/MapView";
 import { server } from "@/test/msw/server";
+
+// MapLibre needs WebGL, which happy-dom can't provide — so we mock it and assert the *wiring*
+// (constructor options, sources/handlers, the click → PlaceCard path). Real rendering is covered
+// by the Playwright e2e pass.
+const created: FakeMap[] = [];
+
+class FakeSource {
+  setData = vi.fn();
+  leaves: { properties: { id: string; name: string } }[] = [];
+  getClusterLeaves = vi.fn(() => Promise.resolve(this.leaves));
+  getClusterExpansionZoom = vi.fn(() => Promise.resolve(6));
+}
+
+class FakeMap {
+  opts: Record<string, unknown>;
+  handlers = new Map<string, (arg?: unknown) => void>();
+  source = new FakeSource();
+  fitBounds = vi.fn();
+  setFilter = vi.fn();
+  addControl = vi.fn();
+  easeTo = vi.fn();
+  resize = vi.fn();
+  remove = vi.fn();
+  touchZoomRotate = { disableRotation: vi.fn() };
+  constructor(opts: Record<string, unknown>) {
+    this.opts = opts;
+    created.push(this);
+  }
+  on(type: string, b: unknown, c?: unknown): this {
+    const layer = typeof b === "function" ? "" : (b as string);
+    const fn = (typeof b === "function" ? b : c) as (arg?: unknown) => void;
+    this.handlers.set(`${type}:${layer}`, fn);
+    return this;
+  }
+  getSource(): FakeSource {
+    return this.source;
+  }
+  getCanvas(): { style: Record<string, string> } {
+    return { style: {} };
+  }
+  querySourceFeatures(): unknown[] {
+    return [];
+  }
+  isSourceLoaded(): boolean {
+    return true;
+  }
+  emit(type: string, layer: string, arg?: unknown): void {
+    this.handlers.get(`${type}:${layer}`)?.(arg);
+  }
+}
+
+vi.mock("maplibre-gl", () => ({
+  default: {
+    Map: FakeMap,
+    Marker: class {
+      el: HTMLElement;
+      constructor(o?: { element?: HTMLElement }) {
+        this.el = o?.element ?? document.createElement("div");
+      }
+      setLngLat() {
+        return this;
+      }
+      addTo() {
+        return this;
+      }
+      getElement() {
+        return this.el;
+      }
+      remove() {}
+    },
+    NavigationControl: class {},
+    addProtocol: vi.fn(),
+  },
+}));
+vi.mock("pmtiles", () => ({ Protocol: class { tile = vi.fn(); } }));
+
+// Imported after the mocks are registered.
+const { MapView } = await import("@/components/MapView");
 
 function place(overrides: Record<string, unknown> = {}) {
   return {
@@ -22,12 +99,10 @@ function place(overrides: Record<string, unknown> = {}) {
   };
 }
 
-// Jerusalem & Rome are in-bounds; Tarshish (Iberia) is located but off the map; Eden is unknown.
-const JERUSALEM = place({ id: "jeru", name: "Jerusalem", latitude: 31.78, longitude: 35.23 });
-const ROME = place({ id: "rome", name: "Rome", latitude: 41.9, longitude: 12.5, confidence: "medium", status: "identified" });
-const BABYLON = place({ id: "bab", name: "Babylon", latitude: 32.5, longitude: 44.4, confidence: "medium", status: "disputed" });
-const TARSHISH = place({ id: "tar", name: "Tarshish", latitude: 36.7, longitude: -6.0, confidence: "low", status: "identified" });
-const EDEN = place({ id: "eden", name: "Eden", latitude: null, longitude: null, confidence: null, confidence_score: null, status: "unknown" });
+const JERUSALEM = place({ id: "jeru", name: "Jerusalem" });
+const BETHANY = place({ id: "beth", name: "Bethany", latitude: 31.9, longitude: 35.4 });
+const TARSHISH = place({ id: "tar", name: "Tarshish", latitude: 36.7, longitude: -6.0 });
+const EDEN = place({ id: "eden", name: "Eden", latitude: null, longitude: null, confidence_score: null, status: "unknown" });
 
 function mockPlaces(places: ReturnType<typeof place>[]) {
   server.use(http.get("/api/v1/places", () => HttpResponse.json(places)));
@@ -43,124 +118,48 @@ function renderMap(onJump = vi.fn()) {
   return { onJump };
 }
 
-describe("MapView", () => {
-  it("plots located, in-bounds places as pins", async () => {
-    mockPlaces([JERUSALEM, ROME]);
+/** Wait for the places query to resolve, then fire the map's "load" event (creates state). */
+async function loadMap(): Promise<FakeMap> {
+  await screen.findByTestId("map-canvas");
+  const map = created.at(-1)!;
+  await act(async () => {
+    map.emit("load", "");
+  });
+  return map;
+}
+
+beforeEach(() => {
+  created.length = 0;
+});
+afterEach(() => {
+  vi.clearAllMocks();
+});
+
+describe("MapView (MapLibre)", () => {
+  it("constrains panning with maxBounds (can't scroll off the map)", async () => {
+    mockPlaces([JERUSALEM]);
     renderMap();
-    const pins = await screen.findAllByTestId("map-pin");
-    expect(pins).toHaveLength(2);
-    expect(screen.getByRole("button", { name: "Jerusalem" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Rome" })).toBeInTheDocument();
+    const map = await loadMap();
+    expect(map.opts.maxBounds).toBeDefined();
   });
 
-  it("lists unknown places instead of plotting them", async () => {
-    mockPlaces([JERUSALEM, EDEN]);
+  it("frames the chapter's places on load (fitBounds)", async () => {
+    mockPlaces([JERUSALEM]);
     renderMap();
+    const map = await loadMap();
+    await waitFor(() => expect(map.source.setData).toHaveBeenCalled());
+    expect(map.fitBounds).toHaveBeenCalled();
+  });
+
+  it("lists unknown and off-map places instead of plotting them", async () => {
+    mockPlaces([JERUSALEM, EDEN, TARSHISH]);
+    renderMap();
+    await loadMap();
     expect(await screen.findByText(/location unknown/i)).toHaveTextContent("Eden");
-    expect(screen.queryByRole("button", { name: "Eden" })).not.toBeInTheDocument();
-    expect(screen.getAllByTestId("map-pin")).toHaveLength(1);
+    expect(screen.getByText(/off this map/i)).toHaveTextContent("Tarshish");
   });
 
-  it("lists located-but-off-extent places under 'Off this map'", async () => {
-    mockPlaces([JERUSALEM, TARSHISH]);
-    renderMap();
-    expect(await screen.findByText(/off this map/i)).toHaveTextContent("Tarshish");
-    expect(screen.queryByRole("button", { name: "Tarshish" })).not.toBeInTheDocument();
-    expect(screen.getAllByTestId("map-pin")).toHaveLength(1);
-  });
-
-  it("encodes confidence visually: identified vs lower vs disputed differ", async () => {
-    mockPlaces([JERUSALEM, ROME, BABYLON]);
-    renderMap();
-    await screen.findByRole("button", { name: "Jerusalem" });
-    expect(screen.getByRole("button", { name: "Jerusalem" })).toHaveAttribute("data-tier", "solid");
-    expect(screen.getByRole("button", { name: "Rome" })).toHaveAttribute("data-tier", "hollow");
-    expect(screen.getByRole("button", { name: "Babylon" })).toHaveAttribute("data-tier", "disputed");
-  });
-
-  it("shows a card with name/status/confidence when a pin is tapped", async () => {
-    mockPlaces([JERUSALEM]);
-    const user = userEvent.setup();
-    renderMap();
-    await user.click(await screen.findByRole("button", { name: "Jerusalem" }));
-    expect(screen.getByText("identified")).toBeInTheDocument();
-    expect(screen.getByText(/high confidence/i)).toBeInTheDocument();
-  });
-
-  it("offers pan/zoom controls (zoom in, zoom out, fit)", async () => {
-    mockPlaces([JERUSALEM]);
-    renderMap();
-    await screen.findByRole("button", { name: "Jerusalem" });
-    expect(screen.getByRole("button", { name: /zoom in/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /zoom out/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /fit chapter/i })).toBeInTheDocument();
-  });
-
-  it("collapses overlapping places into a cluster badge instead of crowding pins", async () => {
-    // Two places ~0.2° apart: they overlap at the auto-fit zoom and read as one count badge.
-    const NEAR = place({ id: "near", name: "Bethany", latitude: 31.9, longitude: 35.4 });
-    mockPlaces([JERUSALEM, NEAR]);
-    renderMap();
-    const clusterBadge = await screen.findByTestId("map-cluster");
-    expect(clusterBadge).toHaveAttribute("data-count", "2");
-    expect(screen.queryByTestId("map-pin")).not.toBeInTheDocument();
-  });
-
-  it("clicking a cluster shows its members and clears a previously-open place card (issue #76)", async () => {
-    // Two co-located places (a cluster) + one far place (a single pin).
-    const BETHANY = place({ id: "beth", name: "Bethany", latitude: 31.9, longitude: 35.4 });
-    mockPlaces([JERUSALEM, BETHANY, ROME]);
-    const user = userEvent.setup();
-    renderMap();
-
-    // Open Rome's card first.
-    await user.click(await screen.findByRole("button", { name: "Rome" }));
-    expect(screen.getByTestId("place-card")).toBeInTheDocument();
-
-    // Click the numbered cluster: the stale Rome card goes away, the members are listed.
-    await user.click(screen.getByTestId("map-cluster"));
-    expect(screen.queryByTestId("place-card")).not.toBeInTheDocument();
-    const clusterCard = screen.getByTestId("cluster-card");
-    const members = within(clusterCard).getAllByTestId("cluster-member");
-    expect(members.map((m) => m.textContent)).toEqual(
-      expect.arrayContaining(["Jerusalem", "Bethany"]),
-    );
-
-    // Picking a member opens its place card and dismisses the cluster list.
-    await user.click(within(clusterCard).getByRole("button", { name: "Bethany" }));
-    expect(screen.queryByTestId("cluster-card")).not.toBeInTheDocument();
-    expect(screen.getByTestId("place-card")).toBeInTheDocument();
-  });
-
-  it("splits a cluster into individual pins as the user zooms in", async () => {
-    const NEAR = place({ id: "near", name: "Bethany", latitude: 31.9, longitude: 35.4 });
-    mockPlaces([JERUSALEM, NEAR]);
-    const user = userEvent.setup();
-    renderMap();
-    await screen.findByTestId("map-cluster");
-    const zoomIn = screen.getByRole("button", { name: /zoom in/i });
-    for (let i = 0; i < 6; i++) await user.click(zoomIn);
-    expect(screen.queryByTestId("map-cluster")).not.toBeInTheDocument();
-    expect(screen.getAllByTestId("map-pin")).toHaveLength(2);
-  });
-
-  it("shows curated context labels, and toggles them off and on", async () => {
-    mockPlaces([JERUSALEM]);
-    const user = userEvent.setup();
-    renderMap();
-    await screen.findByRole("button", { name: "Jerusalem" });
-
-    expect(screen.getAllByTestId("map-label").length).toBeGreaterThan(0);
-    expect(screen.getByText("Mediterranean Sea")).toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: /hide labels/i }));
-    expect(screen.queryByTestId("map-label")).not.toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: /show labels/i }));
-    expect(screen.getAllByTestId("map-label").length).toBeGreaterThan(0);
-  });
-
-  it("jumps to a verse from the card, reusing the existing navigation", async () => {
+  it("opens a place card when a point is clicked, and jumps to a verse", async () => {
     mockPlaces([JERUSALEM]);
     server.use(
       http.get("/api/v1/places/:placeId/verses", () =>
@@ -169,10 +168,48 @@ describe("MapView", () => {
     );
     const user = userEvent.setup();
     const { onJump } = renderMap();
+    const map = await loadMap();
 
-    await user.click(await screen.findByRole("button", { name: "Jerusalem" }));
+    await act(async () => {
+      map.emit("click", "unclustered-point", {
+        features: [{ geometry: { type: "Point", coordinates: [35.23, 31.78] }, properties: { id: "jeru" } }],
+      });
+    });
     const card = await screen.findByTestId("place-card");
+    expect(card).toHaveTextContent("Jerusalem");
     await user.click(await within(card).findByRole("button", { name: "John 3:16" }));
     expect(onJump).toHaveBeenCalledWith("JHN", 3, 16);
+  });
+
+  it("clicking a cluster lists its members and clears a stale place card", async () => {
+    mockPlaces([JERUSALEM, BETHANY]);
+    renderMap();
+    const map = await loadMap();
+    map.source.leaves = [
+      { properties: { id: "jeru", name: "Jerusalem" } },
+      { properties: { id: "beth", name: "Bethany" } },
+    ];
+
+    // Open a place card first.
+    await act(async () => {
+      map.emit("click", "unclustered-point", {
+        features: [{ geometry: { type: "Point", coordinates: [35.23, 31.78] }, properties: { id: "jeru" } }],
+      });
+    });
+    expect(await screen.findByTestId("place-card")).toBeInTheDocument();
+
+    // Click the cluster: stale card clears, members are listed, and it zooms to expand.
+    await act(async () => {
+      map.emit("click", "clusters", {
+        features: [{ geometry: { type: "Point", coordinates: [35.3, 31.85] }, properties: { cluster_id: 1 } }],
+      });
+    });
+    const clusterCard = await screen.findByTestId("cluster-card");
+    expect(within(clusterCard).getAllByTestId("cluster-member").map((m) => m.textContent)).toEqual([
+      "Jerusalem",
+      "Bethany",
+    ]);
+    expect(screen.queryByTestId("place-card")).not.toBeInTheDocument();
+    expect(map.easeTo).toHaveBeenCalled();
   });
 });
