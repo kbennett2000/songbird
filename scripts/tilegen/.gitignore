@@ -1,0 +1,3 @@
+# Natural Earth source downloads + build intermediates — never committed.
+# Only the build OUTPUTS (frontend/public/tiles/*) are committed.
+data/

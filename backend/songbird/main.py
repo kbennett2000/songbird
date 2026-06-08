@@ -58,6 +58,13 @@ def _mount_frontend(app: FastAPI, dist_dir: Path) -> None:
     assets_dir = dist_dir / "assets"
     if assets_dir.is_dir():
         app.mount("/assets", StaticFiles(directory=assets_dir), name="assets")
+    # Bundled, offline map tiles (relief.pmtiles + bible-physical.geojson). StaticFiles serves
+    # HTTP Range (206) + Accept-Ranges, which the PMTiles client relies on. Mounted before the SPA
+    # catch-all so tile requests don't fall through to index.html. Still fully offline — these are
+    # local files served by songbird's own process (see docs/adr/0003).
+    tiles_dir = dist_dir / "tiles"
+    if tiles_dir.is_dir():
+        app.mount("/tiles", StaticFiles(directory=tiles_dir), name="tiles")
     index_file = dist_dir / "index.html"
 
     @app.get("/{full_path:path}", include_in_schema=False)
