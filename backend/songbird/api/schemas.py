@@ -282,6 +282,9 @@ class KeywordResult(BaseModel):
     verse: int
     reference: str
     snippet: str | None
+    # Multi-translation keyword search: highlighted snippet per translation that matched (id →
+    # snippet), top-ranked first. Null for a single matched translation (render `snippet` alone).
+    matches: dict[str, str] | None = None
 
 
 class NoteCrossReference(BaseModel):

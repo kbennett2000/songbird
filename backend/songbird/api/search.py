@@ -49,16 +49,19 @@ async def semantic_search(
 @router.get("/keyword-search", response_model=list[KeywordResult])
 async def keyword_search(
     q: str,
-    translation: str | None = None,
+    translations: str | None = None,
     limit: int = 20,
     concord: ConcordClient = Depends(get_concord_client),
 ) -> list[KeywordResult]:
     """Exact word/phrase Scripture search — a thin proxy of Concord's `/v1/search`. The literal
-    counterpart to semantic search; no embedding model involved (issue #46)."""
+    counterpart to semantic search; no embedding model involved (issue #46). Searches **all loaded
+    translations** by default; `translations` is an optional CSV of translation ids to narrow."""
     if not q.strip():
         return []  # no query → no call (Concord 422s on empty q)
+    # Absent/blank → None → Concord searches all (`*`); a CSV narrows to that subset.
+    narrowed = [t for t in translations.split(",") if t.strip()] if translations else None
     try:
-        result = await concord.keyword_search(q, translation, limit=limit)
+        result = await concord.keyword_search(q, narrowed, limit=limit)
     except ConcordNotFoundError:
         # Concord's keyword search is FTS5, which 400s on ordinary punctuation (apostrophes,
         # commas, hyphens, …). That isn't an outage and isn't worth surfacing as an error —
@@ -74,6 +77,7 @@ async def keyword_search(
             verse=h.verse,
             reference=h.reference,
             snippet=h.snippet,
+            matches=h.matches,
         )
         for h in result.hits
     ]

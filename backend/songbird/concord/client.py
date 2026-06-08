@@ -25,6 +25,12 @@ from songbird.concord.schemas import (
     VersePlacesResponse,
 )
 
+# Keyword search can be slow on a cold Concord — multi-translation FTS over the whole corpus, and
+# single-translation searches for the larger translations were observed at 6–8s. Give the *read* a
+# generous budget so a slow search isn't misreported as an outage; connect stays tight (the default
+# 5s) so a genuinely-down Concord still fails fast (CLAUDE.md invariant 3).
+_SEARCH_TIMEOUT = httpx.Timeout(30.0, connect=5.0)
+
 
 class ConcordUnreachableError(Exception):
     """Raised when Concord cannot be reached, or returns a server error, over HTTP."""
@@ -107,20 +113,26 @@ class ConcordClient:
     async def keyword_search(
         self,
         q: str,
-        translation: str | None = None,
+        translations: list[str] | None = None,
         book: str | None = None,
         limit: int = 20,
     ) -> KeywordSearchResponse:
         """Search Scripture for an exact word/phrase via Concord's `/v1/search` — the literal-text
-        counterpart to semantic search (no embedding model involved). A 400/404/422 (bad query /
-        unknown translation or book) is a client error, not unreachability."""
-        params: dict[str, str] = {"q": q, "limit": str(limit)}
-        if translation:
-            params["translation"] = translation
+        counterpart to semantic search (no embedding model involved). Searches **all loaded
+        translations** by default (`translations=*`); pass a list to narrow to a subset. Each hit
+        then carries a `matches` map (translation id → highlighted snippet) for the translations
+        where that verse matched. A 400/404/422 (bad query / unknown translation or book) is a
+        client error, not unreachability."""
+        # `translations=*` is Concord's "all loaded translations"; a list narrows to a subset.
+        params: dict[str, str] = {
+            "q": q,
+            "limit": str(limit),
+            "translations": ",".join(translations) if translations else "*",
+        }
         if book:
             params["book"] = book
         try:
-            response = await self._client.get("/v1/search", params=params)
+            response = await self._client.get("/v1/search", params=params, timeout=_SEARCH_TIMEOUT)
             response.raise_for_status()
         except httpx.HTTPStatusError as exc:
             if exc.response.status_code in (400, 404, 422):
