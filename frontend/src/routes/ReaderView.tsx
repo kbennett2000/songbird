@@ -129,6 +129,13 @@ export function ReaderView(): JSX.Element {
     queryKey: ["notes", translation, chapterBook, chapter],
     queryFn: () => fetchNotes(translation, chapterBook, chapter),
   });
+  // Only a genuine Concord outage warrants the notice. A 404 (NOT_FOUND) means "no notes for this
+  // passage" — markers simply absent, no scary message — while CONCORD_UNREACHABLE (502) and
+  // NETWORK_ERROR (0) still surface. Before the Concord v1.1.0 pin the notes route 404'd on every
+  // translation, so this fired on every chapter; the bump makes a 404 mean genuinely-not-found.
+  const notesUnreachable =
+    notesQuery.isError &&
+    !(notesQuery.error instanceof ApiError && notesQuery.error.code === "NOT_FOUND");
   const notesByVerse = useMemo(() => {
     const map = new Map<number, TranslatorNote[]>();
     for (const note of notesQuery.data ?? []) {
@@ -599,7 +606,7 @@ export function ReaderView(): JSX.Element {
                 🌐 Map
               </button>
             </div>
-            {notesQuery.isError && (
+            {notesUnreachable && (
               <p className="mb-3 font-sans text-sm text-red-600">
                 Translator&rsquo;s notes unavailable (is Concord reachable?).
               </p>
