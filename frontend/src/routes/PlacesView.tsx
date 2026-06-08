@@ -47,12 +47,12 @@ export function PlacesView(): JSX.Element {
   };
 
   return (
-    <div className="min-h-screen bg-stone-50">
+    <div className="min-h-screen bg-stone-50 dark:bg-gray-900">
       <TopNav />
 
       <main className="mx-auto max-w-3xl p-6">
         <h1 className="mb-1 text-2xl font-bold tracking-tight">Places</h1>
-        <p className="mb-4 text-gray-500">
+        <p className="mb-4 text-gray-500 dark:text-gray-400">
           Every place named in Scripture that Concord knows — browse, filter, and open one to see
           where it is (honestly) and the verses that name it.
         </p>
@@ -65,7 +65,7 @@ export function PlacesView(): JSX.Element {
               onChange={(e) => setDraft(e.target.value)}
               placeholder="Search by name… e.g. Jerusalem"
               aria-label="Search places by name"
-              className="rounded border border-gray-300 px-3 py-2"
+              className="rounded border border-gray-300 dark:border-gray-600 px-3 py-2"
             />
             <button
               type="submit"
@@ -75,13 +75,13 @@ export function PlacesView(): JSX.Element {
             </button>
           </form>
 
-          <label className="flex flex-col text-xs text-gray-500">
+          <label className="flex flex-col text-xs text-gray-500 dark:text-gray-400">
             Status
             <select
               value={status}
               onChange={(e) => setStatus(e.target.value)}
               aria-label="Filter by status"
-              className="mt-0.5 rounded border border-gray-300 px-2 py-1.5 text-sm text-gray-900"
+              className="mt-0.5 rounded border border-gray-300 dark:border-gray-600 px-2 py-1.5 text-sm text-gray-900 dark:text-gray-100"
             >
               <option value="">All</option>
               {STATUS_OPTIONS.map((s) => (
@@ -94,13 +94,13 @@ export function PlacesView(): JSX.Element {
 
           {/* Type filter shows ONLY when Concord surfaced the vocabulary — never a hardcoded list. */}
           {types.length > 0 && (
-            <label className="flex flex-col text-xs text-gray-500">
+            <label className="flex flex-col text-xs text-gray-500 dark:text-gray-400">
               Type
               <select
                 value={type}
                 onChange={(e) => setType(e.target.value)}
                 aria-label="Filter by type"
-                className="mt-0.5 rounded border border-gray-300 px-2 py-1.5 text-sm text-gray-900"
+                className="mt-0.5 rounded border border-gray-300 dark:border-gray-600 px-2 py-1.5 text-sm text-gray-900 dark:text-gray-100"
               >
                 <option value="">All</option>
                 {types.map((t) => (
@@ -113,28 +113,28 @@ export function PlacesView(): JSX.Element {
           )}
         </div>
 
-        {list.isPending && <p className="text-gray-500">Loading places…</p>}
+        {list.isPending && <p className="text-gray-500 dark:text-gray-400">Loading places…</p>}
         {list.isError && (
-          <p className="text-red-600">Couldn&rsquo;t load places (is Concord reachable?).</p>
+          <p className="text-red-600 dark:text-red-400">Couldn&rsquo;t load places (is Concord reachable?).</p>
         )}
-        {list.data && places.length === 0 && <p className="text-gray-500">No places match.</p>}
+        {list.data && places.length === 0 && <p className="text-gray-500 dark:text-gray-400">No places match.</p>}
 
         {places.length > 0 && (
           <>
-            <p className="mb-2 text-sm text-gray-400">
+            <p className="mb-2 text-sm text-gray-400 dark:text-gray-500">
               {places.length} of {total}
             </p>
             <ul className="flex flex-col gap-2">
               {places.map((place) => (
-                <li key={place.id} className="rounded border border-gray-200 bg-white p-3">
+                <li key={place.id} className="rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-3">
                   <div className="flex items-center gap-2">
                     <Link
                       to={`/places/${place.id}`}
-                      className="font-medium text-blue-700 hover:underline"
+                      className="font-medium text-blue-700 dark:text-blue-400 hover:underline"
                     >
                       {place.name}
                     </Link>
-                    <span className="text-xs text-gray-400">{place.type}</span>
+                    <span className="text-xs text-gray-400 dark:text-gray-500">{place.type}</span>
                     <StatusBadge status={place.status} />
                   </div>
                   <div className="mt-0.5">
@@ -149,7 +149,7 @@ export function PlacesView(): JSX.Element {
                 type="button"
                 onClick={() => void list.fetchNextPage()}
                 disabled={list.isFetchingNextPage}
-                className="mt-4 rounded border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                className="mt-4 rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50"
               >
                 {list.isFetchingNextPage ? "Loading…" : "Load more"}
               </button>

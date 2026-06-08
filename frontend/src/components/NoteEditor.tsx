@@ -19,7 +19,7 @@ interface NoteEditorProps {
 }
 
 const toolbarButton =
-  "rounded border border-gray-300 px-2 py-1 text-sm hover:bg-gray-100 disabled:opacity-50";
+  "rounded border border-gray-300 dark:border-gray-600 px-2 py-1 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50";
 
 /**
  * A TipTap rich-text editor that reads and writes **Markdown** (CLAUDE.md invariant 6) —
@@ -78,7 +78,7 @@ export function NoteEditor({
         </button>
       </div>
 
-      <div className="rounded border border-gray-300 p-3">
+      <div className="rounded border border-gray-300 dark:border-gray-600 p-3">
         <EditorContent editor={editor} data-testid="note-editor" />
       </div>
 
@@ -93,7 +93,7 @@ export function NoteEditor({
         </button>
         <button
           type="button"
-          className="rounded border border-gray-300 px-3 py-1 text-sm hover:bg-gray-100"
+          className="rounded border border-gray-300 dark:border-gray-600 px-3 py-1 text-sm hover:bg-gray-100 dark:hover:bg-gray-700"
           onClick={onCancel}
         >
           Cancel
@@ -101,7 +101,7 @@ export function NoteEditor({
         {onDelete && (
           <button
             type="button"
-            className="ml-auto rounded px-3 py-1 text-sm text-red-600 hover:bg-red-50"
+            className="ml-auto rounded px-3 py-1 text-sm text-red-600 dark:text-red-400 hover:bg-red-50"
             onClick={onDelete}
           >
             Delete

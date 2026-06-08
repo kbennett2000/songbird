@@ -32,7 +32,7 @@ export function AnnotationPopover({
         <span className="text-xs font-semibold uppercase tracking-wide text-amber-700">Note</span>
         <button
           type="button"
-          className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700"
+          className="rounded p-1 text-gray-400 dark:text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-700 dark:hover:text-gray-200"
           onClick={onClose}
           aria-label="Close"
         >
@@ -40,17 +40,17 @@ export function AnnotationPopover({
         </button>
       </div>
       {!annotation.in_scope && annotation.scope_translations.length > 0 && (
-        <p className="mb-1 text-xs italic text-gray-500">
+        <p className="mb-1 text-xs italic text-gray-500 dark:text-gray-400">
           Written for {annotation.scope_translations.join(", ")}
         </p>
       )}
-      <p className="whitespace-pre-wrap break-words text-gray-800">{annotation.note_markdown}</p>
+      <p className="whitespace-pre-wrap break-words text-gray-800 dark:text-gray-100">{annotation.note_markdown}</p>
       {annotation.tags.length > 0 && (
         <ul className="mt-2 flex flex-wrap gap-1">
           {annotation.tags.map((tag) => (
             <li
               key={tag}
-              className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600"
+              className="rounded-full bg-gray-100 dark:bg-gray-700 px-2 py-0.5 text-xs font-medium text-gray-600 dark:text-gray-300"
             >
               {tag}
             </li>
@@ -58,7 +58,7 @@ export function AnnotationPopover({
         </ul>
       )}
       <div className="mt-2 border-t border-gray-100 pt-2">
-        <Link to={readerHref} className="text-sm font-medium text-blue-700 hover:underline">
+        <Link to={readerHref} className="text-sm font-medium text-blue-700 dark:text-blue-400 hover:underline">
           Open in reader →
         </Link>
       </div>

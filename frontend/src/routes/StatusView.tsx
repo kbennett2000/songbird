@@ -26,14 +26,14 @@ export function StatusView(): JSX.Element {
     <main className="mx-auto max-w-2xl p-8">
       <header>
         <h1 className="text-3xl font-bold tracking-tight">songbird</h1>
-        <p className="text-sm text-gray-500">Slice 0 — skeleton &amp; boot</p>
+        <p className="text-sm text-gray-500 dark:text-gray-400">Slice 0 — skeleton &amp; boot</p>
       </header>
 
       <section className="mt-8">
         <h2 className="text-lg font-semibold">Concord</h2>
-        {health.isPending && <p className="text-gray-500">Checking Concord…</p>}
+        {health.isPending && <p className="text-gray-500 dark:text-gray-400">Checking Concord…</p>}
         {health.isError && (
-          <p className="text-red-600">Could not reach songbird&rsquo;s health endpoint.</p>
+          <p className="text-red-600 dark:text-red-400">Could not reach songbird&rsquo;s health endpoint.</p>
         )}
         {health.data &&
           (health.data.concord.reachable ? (
@@ -42,7 +42,7 @@ export function StatusView(): JSX.Element {
               {health.data.concord.translation_count} translations.
             </p>
           ) : (
-            <p className="text-red-600">
+            <p className="text-red-600 dark:text-red-400">
               Unreachable at <code>{health.data.concord.base_url}</code>:{" "}
               {health.data.concord.error}
             </p>
@@ -51,10 +51,10 @@ export function StatusView(): JSX.Element {
 
       <section className="mt-8">
         <h2 className="text-lg font-semibold">Translations</h2>
-        <p className="text-sm text-gray-500">Fetched via songbird → Concord.</p>
-        {translations.isPending && <p className="text-gray-500">Loading…</p>}
+        <p className="text-sm text-gray-500 dark:text-gray-400">Fetched via songbird → Concord.</p>
+        {translations.isPending && <p className="text-gray-500 dark:text-gray-400">Loading…</p>}
         {translations.isError && (
-          <p className="text-red-600">Failed to load translations (is Concord up?).</p>
+          <p className="text-red-600 dark:text-red-400">Failed to load translations (is Concord up?).</p>
         )}
         {translations.data && (
           <ul className="mt-2 list-disc pl-6">

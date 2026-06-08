@@ -44,14 +44,14 @@ export function Modal({ open, title, onClose, children }: ModalProps): JSX.Eleme
         aria-modal="true"
         aria-label={title}
         tabIndex={-1}
-        className="flex h-full w-full flex-col bg-white shadow-xl outline-none sm:h-auto sm:max-h-[90vh] sm:max-w-3xl sm:rounded-lg"
+        className="flex h-full w-full flex-col bg-white dark:bg-gray-800 shadow-xl outline-none sm:h-auto sm:max-h-[90vh] sm:max-w-3xl sm:rounded-lg"
         onClick={(e) => e.stopPropagation()}
       >
-        <header className="flex items-center justify-between border-b border-gray-200 p-4">
+        <header className="flex items-center justify-between border-b border-gray-200 dark:border-gray-700 p-4">
           <h2 className="text-lg font-semibold">{title}</h2>
           <button
             type="button"
-            className="rounded p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-700"
+            className="rounded p-2 text-gray-400 dark:text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-700 dark:hover:text-gray-200"
             onClick={onClose}
             aria-label="Close"
           >
