@@ -10,7 +10,7 @@
  * basemap was rendered into *exactly* these bounds at *exactly* this pixel size.
  *
  * ⚠ If you change any value here, you MUST re-run `scripts/mapgen/generate_map.py` to
- * re-render `assets/bible-map.png` against the new bounds — otherwise pins will be
+ * re-render `assets/bible-map.svg` against the new bounds — otherwise pins will be
  * confidently wrong (worse than no map). The accuracy test (`projection.test.ts`) recomputes
  * its expectations from these constants, so it will follow a change here automatically.
  *

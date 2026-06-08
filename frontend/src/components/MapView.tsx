@@ -1,9 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
-import mapUrl from "@/assets/bible-map.png";
+import bibleMapSvg from "@/assets/bible-map.svg?raw";
 import { cluster } from "@/lib/cluster";
 import { MAP_PX } from "@/lib/mapBounds";
+import { MAP_LABELS } from "@/lib/mapLabels";
 import { project } from "@/lib/projection";
 import {
   applyZoomAt,
@@ -30,6 +31,22 @@ const CLUSTER_RADIUS_PX = 28;
 
 /** Fallback container size before/without a real measurement (e.g. in tests). 5:4, like the atlas. */
 const DEFAULT_SIZE: Size = { width: 500, height: 400 };
+
+/**
+ * The bundled atlas, inlined so it scales as true vector under the CSS transform (an <img> would
+ * rasterize and blur when zoomed). We size it to fill its wrapper; the wrapper carries the
+ * transform. The width/height are injected because the committed SVG declares only a viewBox.
+ */
+const BASEMAP_MARKUP = bibleMapSvg.replace(
+  "<svg ",
+  '<svg width="100%" height="100%" focusable="false" ',
+);
+
+/** Curated labels with their image-space position precomputed once (all are in-bounds by design). */
+const PROJECTED_LABELS = MAP_LABELS.flatMap((label) => {
+  const px = project(label.lat, label.lon);
+  return px === null ? [] : [{ ...label, x: px.x, y: px.y }];
+});
 
 /**
  * Map a place's status/confidence to a marker tier — the honesty model, made visual.
@@ -195,6 +212,7 @@ function ControlButton({
  */
 export function MapView({ book, chapter, onJump }: MapViewProps): JSX.Element {
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [showLabels, setShowLabels] = useState(true);
   const [containerRef, size] = useContainerSize();
   const [transform, setTransform] = useState<Transform | null>(null);
 
@@ -311,7 +329,8 @@ export function MapView({ book, chapter, onJump }: MapViewProps): JSX.Element {
         onPointerCancel={endPointer}
         className="relative w-full overflow-hidden rounded border border-gray-200 dark:border-gray-700 aspect-[5/4] touch-none cursor-grab active:cursor-grabbing"
       >
-        {/* Base layer: the atlas, transformed (translate + scale). Pins ride a separate layer. */}
+        {/* Base layer: the atlas, transformed (translate + scale). Inline vector SVG stays crisp
+            at any zoom. Pins and labels ride separate, un-scaled layers. */}
         <div
           className="absolute left-0 top-0 origin-top-left"
           style={{
@@ -320,9 +339,34 @@ export function MapView({ book, chapter, onJump }: MapViewProps): JSX.Element {
             transform: `translate(${t.tx}px, ${t.ty}px) scale(${t.scale})`,
             pointerEvents: "none",
           }}
-        >
-          <img src={mapUrl} alt="Map of the biblical world" className="h-full w-full" draggable={false} />
-        </div>
+          // The atlas is a bundled, build-time-generated asset — no user input flows into it.
+          dangerouslySetInnerHTML={{ __html: BASEMAP_MARKUP }}
+        />
+
+        {/* Label layer: curated context (seas, regions). Un-scaled, so text stays legible at any
+            zoom; positioned by the same transform as the pins. */}
+        {showLabels && (
+          <div className="pointer-events-none absolute inset-0 select-none" aria-hidden="true">
+            {PROJECTED_LABELS.map((label) => {
+              const pos = screenPos(label, t);
+              return (
+                <span
+                  key={label.name}
+                  data-testid="map-label"
+                  data-kind={label.kind}
+                  style={{ left: `${pos.x}px`, top: `${pos.y}px` }}
+                  className={`absolute -translate-x-1/2 -translate-y-1/2 whitespace-nowrap ${
+                    label.kind === "sea"
+                      ? "text-[11px] italic text-slate-500/80 dark:text-slate-400/80"
+                      : "text-[10px] font-medium uppercase tracking-widest text-stone-500/80 dark:text-stone-400/80"
+                  }`}
+                >
+                  {label.name}
+                </span>
+              );
+            })}
+          </div>
+        )}
 
         {/* Marker layer: not scaled, so pins stay a constant size; only their positions move. */}
         <div className="pointer-events-none absolute inset-0">
@@ -383,6 +427,12 @@ export function MapView({ book, chapter, onJump }: MapViewProps): JSX.Element {
           </ControlButton>
           <ControlButton label="Fit chapter" onClick={() => setTransform(fitToBounds(points, sizeRef.current))}>
             ⤢
+          </ControlButton>
+          <ControlButton
+            label={showLabels ? "Hide labels" : "Show labels"}
+            onClick={() => setShowLabels((v) => !v)}
+          >
+            <span className={showLabels ? "" : "opacity-40"}>Aa</span>
           </ControlButton>
         </div>
       </div>

@@ -118,6 +118,22 @@ describe("MapView", () => {
     expect(screen.getAllByTestId("map-pin")).toHaveLength(2);
   });
 
+  it("shows curated context labels, and toggles them off and on", async () => {
+    mockPlaces([JERUSALEM]);
+    const user = userEvent.setup();
+    renderMap();
+    await screen.findByRole("button", { name: "Jerusalem" });
+
+    expect(screen.getAllByTestId("map-label").length).toBeGreaterThan(0);
+    expect(screen.getByText("Mediterranean Sea")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /hide labels/i }));
+    expect(screen.queryByTestId("map-label")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /show labels/i }));
+    expect(screen.getAllByTestId("map-label").length).toBeGreaterThan(0);
+  });
+
   it("jumps to a verse from the card, reusing the existing navigation", async () => {
     mockPlaces([JERUSALEM]);
     server.use(

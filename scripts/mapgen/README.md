@@ -1,12 +1,15 @@
 # mapgen — the bundled Bible-world basemap
 
 `generate_map.py` renders the offline atlas that songbird's Map View plots places onto:
-[`frontend/src/assets/bible-map.png`](../../frontend/src/assets/bible-map.png).
+[`frontend/src/assets/bible-map.svg`](../../frontend/src/assets/bible-map.svg).
 
-This is a **dev/build-time tool**. The PNG it produces is committed to the repo and is what
-ships; **songbird's runtime never runs this script** and never depends on its libraries. That is
-why `requirements.txt` here (`pyshp`, `Pillow`) is intentionally separate from the backend
-requirements — the runtime stays lean (no geo/ML stack), per the dependency-discipline canon.
+This is a **dev/build-time tool**. The SVG it produces is committed to the repo and is what
+ships; **songbird's runtime never runs this script** and never depends on its library. That is
+why `requirements.txt` here (`pyshp`) is intentionally separate from the backend requirements —
+the runtime stays lean (no geo/ML stack), per the dependency-discipline canon. The output is
+**vector SVG** (not raster) so the basemap stays crisp at any zoom level (see
+[`docs/adr/0002`](../../docs/adr/0002-vector-basemap-and-pan-zoom.md)); the geometry is clipped to
+the viewBox so the committed file stays small.
 
 ## Why it can be trusted (the load-bearing bit)
 
@@ -36,7 +39,7 @@ by songbird as "off this map", never clipped.
 
 Source: [Natural Earth](https://www.naturalearthdata.com/) 1:50m physical vectors. Natural Earth
 is released into the **public domain** (no permission or attribution required; credit is
-appreciated). The source vectors are **not** committed — only the rendered PNG is.
+appreciated). The source vectors are **not** committed — only the rendered SVG is.
 
 Download once (this is the only step that touches the network; the renderer itself makes zero
 network calls), unzip into `scripts/mapgen/data/` (gitignored):
@@ -63,4 +66,4 @@ pip install -r scripts/mapgen/requirements.txt
 python scripts/mapgen/generate_map.py
 ```
 
-Then commit the updated `frontend/src/assets/bible-map.png` and run the frontend test suite.
+Then commit the updated `frontend/src/assets/bible-map.svg` and run the frontend test suite.
