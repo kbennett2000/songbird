@@ -306,4 +306,110 @@ describe("SearchView", () => {
     // The display translation follows the profile (WEB), not the old hardcoded KJV.
     await waitFor(() => expect(sentTranslation).toBe("WEB"));
   });
+
+  it("hides the Study notes section when Concord has no matching notes (the stock case)", async () => {
+    server.use(
+      http.get("/api/v1/semantic-search", () =>
+        HttpResponse.json([
+          { book: "PRO", chapter: 12, verse: 25, reference: "Proverbs 12:25", score: 0.8, text: "…" },
+        ]),
+      ),
+      http.get("/api/v1/annotations", () => HttpResponse.json([])),
+      http.get("/api/v1/study-notes-search", () => HttpResponse.json([])),
+    );
+    const user = userEvent.setup();
+    renderSearch();
+
+    await user.type(screen.getByLabelText("Search query"), "anxiety");
+    await user.click(screen.getByRole("button", { name: "Search" }));
+
+    // Scripture renders; the Study-notes section is simply absent (no header, no "no notes" line).
+    expect(await screen.findByText("Proverbs 12:25")).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Study notes results" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Study notes")).not.toBeInTheDocument();
+  });
+
+  it("shows the Study notes section on hits — type badge, highlight, and verse jump", async () => {
+    server.use(
+      http.get("/api/v1/annotations", () => HttpResponse.json([])),
+      http.get("/api/v1/study-notes-search", () =>
+        HttpResponse.json([
+          {
+            book: "JHN",
+            chapter: 3,
+            verse: 16,
+            reference: "John 3:16",
+            translation: "NET",
+            type: "sn",
+            snippet: "The word for <mark>love</mark> is agape.",
+          },
+        ]),
+      ),
+    );
+    const user = userEvent.setup();
+    renderSearch();
+
+    await user.type(screen.getByLabelText("Search query"), "love");
+    await user.click(screen.getByRole("button", { name: "Search" }));
+
+    // The section shows with the reader's "sn" label and a highlighted snippet.
+    expect(await screen.findByRole("region", { name: "Study notes results" })).toBeInTheDocument();
+    expect(screen.getByText("Study note")).toBeInTheDocument();
+    const mark = screen.getByText("love");
+    expect(mark.tagName).toBe("MARK");
+
+    // "Open in reader" jumps to the verse (no translation switch in the link).
+    await user.click(screen.getByRole("link", { name: "Open in reader" }));
+    expect(await screen.findByText(/book=JHN&chapter=3&verse=16/)).toBeInTheDocument();
+  });
+
+  it("falls back to a neutral 'Note' badge for an unknown note type", async () => {
+    server.use(
+      http.get("/api/v1/annotations", () => HttpResponse.json([])),
+      http.get("/api/v1/study-notes-search", () =>
+        HttpResponse.json([
+          {
+            book: "GEN",
+            chapter: 1,
+            verse: 1,
+            reference: "Genesis 1:1",
+            translation: "NET",
+            type: "weird",
+            snippet: "A <mark>note</mark>.",
+          },
+        ]),
+      ),
+    );
+    const user = userEvent.setup();
+    renderSearch();
+
+    await user.type(screen.getByLabelText("Search query"), "note");
+    await user.click(screen.getByRole("button", { name: "Search" }));
+
+    expect(await screen.findByText("Genesis 1:1")).toBeInTheDocument();
+    expect(screen.getByText("Note")).toBeInTheDocument(); // neutral fallback, never the raw "weird"
+    expect(screen.queryByText("weird")).not.toBeInTheDocument();
+  });
+
+  it("best-effort: an erroring Study-notes call leaves the section absent and the rest intact", async () => {
+    server.use(
+      http.get("/api/v1/semantic-search", () =>
+        HttpResponse.json([
+          { book: "PRO", chapter: 12, verse: 25, reference: "Proverbs 12:25", score: 0.8, text: "…" },
+        ]),
+      ),
+      http.get("/api/v1/annotations", () => HttpResponse.json([])),
+      // The frontend treats this as best-effort; a failure must not surface or break the page.
+      http.get("/api/v1/study-notes-search", () => new HttpResponse(null, { status: 500 })),
+    );
+    const user = userEvent.setup();
+    renderSearch();
+
+    await user.type(screen.getByLabelText("Search query"), "anxiety");
+    await user.click(screen.getByRole("button", { name: "Search" }));
+
+    // Scripture still renders; no Study-notes section, no error text from it.
+    expect(await screen.findByText("Proverbs 12:25")).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Study notes results" })).not.toBeInTheDocument();
+  });
 });
