@@ -4,6 +4,51 @@ A running log of per-slice decisions, gotchas, and how each slice was verified. 
 
 ---
 
+## Place-name labels (#86) + docs audit pass
+
+- **Date:** 2026-06-08
+- **Branches:** `feat/86-place-name-labels` (#88, the feature), then `docs/audit-map-86` (this docs pass).
+
+### Why
+A reader had to click every pin to learn what it was (#86). And with the map having moved fast
+(#83 filled seas, #86 labels), a full docs sweep was due to catch drift.
+
+### What shipped
+- **Feature (#88):** each *unclustered* pin now shows its **place name** beside it — a DOM marker
+  (`buildPlaceLabel`, `data-testid="map-place-label"`) seated right of the pin (`anchor:"left",
+  offset:[10,0]`), `pointer-events-none` so a tap still hits the GL circle. Synced to the GL points
+  exactly like the cluster badges (rebuilt on `moveend`/`data`), so a pin that crowds into a cluster
+  drops its name and regains it when the cluster expands — names show only when there's room. The
+  single **"Aa"** control now toggles place names together with the curated context labels. No glyph
+  font (offline invariant intact, ADR 0003; `style.test.ts` still green).
+- **Docs audit (this pass):**
+  - **MAP-SPEC** (`docs/v1.1/MAP-SPEC.md`): documented the place-name labels (§7) and the filled
+    inland seas/`lakes-fill` (#83, §3), and named both in the Status header.
+  - **SPEC §12** (`docs/v1/SPEC.md`): added the missing **light/dark theme** entry (#60, `users.theme`,
+    migration `0009`) and added `theme` to the restated data-model line.
+  - **ADRs:** marked **0001** and **0002** `Superseded by ADR 0003` (was `Accepted`) with a one-line
+    note each — the cross-links existed, the Status field now agrees.
+  - **Screenshot harness** (`scripts/screenshots/capture.mjs`): the card-shot path was dead since the
+    MapLibre rewrite — `isolatedPin()` waited on `getByTestId("map-pin")`, which no longer exists, so
+    the card sub-steps silently skipped. Rebuilt as `isolatedPinPoint()`, which locates a pin from its
+    #86 place-name label box (pin center ≈ `box.x - 10, box.y + box.height/2`) and clicks/taps that
+    point on the GL canvas. Both `map-*-card.png` shots regenerate again.
+  - Regenerated the **map family** of screenshots (`map-desktop`, `map-mobile`, and the two `*-card`)
+    so pins now show their names.
+
+### Checked-and-clean (no change needed)
+- README is accurate: port, env vars, endpoints, feature list, all embedded images verified; dark
+  mode already mentioned; the `[Issues](../../issues)` link is the correct GitHub relative idiom.
+- The other map PNGs (`map-globe-disabled`, `places`, etc.) are referenced only here in dev-notes.
+
+### Verified
+- Fast suite green (full frontend `vitest` 172 passed, incl. the new label tests + `style.test.ts`).
+- Live (`docker compose up --build`, real Concord): harness ran with **no skip warnings**, all four
+  map shots regenerated; desktop card selected "Italy", mobile card tapped "Pishon"; names sit beside
+  pins, inland seas stay filled, clusters show counts only, pin click still opens the card.
+
+---
+
 ## Map rewrite (#76) + docs audit
 
 - **Date:** 2026-06-08
