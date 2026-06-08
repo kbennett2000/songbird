@@ -70,6 +70,16 @@ def test_endpoints_songbird_calls_exist_in_concord_spec() -> None:
     assert not missing, f"Concord no longer exposes endpoints songbird calls: {sorted(missing)}"
 
 
+def test_search_supports_the_translations_param() -> None:
+    # Multi-translation keyword search (v1.3 Slice 1) relies on `/v1/search?translations=`. Pin it
+    # so a Concord that drops the param fails here rather than silently degrading to single-result.
+    paths = _spec()["paths"]
+    assert isinstance(paths, dict)
+    params = paths["/v1/search"]["get"]["parameters"]
+    names = {p["name"] for p in params}
+    assert "translations" in names, "Concord's /v1/search dropped the `translations` param"
+
+
 def test_health_response_contract() -> None:
     components = _spec()["components"]
     assert isinstance(components, dict)

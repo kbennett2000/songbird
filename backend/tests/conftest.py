@@ -68,6 +68,9 @@ class FakeConcordClient:
         self._keyword = keyword
         self._error = error
         self.base_url = base_url
+        # Records the last `keyword_search` translations arg so tests can assert the endpoint's
+        # CSV→list parse and the absent→None (search-all) default.
+        self.last_keyword_translations: list[str] | None = None
 
     async def health(self) -> ConcordHealth:
         if self._error is not None:
@@ -141,10 +144,11 @@ class FakeConcordClient:
     async def keyword_search(
         self,
         q: str,
-        translation: str | None = None,
+        translations: list[str] | None = None,
         book: str | None = None,
         limit: int = 20,
     ) -> KeywordSearchResponse:
+        self.last_keyword_translations = translations
         if self._error is not None:
             raise self._error
         return self._keyword if self._keyword is not None else KeywordSearchResponse(hits=[])
