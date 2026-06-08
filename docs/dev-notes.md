@@ -4,6 +4,64 @@ A running log of per-slice decisions, gotchas, and how each slice was verified. 
 
 ---
 
+## Map rewrite (#76) + docs audit
+
+- **Date:** 2026-06-08
+- **Branches:** `fix/76-map-pan-cluster` (#79), `feat/76-tile-assets` (#80), `feat/76-maplibre`
+  (#81), then `docs/audit-map-rewrite` (this docs pass).
+
+### Why
+Issue #76 feedback: the map could be scrolled off-screen, a numbered (cluster) pin showed nothing
+on click and left a stale card, and the map was "still very sparse when zoomed in." Offline is
+non-negotiable, but data size was explicitly not a concern.
+
+### What shipped (the map rewrite, three slices)
+- **A — interaction fixes (#79):** drag-pan now clamps (was unclamped — the scroll-off bug); a
+  cluster click clears any open card and **lists its member places** (each opens that place's card),
+  while still zooming to expand.
+- **B — offline tiles (#80):** a dev-only `scripts/tilegen/build.py` (rasterio + rio-pmtiles + pyshp;
+  manylinux wheels, no system GDAL) builds two committed assets from Natural Earth public-domain
+  data, clipped to the biblical-world bbox: `frontend/public/tiles/relief.pmtiles` (~6.7 MB,
+  natural-color shaded relief, z0–8) + `bible-physical.geojson` (~760 KB, coast/rivers/lakes/etc.).
+  The backend mounts `/tiles` (StaticFiles) so PMTiles is served over HTTP **Range** (`206`).
+- **C — MapLibre engine (#81):** `MapView` rewritten on **MapLibre GL** over those local tiles, with
+  natural-color relief under crisp vectors. **`maxBounds`** fixes scroll-off natively; **native
+  GeoJSON clustering** fixes the cluster-click bug; per-chapter `fitBounds` (capped at z9 so tight
+  chapters don't over-zoom into blur). New ADR 0003; removed `lib/{projection,mapTransform,cluster,
+  mapBounds,mapLabels}`, the SVG asset, and `scripts/mapgen`.
+
+### Gotchas
+- **Offline glyph trap:** MapLibre's `symbol`/`text` layers fetch glyphs from a CDN by default. We
+  draw **all text (cluster counts, labels) as DOM markers** and use no `symbol` layers, so there's
+  no font dependency — the offline promise holds with no glyph bundling. A `style.test.ts` whitelist
+  asserts no glyphs and no modern (road/city/POI/boundary) layers.
+- **`.maplibregl-map { position: relative }`** overrides Tailwind `absolute`, collapsing an
+  `inset-0` map container to height 0 → the container needs real height (`h-full`), not absolute fill.
+- **WebGL doesn't run in happy-dom:** pure modules (`lib/map/*`) are unit-tested; the component test
+  mocks `maplibre-gl`/`pmtiles`; **rendering is verified live** (Playwright + software-GL flags).
+
+### The docs audit (this pass — docs only, no behavior change)
+- **Screenshots** re-shot against the live MapLibre map: `map-desktop`, `map-desktop-card`,
+  `map-mobile`, `map-mobile-card` (Acts 27 — Mediterranean relief, clustered pins, place card).
+  `map-globe-disabled` left as-is (reader toolbar; unchanged).
+- **`docs/v1.1/MAP-SPEC.md`** — added a "rendering evolved (ADR 0002/0003)" banner and corrected the
+  now-false claims (equirectangular / static-image / no-pan-zoom) and dead file references
+  (`bible-map.png`, `scripts/mapgen`, `mapBounds.ts`, `project()`); the honesty/affordance/mobile
+  design sections were left intact.
+- **`docs/SECURITY.md`** created — it was referenced 3× (Dockerfile, `config.py`, `.env.example`) but
+  didn't exist; covers `COOKIE_SECURE`/TLS and an exposing-beyond-LAN checklist.
+- **`docs/v1/SPEC.md`** — map cross-ref now cites ADR 0002/0003, not just 0001.
+- **`README.md`** — added the **dark mode** feature and noted the map now pans/zooms over terrain.
+
+### Verification
+- Live: Acts 27 vs John 11 frame to different areas over natural-color relief; drag stays clamped;
+  cluster expands + lists members; **zero network requests outside `/api` and `/tiles`** (offline gate).
+- Suite green (168 frontend tests; backend Range test). Docs pass: a dead-reference grep
+  (`scripts/mapgen | bible-map.(png|svg) | mapBounds.ts | projection.ts | "no pan/zoom"`) hits only
+  the historical ADRs 0001/0002 (left as-is by design); `docs/SECURITY.md` now resolves its referrers.
+
+---
+
 ## Docs reconcile #3 — surface v1.3–v1.5 features + refreshed screenshots
 
 - **Date:** 2026-06-08
