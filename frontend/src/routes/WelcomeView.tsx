@@ -19,6 +19,7 @@ const QUICK_LINKS = [
   { to: "/browse", title: "Browse notes", blurb: "Every note, filtered by tag." },
   { to: "/search", title: "Search", blurb: "Find Scripture by meaning + your notes." },
   { to: "/compare", title: "Compare", blurb: "Read translations side by side." },
+  { to: "/places", title: "Places", blurb: "Explore the biblical world." },
 ] as const;
 
 /**

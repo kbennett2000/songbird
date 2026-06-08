@@ -465,6 +465,9 @@ export function ReaderView(): JSX.Element {
             <Link to="/search" className="text-sm text-blue-700 hover:underline">
               Search
             </Link>
+            <Link to="/places" className="text-sm text-blue-700 hover:underline">
+              Places
+            </Link>
             <Link
               to={`/compare?translation=${encodeURIComponent(translation)}&book=${encodeURIComponent(book)}&chapter=${chapter}`}
               className="text-sm text-blue-700 hover:underline"

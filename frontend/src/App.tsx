@@ -4,6 +4,8 @@ import { RequireAuth } from "@/components/RequireAuth";
 import { BrowseView } from "@/routes/BrowseView";
 import { CompareView } from "@/routes/CompareView";
 import { LoginPage } from "@/routes/LoginPage";
+import { PlaceDetailView } from "@/routes/PlaceDetailView";
+import { PlacesView } from "@/routes/PlacesView";
 import { ReaderView } from "@/routes/ReaderView";
 import { SearchView } from "@/routes/SearchView";
 import { StatusView } from "@/routes/StatusView";
@@ -48,6 +50,22 @@ const router = createBrowserRouter([
     element: (
       <RequireAuth>
         <SearchView />
+      </RequireAuth>
+    ),
+  },
+  {
+    path: "/places",
+    element: (
+      <RequireAuth>
+        <PlacesView />
+      </RequireAuth>
+    ),
+  },
+  {
+    path: "/places/:id",
+    element: (
+      <RequireAuth>
+        <PlaceDetailView />
       </RequireAuth>
     ),
   },
