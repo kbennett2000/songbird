@@ -10,6 +10,8 @@ export interface SermonNoteFormValues {
 interface SermonNoteFormProps {
   initial: SermonNoteFormValues;
   saving?: boolean;
+  /** A save error to surface (e.g. an unresolvable reference). */
+  error?: string | null;
   onSave: (values: SermonNoteFormValues) => void;
   onCancel: () => void;
   onDelete?: () => void;
@@ -27,6 +29,7 @@ const fieldClass =
 export function SermonNoteForm({
   initial,
   saving,
+  error,
   onSave,
   onCancel,
   onDelete,
@@ -72,16 +75,21 @@ export function SermonNoteForm({
         />
       </label>
 
-      <label className="block text-sm font-medium text-gray-700 dark:text-gray-200">
-        Reference
-        <input
-          type="text"
-          value={reference}
-          onChange={(e) => setReference(e.target.value)}
-          placeholder="e.g. John 3:16"
-          className={fieldClass}
-        />
-      </label>
+      <div>
+        <label className="block text-sm font-medium text-gray-700 dark:text-gray-200">
+          Reference
+          <input
+            type="text"
+            value={reference}
+            onChange={(e) => setReference(e.target.value)}
+            placeholder="e.g. John 3:16 or Joshua 6:1-16"
+            className={fieldClass}
+          />
+        </label>
+        <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+          A single verse or a range — the note rides every verse in it.
+        </p>
+      </div>
 
       <label className="block text-sm font-medium text-gray-700 dark:text-gray-200">
         Date
@@ -92,6 +100,8 @@ export function SermonNoteForm({
           className={fieldClass}
         />
       </label>
+
+      {error && <p className="text-sm text-red-600 dark:text-red-400">{error}</p>}
 
       <div className="flex gap-2">
         <button

@@ -50,6 +50,7 @@ class FakeConcordClient:
         health: ConcordHealth | None = None,
         translations: list[Translation] | None = None,
         chapter: Chapter | None = None,
+        resolved: Chapter | None = None,
         books: list[Book] | None = None,
         cross_refs: CrossRefResponse | None = None,
         places: VersePlacesResponse | None = None,
@@ -68,6 +69,9 @@ class FakeConcordClient:
         self._health = health
         self._translations = translations or []
         self._chapter = chapter
+        # What `resolve_reference` returns (a human ref → its canonical verse span). Falls back
+        # to `chapter` when not set, so tests that don't care about the span need no extra wiring.
+        self._resolved = resolved
         self._books = books or []
         self._cross_refs = cross_refs
         self._places = places
@@ -115,8 +119,9 @@ class FakeConcordClient:
     async def resolve_reference(self, ref: str) -> Chapter:
         if self._error is not None:
             raise self._error
-        assert self._chapter is not None
-        return self._chapter
+        resolved = self._resolved if self._resolved is not None else self._chapter
+        assert resolved is not None
+        return resolved
 
     async def get_cross_references(
         self, book: str, chapter: int, verse: int, translation: str | None = None

@@ -7,13 +7,13 @@ from collections.abc import Callable
 from datetime import UTC, date, datetime
 
 import httpx
-from songbird.concord.client import ConcordUnreachableError
-from songbird.concord.schemas import Book
+from songbird.concord.client import ConcordNotFoundError, ConcordUnreachableError
+from songbird.concord.schemas import Book, Chapter
 from songbird.db.models import SermonNote, Tag, User
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from tests.conftest import FakeConcordClient
-from tests.helpers import DEFAULT_TRANSLATIONS, build_chapter
+from tests.helpers import DEFAULT_TRANSLATIONS, build_chapter, build_range
 
 # Canonical book map the fake Concord serves for server-side book_order_index resolution.
 _BOOKS = [
@@ -24,9 +24,12 @@ _BOOKS = [
 ]
 
 
-def _fake(translation: str = "KJV") -> FakeConcordClient:
+def _fake(translation: str = "KJV", resolved: Chapter | None = None) -> FakeConcordClient:
+    # `resolved` is the chapter `resolve_reference` returns (a human ref → its canonical span).
+    # Left None, it falls back to the read chapter — fine for tests that don't pin the span.
     return FakeConcordClient(
         chapter=build_chapter("JHN", 3, translation, 20),
+        resolved=resolved,
         translations=DEFAULT_TRANSLATIONS,
         books=_BOOKS,
     )
@@ -267,36 +270,57 @@ async def test_author_scoped_out_of_overlay_and_list(
 
 # --- Create / update / delete (Slice 15) ---
 
+# The client sends only the human reference; the server resolves the canonical anchor + span.
 _CREATE_BODY = {
     "title": "A new sermon",
     "sermon_url": "https://example.test/new",
     "reference": "John 3:16",
-    "book_usfm": "JHN",
-    "start_chapter": 3,
-    "start_verse": 16,
-    "end_chapter": 3,
-    "end_verse": 16,
 }
 
 
-async def test_create_persists_resolves_order_and_overlays(
+async def test_create_resolves_anchor_order_and_overlays(
     db_sessionmaker: async_sessionmaker[AsyncSession],
     client_for: Callable[[FakeConcordClient], httpx.AsyncClient],
 ) -> None:
-    # POST creates a row; the server resolves book_order_index from Concord (client never sends
-    # it); the note then overlays the chapter by canonical coords (invariant 4).
-    async with client_for(_fake("KJV")) as client:
+    # POST sends only the reference; the server resolves it through Concord into book + span +
+    # book_order_index (client never asserts coords); the note then overlays by canonical coords.
+    fake = _fake("KJV", resolved=build_range("JHN", 3, 16, 16))
+    async with client_for(fake) as client:
         created = await client.post(
             "/api/v1/sermon-notes", json={**_CREATE_BODY, "tags": ["Grace"]}
         )
         assert created.status_code == 201
         body = created.json()
-        assert body["book_order_index"] == 43  # resolved from Concord, not from the request
+        assert body["book_order_index"] == 43  # resolved from Concord
         assert body["book_usfm"] == "JHN"
+        assert (body["start_chapter"], body["start_verse"]) == (3, 16)
+        assert (body["end_chapter"], body["end_verse"]) == (3, 16)
         assert body["tags"] == ["grace"]  # normalized
 
         read = (await client.get("/api/v1/read/KJV/JHN/3")).json()
     assert [s["id"] for s in _verse(read, 16)["sermon_notes"]] == [body["id"]]
+
+
+async def test_create_ranged_reference_overlays_every_verse(
+    db_sessionmaker: async_sessionmaker[AsyncSession],
+    client_for: Callable[[FakeConcordClient], httpx.AsyncClient],
+) -> None:
+    # The bug in #91: a ranged reference must cover every verse in the range, not just the anchor.
+    fake = _fake("KJV", resolved=build_range("JHN", 3, 14, 17))
+    async with client_for(fake) as client:
+        created = await client.post(
+            "/api/v1/sermon-notes",
+            json={**_CREATE_BODY, "reference": "John 3:14-17"},
+        )
+        assert created.status_code == 201
+        body = created.json()
+        assert (body["start_verse"], body["end_verse"]) == (14, 17)
+
+        read = (await client.get("/api/v1/read/KJV/JHN/3")).json()
+    for v in (14, 15, 16, 17):
+        assert [s["id"] for s in _verse(read, v)["sermon_notes"]] == [body["id"]], f"verse {v}"
+    for v in (13, 18):
+        assert _verse(read, v)["sermon_notes"] == [], f"verse {v} should NOT carry it"
 
 
 async def test_create_reuses_existing_tag_vocabulary(
@@ -318,21 +342,23 @@ async def test_create_reuses_existing_tag_vocabulary(
     assert len(rows) == 1  # not duplicated
 
 
-async def test_create_unknown_book_422(
+async def test_create_unresolvable_reference_404(
     client_for: Callable[[FakeConcordClient], httpx.AsyncClient],
 ) -> None:
-    async with client_for(_fake()) as client:
+    # A reference Concord can't parse → a clear 404, not a silently mis-anchored note.
+    fake = FakeConcordClient(error=ConcordNotFoundError("nope"), books=_BOOKS)
+    async with client_for(fake) as client:
         resp = await client.post(
-            "/api/v1/sermon-notes", json={**_CREATE_BODY, "book_usfm": "ZZZ"}
+            "/api/v1/sermon-notes", json={**_CREATE_BODY, "reference": "Hesitations 3"}
         )
-    assert resp.status_code == 422
-    assert resp.json()["detail"]["code"] == "INVALID_BOOK"
+    assert resp.status_code == 404
+    assert resp.json()["detail"]["code"] == "NOT_FOUND"
 
 
 async def test_create_concord_unreachable_502(
     client_for: Callable[[FakeConcordClient], httpx.AsyncClient],
 ) -> None:
-    # Concord is a hard dependency: if it can't be reached to resolve the book, error (invariant 3).
+    # Concord is a hard dependency: if it can't be reached to resolve the reference, error (inv. 3).
     fake = FakeConcordClient(
         error=ConcordUnreachableError("http://concord.test", httpx.ConnectError("down"))
     )
@@ -358,6 +384,27 @@ async def test_patch_updates_only_given_fields(
         # Untouched fields are preserved.
         assert body["sermon_url"] == "https://example.test/sermon"
         assert body["reference"] == "John 3:16"
+
+
+async def test_patch_reference_reanchors_span(
+    db_sessionmaker: async_sessionmaker[AsyncSession],
+    client_for: Callable[[FakeConcordClient], httpx.AsyncClient],
+) -> None:
+    # Editing the reference re-resolves the canonical span so coverage follows the reference.
+    note_id = await _seed_note(db_sessionmaker, start_verse=16, end_verse=16)
+    fake = _fake(resolved=build_range("JHN", 3, 14, 17))
+    async with client_for(fake) as client:
+        resp = await client.patch(
+            f"/api/v1/sermon-notes/{note_id}", json={"reference": "John 3:14-17"}
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["reference"] == "John 3:14-17"
+        assert (body["start_verse"], body["end_verse"]) == (14, 17)
+
+        read = (await client.get("/api/v1/read/KJV/JHN/3")).json()
+    for v in (14, 15, 16, 17):
+        assert [s["id"] for s in _verse(read, v)["sermon_notes"]] == [note_id], f"verse {v}"
 
 
 async def test_patch_other_author_404(

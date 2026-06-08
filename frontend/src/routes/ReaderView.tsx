@@ -101,6 +101,7 @@ export function ReaderView(): JSX.Element {
   } | null>(null);
   const [refInput, setRefInput] = useState("");
   const [resolveError, setResolveError] = useState<string | null>(null);
+  const [sermonSaveError, setSermonSaveError] = useState<string | null>(null);
   const [highlightVerse, setHighlightVerse] = useState<number | null>(() => {
     const v = searchParams.get("verse");
     return v ? Number(v) : null;
@@ -334,20 +335,24 @@ export function ReaderView(): JSX.Element {
           title: values.title,
           sermon_url: values.sermon_url,
           reference: values.reference,
-          book_usfm: chapterQuery.data?.book ?? book,
-          start_chapter: chapter,
-          start_verse: editing.verse.verse,
-          end_chapter: chapter,
-          end_verse: editing.verse.verse,
           event_date: values.event_date,
           tags: editing.tags,
         });
       }
     },
     onSuccess: async () => {
+      setSermonSaveError(null);
       await invalidateChapter();
       await queryClient.invalidateQueries({ queryKey: ["tags"] });
       setEditing(null);
+    },
+    onError: (err) => {
+      const code = err instanceof ApiError ? err.code : "";
+      setSermonSaveError(
+        code === "NOT_FOUND"
+          ? "Couldn't find that reference — check the spelling (e.g. Joshua 6:1-16)."
+          : "Couldn't save that sermon note (is Concord reachable?).",
+      );
     },
   });
 
@@ -365,6 +370,7 @@ export function ReaderView(): JSX.Element {
     setXref(null);
     setGeo(false);
     setMap(false);
+    setSermonSaveError(null);
     setEditing({
       verse,
       kind: "annotation",
@@ -406,6 +412,7 @@ export function ReaderView(): JSX.Element {
     setXref(null);
     setGeo(false);
     setMap(false);
+    setSermonSaveError(null);
     setEditing({
       verse,
       kind: "sermon",
@@ -755,6 +762,7 @@ export function ReaderView(): JSX.Element {
                   key={`sermon-${editing.verse.verse}-${editing.sermonId ?? "new"}`}
                   initial={editing.sermon}
                   saving={sermonSaveMutation.isPending}
+                  error={sermonSaveError}
                   onSave={(values) => sermonSaveMutation.mutate(values)}
                   onCancel={() => setEditing(null)}
                   onDelete={
