@@ -173,3 +173,22 @@ class NotesResponse(BaseModel):
     verse: int | None = None
     total: int
     notes: list[TranslatorNote]
+
+
+class NoteSearchHit(BaseModel):
+    """One keyword match from Concord's `/v1/notes/search` over its translator's/study notes.
+    Tolerant — only the fields songbird renders. The note arrives as a `snippet` with the matched
+    term(s) wrapped in `<mark>…</mark>`. (Concord also returns char_offset/marker/ordinal; not
+    needed for v1 search rendering, so they're ignored.)"""
+
+    book: str  # USFM code — canonical
+    chapter: int
+    verse: int
+    reference: str
+    translation: str  # which translation's notes the hit came from
+    type: str | None = None  # tn | sn | tc | map | other
+    snippet: str | None = None  # note text with <mark>…</mark> around the matched term(s)
+
+
+class NoteSearchResponse(BaseModel):
+    hits: list[NoteSearchHit]

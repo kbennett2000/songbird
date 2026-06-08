@@ -7,7 +7,7 @@ doesn't exist — so notes use keyword search; see the annotations browse `q` pa
 from fastapi import APIRouter, Depends
 
 from songbird.api.deps import get_concord_client
-from songbird.api.schemas import KeywordResult, SemanticResult
+from songbird.api.schemas import KeywordResult, SemanticResult, StudyNoteResult
 from songbird.concord.client import (
     ConcordClient,
     ConcordNotFoundError,
@@ -78,6 +78,40 @@ async def keyword_search(
             reference=h.reference,
             snippet=h.snippet,
             matches=h.matches,
+        )
+        for h in result.hits
+    ]
+
+
+@router.get("/study-notes-search", response_model=list[StudyNoteResult])
+async def study_notes_search(
+    q: str,
+    concord: ConcordClient = Depends(get_concord_client),
+) -> list[StudyNoteResult]:
+    """Keyword search over Concord's translator's/study notes — the Search page's "Study notes"
+    section, distinct from "Scripture" and the user's own "Your notes". Named to avoid colliding
+    with the user's-own-notes search (`/annotations?q=`).
+
+    Best-effort by design: this is the rarely-populated reference layer (the public Concord image
+    ships zero notes), so **any** failure — client error *or* unreachable — is swallowed to `[]`,
+    and the section simply doesn't render. This is a deliberate divergence from the Scripture
+    search endpoints (which surface a 502): the Scripture section is already the page's
+    Concord-health signal, so a redundant error here would be noise and would degrade the page."""
+    if not q.strip():
+        return []  # no query → no call
+    try:
+        result = await concord.search_notes(q)
+    except (ConcordNotFoundError, ConcordUnreachableError):
+        return []  # best-effort: never degrade the Scripture / Your-notes sections
+    return [
+        StudyNoteResult(
+            book=h.book,
+            chapter=h.chapter,
+            verse=h.verse,
+            reference=h.reference,
+            translation=h.translation,
+            type=h.type,
+            snippet=h.snippet,
         )
         for h in result.hits
     ]

@@ -315,6 +315,21 @@ class TranslatorNote(BaseModel):
     cross_references: list[NoteCrossReference]
 
 
+class StudyNoteResult(BaseModel):
+    """One keyword match from Concord's translator's/study notes search ("Study notes" on the
+    Search page — distinct from the user's own "Your notes"). Canonical coords → jump reuses
+    navigation. `snippet` is the note text with the matched term(s) wrapped in `<mark>…</mark>`
+    (the client renders the highlight by splitting on the tags — never as raw HTML)."""
+
+    book: str  # USFM code — canonical
+    chapter: int
+    verse: int
+    reference: str
+    translation: str  # which translation's notes the hit came from
+    type: str | None  # tn | sn | tc | map | other → a readable badge client-side
+    snippet: str | None
+
+
 class ResolvedReference(BaseModel):
     """A raw reference resolved (by Concord) to canonical coordinates. `verse` is set only
     when the reference named a single verse (so the reader can scroll to / highlight it)."""
