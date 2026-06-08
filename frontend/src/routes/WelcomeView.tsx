@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { Link } from "react-router-dom";
 
+import { TopNav } from "@/components/TopNav";
 import { useAuth } from "@/hooks/useAuth";
 import { useReadingTranslation } from "@/hooks/useReadingTranslation";
 import { noteReference, notePreview, readerLink } from "@/lib/notes";
@@ -36,7 +37,7 @@ const QUICK_LINKS = [
  * that already exists (the saved position on the profile, the browse lists, the tag vocabulary).
  */
 export function WelcomeView(): JSX.Element {
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
 
   const booksQuery = useQuery({ queryKey: ["books"], queryFn: fetchBooks });
   const annotationsQuery = useQuery({
@@ -104,23 +105,7 @@ export function WelcomeView(): JSX.Element {
 
   return (
     <div className="min-h-screen bg-stone-50">
-      <header className="border-b border-gray-200 bg-white">
-        <div className="mx-auto flex max-w-4xl items-center gap-3 p-4">
-          <h1 className="text-2xl font-bold tracking-tight">songbird</h1>
-          {user && (
-            <span className="ml-auto flex items-center gap-2 text-sm text-gray-500">
-              <span title={user.is_admin ? "Admin" : undefined}>{user.username}</span>
-              <button
-                type="button"
-                className="text-blue-700 hover:underline"
-                onClick={() => void logout()}
-              >
-                Log out
-              </button>
-            </span>
-          )}
-        </div>
-      </header>
+      <TopNav maxWidth="max-w-4xl" />
 
       <main className="mx-auto flex max-w-4xl flex-col gap-8 p-6">
         <section>

@@ -3,6 +3,7 @@ import { type FormEvent, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { PlaceLocation, StatusBadge } from "@/components/PlaceHonesty";
+import { TopNav } from "@/components/TopNav";
 import { browsePlaces, fetchPlaceTypes } from "@/lib/reader";
 
 const PAGE_SIZE = 50;
@@ -47,24 +48,10 @@ export function PlacesView(): JSX.Element {
 
   return (
     <div className="min-h-screen bg-stone-50">
-      <header className="border-b border-gray-200 bg-white">
-        <div className="mx-auto flex max-w-3xl items-center gap-3 p-4">
-          <h1 className="text-2xl font-bold tracking-tight">Places</h1>
-          <div className="ml-auto flex items-center gap-3 text-sm">
-            <Link to="/read" className="text-blue-700 hover:underline">
-              Reader
-            </Link>
-            <Link to="/search" className="text-blue-700 hover:underline">
-              Search
-            </Link>
-            <Link to="/" className="text-blue-700 hover:underline">
-              Home
-            </Link>
-          </div>
-        </div>
-      </header>
+      <TopNav />
 
       <main className="mx-auto max-w-3xl p-6">
+        <h1 className="mb-1 text-2xl font-bold tracking-tight">Places</h1>
         <p className="mb-4 text-gray-500">
           Every place named in Scripture that Concord knows — browse, filter, and open one to see
           where it is (honestly) and the verses that name it.

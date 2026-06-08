@@ -87,10 +87,14 @@ describe("WelcomeView", () => {
     const cta = await screen.findByRole("link", { name: /Start reading/ });
     expect(cta).toHaveAttribute("href", "/read");
     expect(await screen.findByText(/No notes yet/)).toBeInTheDocument();
-    // Quick-link cards.
-    expect(screen.getByRole("link", { name: /Browse notes/ })).toHaveAttribute("href", "/browse");
-    expect(screen.getByRole("link", { name: /Search/ })).toHaveAttribute("href", "/search");
-    expect(screen.getByRole("link", { name: /Compare/ })).toHaveAttribute("href", "/compare");
+    // Quick-link cards (scoped to the "Go to" section — TopNav also links these destinations).
+    const goTo = screen.getByRole("region", { name: "Go to" });
+    expect(within(goTo).getByRole("link", { name: /Browse notes/ })).toHaveAttribute(
+      "href",
+      "/browse",
+    );
+    expect(within(goTo).getByRole("link", { name: /Search/ })).toHaveAttribute("href", "/search");
+    expect(within(goTo).getByRole("link", { name: /Compare/ })).toHaveAttribute("href", "/compare");
   });
 
   it("labels 'continue reading' with the saved position", async () => {
