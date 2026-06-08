@@ -208,6 +208,9 @@ export const keywordResultSchema = z.object({
   verse: z.number(),
   reference: z.string(),
   snippet: z.string().nullable(),
+  // Multi-translation search: highlighted snippet per translation that matched (id → snippet),
+  // top-ranked first. Null/absent when the verse matched in a single translation (use `snippet`).
+  matches: z.record(z.string()).nullable().optional(),
 });
 export const keywordResultsSchema = z.array(keywordResultSchema);
 export type KeywordResult = z.infer<typeof keywordResultSchema>;

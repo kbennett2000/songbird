@@ -2,14 +2,76 @@ import { useQuery } from "@tanstack/react-query";
 import { type FormEvent, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 
+import { useAuth } from "@/hooks/useAuth";
 import { markSegments } from "@/lib/highlight";
 import { noteReference, notePreview, readerLink } from "@/lib/notes";
-import { fetchBooks, keywordSearch, searchAnnotations, semanticSearch } from "@/lib/reader";
+import {
+  fetchBooks,
+  fetchTranslations,
+  keywordSearch,
+  searchAnnotations,
+  semanticSearch,
+} from "@/lib/reader";
 import type { KeywordResult, SemanticResult } from "@/schemas";
 
-const SEARCH_TRANSLATION = "KJV"; // the translation results are shown in (first cut)
+// Fallback display translation for SEMANTIC search when the profile has no reading translation
+// yet. Keyword search needs no such fallback — it defaults to ALL translations.
+const DEFAULT_TRANSLATION = "KJV";
 
 type Mode = "semantic" | "keyword";
+
+// Render a Concord <mark>…</mark> snippet as safe React nodes (split on the tags — never raw HTML).
+function highlighted(snippet: string): JSX.Element[] {
+  return markSegments(snippet).map((s) =>
+    s.mark ? (
+      <mark key={s.key} className="rounded bg-yellow-200">
+        {s.text}
+      </mark>
+    ) : (
+      <span key={s.key}>{s.text}</span>
+    ),
+  );
+}
+
+// The snippet area of one Scripture hit. Semantic → plain verse text. Keyword → either a single
+// highlighted snippet, or (multi-translation) one labeled, highlighted snippet per matched
+// translation: reading-translation first, else Concord's order (which leads with the top-ranked).
+function ScriptureSnippet({
+  hit,
+  readingTranslation,
+}: {
+  hit: SemanticResult | KeywordResult;
+  readingTranslation: string;
+}): JSX.Element | null {
+  if (!("snippet" in hit)) {
+    return hit.text ? <p className="mt-1 font-serif text-gray-700">{hit.text}</p> : null;
+  }
+  const matches = hit.matches ?? null;
+  const ids = matches ? Object.keys(matches) : [];
+  if (matches && ids.length >= 2) {
+    const ordered = ids.includes(readingTranslation)
+      ? [readingTranslation, ...ids.filter((id) => id !== readingTranslation)]
+      : ids;
+    return (
+      <div className="mt-1 flex flex-col gap-1">
+        {ordered.map((id, i) => (
+          <p
+            key={id}
+            className={i === 0 ? "font-serif text-gray-700" : "font-serif text-sm text-gray-500"}
+          >
+            <span className="mr-2 rounded bg-gray-100 px-1.5 py-0.5 align-middle text-xs font-medium text-gray-600">
+              {id}
+            </span>
+            {highlighted(matches[id] ?? "")}
+          </p>
+        ))}
+      </div>
+    );
+  }
+  return hit.snippet ? (
+    <p className="mt-1 font-serif text-gray-700">{highlighted(hit.snippet)}</p>
+  ) : null;
+}
 
 export function SearchView(): JSX.Element {
   const [draft, setDraft] = useState("");
@@ -18,20 +80,32 @@ export function SearchView(): JSX.Element {
   // spins up Concord's heavy embedding model (issue #46).
   const [mode, setMode] = useState<Mode>("semantic");
 
+  const { user } = useAuth();
+  // Semantic search ranks in WEB meaning-space but renders in ONE display translation; show it in
+  // the reader's translation (the profile's last-used), not a hardcoded default.
+  const readingTranslation = user?.last_translation ?? DEFAULT_TRANSLATION;
+
+  // Keyword scope: which translations to search. Empty = ALL (the default). In-memory only —
+  // resets on reload, never persisted.
+  const [selected, setSelected] = useState<string[]>([]);
+  const [pickerOpen, setPickerOpen] = useState(false);
+
   const booksQuery = useQuery({ queryKey: ["books"], queryFn: fetchBooks });
   const booksById = useMemo(
     () => new Map((booksQuery.data ?? []).map((b) => [b.id, b])),
     [booksQuery.data],
   );
+  const translationsQuery = useQuery({ queryKey: ["translations"], queryFn: fetchTranslations });
 
   const semantic = useQuery({
-    queryKey: ["semantic-search", query],
-    queryFn: () => semanticSearch(query, SEARCH_TRANSLATION),
+    queryKey: ["semantic-search", query, readingTranslation],
+    queryFn: () => semanticSearch(query, readingTranslation),
     enabled: mode === "semantic" && query.length > 0,
   });
   const keyword = useQuery({
-    queryKey: ["keyword-search", query],
-    queryFn: () => keywordSearch(query, SEARCH_TRANSLATION),
+    // The selection is part of the key so narrowing refetches; sorted so order doesn't churn it.
+    queryKey: ["keyword-search", query, [...selected].sort().join(",")],
+    queryFn: () => keywordSearch(query, selected.length > 0 ? selected : undefined),
     enabled: mode === "keyword" && query.length > 0,
   });
   const scripture = mode === "semantic" ? semantic : keyword;
@@ -85,7 +159,7 @@ export function SearchView(): JSX.Element {
           ))}
         </div>
 
-        <form onSubmit={submit} className="mb-6 flex gap-2">
+        <form onSubmit={submit} className="mb-3 flex gap-2">
           <input
             type="text"
             value={draft}
@@ -105,6 +179,50 @@ export function SearchView(): JSX.Element {
             Search
           </button>
         </form>
+
+        {/* Translation scope — keyword only. Defaults to all loaded translations; narrow to a
+            subset here. In-memory: this resets on reload. (Semantic shows one display translation.) */}
+        {mode === "keyword" && (
+          <div className="mb-6">
+            <button
+              type="button"
+              onClick={() => setPickerOpen((o) => !o)}
+              aria-expanded={pickerOpen}
+              className="text-sm text-gray-600 hover:text-gray-900"
+            >
+              Translations:{" "}
+              <span className="font-medium text-gray-900">
+                {selected.length === 0 ? "All translations" : selected.join(", ")}
+              </span>{" "}
+              <span aria-hidden="true">▾</span>
+            </button>
+            {pickerOpen && (
+              <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-2 rounded border border-gray-200 bg-white p-3">
+                <button
+                  type="button"
+                  onClick={() => setSelected([])}
+                  className="text-sm text-blue-700 hover:underline"
+                >
+                  All translations
+                </button>
+                {(translationsQuery.data ?? []).map((t) => (
+                  <label key={t.id} className="flex items-center gap-1.5 text-sm text-gray-700">
+                    <input
+                      type="checkbox"
+                      checked={selected.includes(t.id)}
+                      onChange={(e) =>
+                        setSelected((cur) =>
+                          e.target.checked ? [...cur, t.id] : cur.filter((id) => id !== t.id),
+                        )
+                      }
+                    />
+                    {t.id}
+                  </label>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         {query.length === 0 && (
           <p className="text-gray-500">
@@ -161,21 +279,7 @@ export function SearchView(): JSX.Element {
                         Open
                       </Link>
                     </div>
-                    {"snippet" in r
-                      ? r.snippet && (
-                          <p className="mt-1 font-serif text-gray-700">
-                            {markSegments(r.snippet).map((s) =>
-                              s.mark ? (
-                                <mark key={s.key} className="rounded bg-yellow-200">
-                                  {s.text}
-                                </mark>
-                              ) : (
-                                <span key={s.key}>{s.text}</span>
-                              ),
-                            )}
-                          </p>
-                        )
-                      : r.text && <p className="mt-1 font-serif text-gray-700">{r.text}</p>}
+                    <ScriptureSnippet hit={r} readingTranslation={readingTranslation} />
                   </li>
                 ))}
               </ul>

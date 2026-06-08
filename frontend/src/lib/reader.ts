@@ -219,13 +219,21 @@ export async function semanticSearch(
   return semanticResultsSchema.parse(data);
 }
 
-/** Search Scripture for an exact word/phrase — via Concord's keyword search (issue #46). */
+/**
+ * Search Scripture for an exact word/phrase — via Concord's keyword search (issue #46).
+ * Searches all loaded translations by default; pass a non-empty `translations` list to narrow to
+ * that subset. Each hit then carries a `matches` map (translation id → highlighted snippet).
+ */
 export async function keywordSearch(
   q: string,
-  translation: string,
+  translations?: string[],
   limit = 20,
 ): Promise<KeywordResult[]> {
-  const t = translation ? `&translation=${encodeURIComponent(translation)}` : "";
+  // Narrow only when a non-empty subset is chosen; omit the param for "all" (backend default).
+  const t =
+    translations && translations.length > 0
+      ? `&translations=${encodeURIComponent(translations.join(","))}`
+      : "";
   const data = await apiRequest<unknown>(
     "GET",
     `/keyword-search?q=${encodeURIComponent(q)}&limit=${limit}${t}`,
