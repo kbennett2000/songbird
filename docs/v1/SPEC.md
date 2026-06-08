@@ -313,11 +313,11 @@ always visible.
 
 **Translator's notes.** A pass-through to Concord's per-chapter translator's-notes endpoint,
 rendered as inline footnote markers with a popover in the reader. Pure proxy — no songbird data.
-_Caveat (a real finding):_ these footnotes come from **NET**, which Concord v1.0.0 doesn't ship,
-so against the default 13-translation stack the endpoint 404s and the reader shows an
-"unavailable" notice on every chapter. The feature is built and correct — it lights up when a
-Concord build includes NET. (Softening that notice so "no notes here" ≠ "Concord is down" is open
-work; tracked in dev-notes.)
+_Caveat (a real finding):_ these footnotes come from **NET**, which the stock Concord image
+(now pinned at `v1.1.0`) doesn't ship, so against the default 13-translation stack the endpoint
+404s and the reader shows an "unavailable" notice on every chapter. The feature is built and
+correct — it lights up when a Concord build includes NET. (Softening that notice so "no notes
+here" ≠ "Concord is down" is open work; tracked in dev-notes.)
 
 **Keyword Scripture search.** Alongside semantic search, a **keyword/semantic toggle** on the
 Search screen. Keyword search proxies Concord's `/v1/search` (`GET /api/v1/keyword-search`) for
@@ -325,6 +325,23 @@ exact word/phrase matches with highlighted snippets; semantic search finds by me
 keyword query can't run (Concord's FTS5 rejects punctuation) it returns *no results* rather than
 an error, and the UI offers to retry by meaning. Note search stays keyword-only until Concord
 exposes a semantic note endpoint.
+
+**Multi-translation keyword search (v1.3).** Keyword search now passes Concord's
+`/v1/search?translations=KJV,WEB,…` (or `*` for *all*) — the Search screen defaults to every
+translation and offers a picker to narrow to a chosen subset. Concord returns a per-translation
+match map (`matches: {translation_id: snippet}`), and the result list renders one labeled,
+highlighted snippet per matched translation (reading-translation first). A scope row also lets a
+search target Scripture, your own notes, or study notes in any mix. Specified in
+`docs/v1.3/SEARCH-EXPANSION-SPEC.md`.
+
+**Study-notes search (v1.3).** A third search category beside Scripture and *Your notes*:
+keyword search over Concord's translator's/study/text-critical notes via `/v1/notes/search`
+(`GET /api/v1/study-notes-search`), each hit tagged with its note type and a verse jump-link.
+_Caveat (same shape as translator's notes above):_ the stock Concord image ships **zero** notes
+(`/v1/notes/search` → `total: 0`), so on the default stack this section never appears — it renders
+**only** when a Concord build supplies notes. Best-effort: any failure is swallowed to an empty
+list, so it never degrades the rest of the page. (This is why it can't be screenshotted against
+the stock image — see `docs/dev-notes.md`.) Specified in `docs/v1.3/SEARCH-EXPANSION-SPEC.md`.
 
 **Side-by-side compare.** A `/compare` view reads **up to three translations** in parallel
 columns, aligned by canonical verse number (the union of verses across columns; a verse a
@@ -340,17 +357,35 @@ imported / skipped / failed. Controls live in the Browse view.
 
 **Welcome / home page.** The app now opens at `/` (the reader moved to `/read`) with a personal
 greeting, library counts (notes, sermons, tags), a "pick up where you left off" card from the
-saved reading position, a recent-notes feed, and quick links to Browse / Search / Compare.
+saved reading position, a recent-notes feed, and quick links to Browse / Search / Compare / Places.
+
+**Verse of the day (v1.5).** The Welcome page leads with a verse-of-the-day card — one random
+verse from Concord's `/v1/random?translation=` in the profile's reading translation, with an
+"Open in reader" link and a "show another" re-roll. Best-effort and bonus: it's the page's only
+Scripture, so on any Concord error the card simply doesn't render (no banner) and the rest of the
+home page still works. Not daily-pinned — freely re-rollable. Specified in
+`docs/v1.5/RANDOM-VERSE-SPEC.md`.
+
+**Places gazetteer (v1.4).** A browsable `/places` route over Concord's geography:
+`GET /v1/places` (filter by type/status/name, paginated) lists every place Concord knows, and
+`GET /v1/places/{id}` opens a detail page — type, status + confidence (the honesty model surfaced,
+never a guessed pin), modern name and coordinates when located, and every verse that names it as a
+jump-link (reusing the already-proxied `/v1/places/{id}/verses`). Read-only — Concord owns the
+data; songbird stores none of it. Specified in `docs/v1.4/PLACES-SPEC.md`.
 
 **Concord consumer contract test.** A test validates songbird's hand-written Concord types
 against Concord's pinned OpenAPI schema, catching drift between the two services.
 
 **Specs for shipped features.** The map view (v1.1) is specified in `docs/v1.1/MAP-SPEC.md` +
 ADR 0001 (offline bundled basemap, honest pin placement); sermon notes in
-`docs/v1.2/SERMON-NOTES-SPEC.md`.
+`docs/v1.2/SERMON-NOTES-SPEC.md`; the search expansion (multi-translation keyword + study-note
+search) in `docs/v1.3/SEARCH-EXPANSION-SPEC.md`; the places gazetteer in
+`docs/v1.4/PLACES-SPEC.md`; and the verse of the day in `docs/v1.5/RANDOM-VERSE-SPEC.md`.
 
 **The data model, restated.** songbird's database holds: `users` (now with `last_translation`,
 `last_book`, `last_chapter`), `sessions`, `annotations`, `annotation_translations`, `tags`
-(+ `annotation_tags`, `sermon_note_tags` joins), and `sermon_notes` — **eight** Alembic
-migrations. Keyword search, compare, export/import, and the home page added **no new tables**
-(they proxy Concord or reuse existing models). Still **no Bible text** (invariant 5 intact).
+(+ `annotation_tags`, `sermon_note_tags` joins), and `sermon_notes`. Keyword search, compare,
+export/import, the home page, and the later search expansion (multi-translation keyword +
+study-note search, v1.3), the places gazetteer (v1.4), and the verse of the day (v1.5) all added
+**no new tables** — they proxy Concord or reuse existing models. Still **no Bible text**
+(invariant 5 intact).
