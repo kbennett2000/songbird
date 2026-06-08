@@ -7,7 +7,7 @@ doesn't exist — so notes use keyword search; see the annotations browse `q` pa
 from fastapi import APIRouter, Depends
 
 from songbird.api.deps import get_concord_client
-from songbird.api.schemas import KeywordResult, SemanticResult, StudyNoteResult
+from songbird.api.schemas import KeywordResult, RandomVerse, SemanticResult, StudyNoteResult
 from songbird.concord.client import (
     ConcordClient,
     ConcordNotFoundError,
@@ -115,3 +115,27 @@ async def study_notes_search(
         )
         for h in result.hits
     ]
+
+
+@router.get("/random-verse", response_model=RandomVerse)
+async def random_verse(
+    translation: str | None = None,
+    concord: ConcordClient = Depends(get_concord_client),
+) -> RandomVerse:
+    """One random verse for the Welcome "verse of the day" card, in the reading translation. Stays
+    honest — unreachable → 502, a 404 → 404 — and the frontend hides the card on any error (the
+    Welcome page must not break when Concord is down; the card is a bonus)."""
+    try:
+        v = await concord.random_verse(translation)
+    except ConcordNotFoundError as exc:
+        raise_http(404, ErrorCode.NOT_FOUND, str(exc))
+    except ConcordUnreachableError as exc:
+        raise_http(502, ErrorCode.CONCORD_UNREACHABLE, str(exc))
+    return RandomVerse(
+        translation=v.translation,
+        book=v.book,
+        chapter=v.chapter,
+        verse=v.verse,
+        reference=v.reference,
+        text=v.text,
+    )

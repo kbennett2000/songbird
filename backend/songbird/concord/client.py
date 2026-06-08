@@ -23,6 +23,7 @@ from songbird.concord.schemas import (
     PlaceDetail,
     PlacesPage,
     PlaceVersesResponse,
+    RandomVerse,
     SemanticSearchResponse,
     Translation,
     TranslationsResponse,
@@ -113,6 +114,26 @@ class ConcordClient:
         except httpx.HTTPError as exc:
             raise ConcordUnreachableError(self._base_url, exc) from exc
         return SemanticSearchResponse.model_validate(response.json())
+
+    async def random_verse(self, translation: str | None = None) -> RandomVerse:
+        """One random verse from Concord (`/v1/random`), in the given translation. Concord's
+        response is `no-store`, so every call is a fresh verse. A 400/404 (e.g. unknown
+        translation) is a client not-found, not unreachability."""
+        params: dict[str, str] = {}
+        if translation:
+            params["translation"] = translation
+        try:
+            response = await self._client.get("/v1/random", params=params)
+            response.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code in (400, 404):
+                raise ConcordNotFoundError(
+                    f"Concord could not pick a random verse: {exc.response.status_code}"
+                ) from exc
+            raise ConcordUnreachableError(self._base_url, exc) from exc
+        except httpx.HTTPError as exc:
+            raise ConcordUnreachableError(self._base_url, exc) from exc
+        return RandomVerse.parse_concord(response.json())
 
     async def keyword_search(
         self,
