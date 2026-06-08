@@ -4,6 +4,54 @@ A running log of per-slice decisions, gotchas, and how each slice was verified. 
 
 ---
 
+## Slice 4 (v1.5) — Verse of the day
+
+- **Date:** 2026-06-07
+- **Branch:** `slice/4-verse-of-the-day`
+- **Scope:** a small "verse of the day" card on the Welcome page — one random verse from Concord
+  (`/v1/random`), in the reading translation, openable, re-rollable. Over Concord's existing
+  endpoint (live since v1.0.0). **No Concord change. Closes the v1.3–v1.5 roadmap** (Slice 0 pin +
+  Slices 1–2 features + Slices 3–4 gaps).
+
+### What changed
+- **Client** (`concord/client.py`): `random_verse(translation?) → RandomVerse`. **Schemas**: the
+  flat `RandomVerse` (`translation, book, chapter, verse, reference, text`) + private wire models —
+  Concord's body is **nested** (`{translation, …, verse: {…}}`), so `RandomVerse.parse_concord`
+  flattens it. API `RandomVerse` (`api/schemas.py`).
+- **API** (`api/search.py`): `GET /api/v1/random-verse?translation=` — **honest** (unreachable →
+  502, a Concord 404 → 404; **no swallow**, since a single object has no empty-list to return).
+- **Frontend**: extracted Slice 1's reading-translation resolution into a shared
+  `hooks/useReadingTranslation.ts` (`user?.last_translation ?? "KJV"`) and refactored `SearchView`
+  to use it (no duplication). `fetchRandomVerse`; a "verse of the day" `<section>` on `WelcomeView`
+  that **renders only when `randomVerse.data`** (hidden on error/loading — no banner), with "Open"
+  (verse-only jump) and "Show another" (refetch). Contract test pins `/v1/random`.
+
+### Clarifications (open-question answers)
+1. **Error posture — hide, don't swallow in the backend.** Backend stays honest (502/404); the
+   **frontend** absorbs it (card just doesn't render). On a Concord outage the rest of Welcome
+   (recent notes, stats, quick links — songbird's own DB) renders fully. *(Reality note: Welcome
+   already made one Concord call — `fetchBooks` for book names, which degrade to USFM codes on
+   outage — so the card is its second Concord dependency, but the spirit holds.)*
+2. **"Show another" + freshness:** `/v1/random` is `no-store`, so a fresh verse every call;
+   "Show another" = a React Query refetch; fresh on each mount. **Not daily-pinned** (deferred).
+3. **Translation source:** reuse — extracted the shared `useReadingTranslation()` hook rather than
+   duplicate Slice 1's resolution.
+4. **"Open" = verse-only jump** (`/read?book=&chapter=&verse=`), no translation switch.
+5. **Distinct naming:** `random_verse` / `GET /api/v1/random-verse` / `fetchRandomVerse`, flat
+   `RandomVerse` schema in all three layers.
+
+### Verify
+- Backend `pytest` 188 passed (new `random_verse_test.py` incl. the honest 502/404, a client-level
+  test that flattens the nested body, contract pin); Pyright-strict + Ruff clean. Frontend `vitest`
+  151 passed (WelcomeView card: renders in the reading translation, "Show another" re-rolls, hidden
+  on error with the rest intact; SearchView green through the hook refactor); `tsc` + lint clean.
+- **End-to-end (live v1.1.0 — ships real verses):** card path → `/api/v1/random-verse?translation=WEB`
+  returns a flat verse in WEB; two calls → different verses (no-store); unknown translation → 404.
+  **Hide-on-failure:** with `concord` stopped, `/random-verse` → 502 while `annotations`/`tags`/
+  `sermon-notes` still 200 — Welcome renders without the card. Canonical bridge untouched.
+
+---
+
 ## Slice 3 (v1.4) — Places gazetteer
 
 - **Date:** 2026-06-07
