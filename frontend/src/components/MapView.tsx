@@ -164,6 +164,10 @@ export function MapView({ book, chapter, onJump }: MapViewProps): JSX.Element {
   const labelMarkers = useRef<maplibregl.Marker[]>([]);
   const badgeMarkers = useRef<Record<string, maplibregl.Marker>>({});
   const [mapReady, setMapReady] = useState(false);
+  // Set when the relief basemap fails to load (e.g. its bundled tiles aren't served with HTTP
+  // Range). Without this the failure is silent — a blank map with no signal. Non-blocking: the
+  // vectors + pins still render, so it's a small notice, not an error state.
+  const [basemapError, setBasemapError] = useState(false);
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [clusterMembers, setClusterMembers] = useState<MemberRef[] | null>(null);
@@ -260,6 +264,19 @@ export function MapView({ book, chapter, onJump }: MapViewProps): JSX.Element {
       map.getCanvas().style.cursor = on ? "pointer" : "";
     };
 
+    // Surface load failures instead of failing to a silent blank map. MapLibre fires `error` with
+    // a `sourceId` when a source/tile can't load — the relief basemap reads its bundled pmtiles
+    // over HTTP Range, so a deploy that doesn't serve Range (or a missing/stale tile asset) lands
+    // here. Log every error; flag the relief one so the user gets a visible note (ADR 0003).
+    map.on("error", (e) => {
+      const ev = e as { error?: { message?: string }; sourceId?: string };
+      console.error(
+        `[map] ${ev.sourceId ? `source "${ev.sourceId}": ` : ""}${ev.error?.message ?? "error"}`,
+        e,
+      );
+      if (ev.sourceId === "relief") setBasemapError(true);
+    });
+
     map.on("load", () => {
       for (const l of MAP_LABELS) {
         const m = new maplibregl.Marker({ element: buildLabelElement(l.name, l.kind) })
@@ -350,6 +367,14 @@ export function MapView({ book, chapter, onJump }: MapViewProps): JSX.Element {
             <span className={showLabels ? "" : "opacity-40"}>Aa</span>
           </ControlButton>
         </div>
+        {basemapError && (
+          <div
+            role="status"
+            className="absolute inset-x-2 bottom-2 z-10 rounded border border-amber-300 bg-amber-50/95 px-3 py-1.5 text-center text-xs text-amber-800 shadow dark:border-amber-700 dark:bg-amber-950/90 dark:text-amber-200"
+          >
+            The map terrain didn’t load. Places still work — check the browser console for details.
+          </div>
+        )}
       </div>
 
       {query.isPending && <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">Loading places…</p>}

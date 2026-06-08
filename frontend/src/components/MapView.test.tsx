@@ -143,6 +143,19 @@ describe("MapView (MapLibre)", () => {
     expect(map.opts.maxBounds).toBeDefined();
   });
 
+  it("surfaces a notice when the relief basemap fails to load (no silent blank)", async () => {
+    mockPlaces([JERUSALEM]);
+    renderMap();
+    const map = await loadMap();
+    // No notice while the basemap is fine.
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    // MapLibre fires `error` with the failing source id; the relief one shows a visible note.
+    await act(async () => {
+      map.emit("error", "", { sourceId: "relief", error: { message: "tile load failed" } });
+    });
+    expect(await screen.findByRole("status")).toHaveTextContent(/terrain/i);
+  });
+
   it("frames the chapter's places on load (fitBounds)", async () => {
     mockPlaces([JERUSALEM]);
     renderMap();
