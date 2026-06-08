@@ -121,6 +121,8 @@ export function ReaderView(): JSX.Element {
   const hasMappable = (placesQuery.data ?? []).some(
     (p) => p.latitude !== null && p.longitude !== null,
   );
+  // Any places at all (located or not) — the panel is pointless when a chapter names none (#55).
+  const hasPlaces = (placesQuery.data ?? []).length > 0;
   // Translator's notes for the chapter, in the CURRENT translation (NET's tn/sn/tc/map). The key
   // includes `translation`, so switching away from NET refetches → empty → markers clear, while
   // the canonical annotations (from chapterQuery) are untouched. Notes overlay verse text only;
@@ -593,8 +595,10 @@ export function ReaderView(): JSX.Element {
               <h2 className="font-sans text-xl font-semibold">{chapterQuery.data.reference}</h2>
               <button
                 type="button"
-                className="rounded border border-gray-300 px-2 py-0.5 font-sans text-xs text-gray-600 hover:bg-gray-100"
+                className="rounded border border-gray-300 px-2 py-0.5 font-sans text-xs text-gray-600 hover:bg-gray-100 disabled:opacity-40 disabled:hover:bg-transparent"
                 onClick={openGeo}
+                disabled={!hasPlaces}
+                title={hasPlaces ? "Places in this chapter" : "No places in this passage"}
               >
                 Places in this chapter
               </button>
