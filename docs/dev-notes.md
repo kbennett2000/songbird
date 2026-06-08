@@ -4,6 +4,64 @@ A running log of per-slice decisions, gotchas, and how each slice was verified. 
 
 ---
 
+## Docs reconcile #3 — surface v1.3–v1.5 features + refreshed screenshots
+
+- **Date:** 2026-06-08
+- **Branch:** `docs/reconcile-3`
+- **Scope:** docs + screenshot tooling only — **no feature/behavior/Concord change.**
+
+### Why
+A third docs pass (after "Docs reconcile #2" below). Four user-visible capabilities had shipped to
+`main` and were documented nowhere in the **public** docs (README / SPEC §12): **multi-translation
+keyword search** (v1.3), the **study-notes search** section (v1.3), the **places gazetteer** (v1.4:
+`/places` + `/places/{id}`), and the **verse of the day** on Welcome (v1.5). The per-slice detail
+already lived in this file; the public docs hadn't caught up. (Slice 0 already moved the Concord pin
+to `v1.1.0`; this pass only sweeps lingering *prose* version references.)
+
+### What changed
+- **`README.md`** — the "Using songbird" tour now makes the **three search types explicit**
+  (Scripture / Your notes / Study notes), names the multi-translation keyword scope ("all
+  translations or just the ones you pick"), and adds **Explore the places** and **verse of the day**
+  bullets. The "See it" gallery gains four shots (below). "How it works (for the curious)" now links
+  the v1.3 / v1.4 / v1.5 specs alongside v1 / v1.1 / v1.2.
+- **`docs/v1/SPEC.md` §12** — four new entries (multi-translation keyword, study-notes search,
+  places gazetteer, verse of the day), each naming the **newly-consumed Concord endpoint**
+  (`/v1/search?translations=`, `/v1/notes/search`, `/v1/places` + `/v1/places/{id}`, `/v1/random`)
+  and pointing at its spec; the "Specs for shipped features" index and the data-model paragraph
+  extended to cover v1.3–v1.5 (still **no new tables** — all proxy Concord).
+- **Stale-version prose sweep** — the §12 translator's-notes NET caveat was re-pinned from `v1.0.0`
+  to the **stock `v1.1.0`** image (which likewise ships no NET / zero notes); the same stale
+  `v1.0.0` comments in `capture.mjs` were corrected. The historical `v1.0.x` reality notes **inside**
+  the v1.3/v1.4/v1.5 specs were left intact (deliberate Slice-0 record — CLAUDE.md "reality corrects
+  the spec").
+- **Screenshots** — re-captured against an **isolated, ephemeral compose project** (`-p sbshots`,
+  throwaway volume, stock `concord:v1.1.0`) so seeded shot data never touched real data. New shots:
+  `search-keyword.png` (one labeled snippet per translation), `places-gazetteer.png` (the `/places`
+  list), `place-detail.png` (Jerusalem — status/type, location honesty, verse jump-links), and
+  `welcome.png` (the verse-of-the-day card + recent feed). `capture.mjs` gained four capture
+  functions and a header note about the honesty constraint below. **Also fixed in passing:** the
+  existing reader/sermon/places/map captures navigated to `/?book=…`, but the reader moved to
+  `/read` when the Welcome page landed (#43), so `/` now renders Welcome — those URLs were corrected
+  to `/read?book=…` (and all existing shots refreshed against v1.1.0 as a result).
+
+### Gotcha — the Study-notes section can't be screenshotted on the stock image (honesty constraint)
+The **stock `concord:v1.1.0` image ships zero notes** (`/v1/notes/search` → `total: 0`), so the
+"Study notes" search section is **correctly hidden** by default — it renders **only** when an
+operator runs a Concord build that supplies study notes. We deliberately did **not** fake a
+screenshot of it; instead the README + SPEC §12 + this note document that it lights up when notes
+are present — the **same shape** as the translator's-notes / NET caveat (dormant without NET on the
+default stack). Recorded here, not faked.
+
+### Verify
+`grep` confirmed the new feature names land in README + SPEC (`study notes`, `places`/`gazetteer`,
+`verse of the day`, `all translations`, the three spec paths). `git diff --stat` confirmed the pass
+is **docs/tooling-only** — only `README.md`, `docs/**`, and `scripts/screenshots/capture.mjs`; no
+`backend/`, no `frontend/src`, no `docker-compose.yml`, **no behavior tests touched**. The four new
+shots were eyeballed against their captions; the canonical-coordinate bridge (invariant 4) was not
+touched.
+
+---
+
 ## #60 — per-profile light/dark mode
 
 - **Date:** 2026-06-08

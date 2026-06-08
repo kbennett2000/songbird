@@ -1,4 +1,7 @@
-// Capture the README screenshots (reader, sermon, search, places, map) against a running stack.
+// Capture the README screenshots against a running stack:
+//   reader, sermon, search (semantic), search-keyword (multi-translation), places (in-reader
+//   overlay), places-gazetteer (/places), place-detail (/places/:id), welcome (verse of the day),
+//   and the map shots (desktop/mobile, with cards).
 //
 //   1. start the stack:   docker compose up        (songbird at http://localhost:8077)
 //   2. install once:      cd scripts/screenshots && npm install && npx playwright install chromium
@@ -6,6 +9,11 @@
 //
 // Everything runs through the real login-gated UI against real Concord data — no mocks.
 // Notes are seeded via authenticated API calls that ride the browser's session cookie.
+//
+// Honesty note: there is intentionally NO study-notes screenshot. The "Study notes" search
+// section renders only when Concord serves study notes, and the stock image ships zero
+// (`/v1/notes/search` → total: 0), so against the default stack the section is correctly hidden.
+// We document that (README + dev-notes) rather than fake a capture of it.
 
 import { chromium } from "playwright";
 import { fileURLToPath } from "node:url";
@@ -118,7 +126,7 @@ async function seedSermonNotes(page) {
 
 // Viewport-framed shots (1440×900) read far better in the README than tall full-page strips.
 async function captureReader(page) {
-  await page.goto(`${BASE}/?book=JHN&chapter=3`, { waitUntil: "networkidle" });
+  await page.goto(`${BASE}/read?book=JHN&chapter=3`, { waitUntil: "networkidle" });
   // Bring the annotated verse 16 into view (it carries the note dot + amber highlight)…
   await page.locator("#v-16").scrollIntoViewIfNeeded();
   // …then open the seeded note → the right-hand drawer shows it richly rendered.
@@ -133,9 +141,9 @@ async function captureReader(page) {
 // Sermon notes: open the seeded Psalm 23 sermon (a chapter-top passage, so no scroll is needed —
 // the floating popover dismisses on any scroll) and frame the passage column with its popover.
 // We clip to the reading column (the top toolbar carries a translator's-notes notice that only
-// applies when Concord serves NET, which the default v1.0.0 image does not — out of frame here).
+// applies when Concord serves NET, which the stock v1.1.0 image does not — out of frame here).
 async function captureSermon(page) {
-  await page.goto(`${BASE}/?book=PSA&chapter=23`, { waitUntil: "networkidle" });
+  await page.goto(`${BASE}/read?book=PSA&chapter=23`, { waitUntil: "networkidle" });
   // The verse 1 sermon marker (▶) sits in the initial viewport — wait for it, then open in place.
   const marker = page.getByRole("button", { name: "Sermon on verse 1" });
   await marker.waitFor({ state: "visible", timeout: 15000 });
@@ -145,11 +153,11 @@ async function captureSermon(page) {
   await page.waitForTimeout(400);
   // Clip to the reading column: from just above verse 1 through the bottom of the popover, and
   // below the toolbar's translator's-notes notice (only meaningful when Concord serves NET, which
-  // the default v1.0.0 image doesn't) so the sermon popover is the subject.
+  // the stock v1.1.0 image doesn't) so the sermon popover is the subject.
   const verseBox = await page.locator("#v-1").boundingBox();
   const lastBox = await page.locator('[id^="v-"]').last().boundingBox();
   const popBox = await page.getByRole("dialog").boundingBox();
-  // The notice is always present in the default stack (Concord v1.0.0 has no NET) — wait for it so
+  // The notice is always present in the default stack (the stock v1.1.0 image has no NET) — wait for it so
   // its box is measured reliably, then start the clip just below it. Tolerate its absence (a future
   // Concord that serves NET) by falling back to just above verse 1.
   const notice = page.getByText("Translator", { exact: false }).first();
@@ -183,7 +191,7 @@ async function captureSearch(page) {
 }
 
 async function capturePlaces(page) {
-  await page.goto(`${BASE}/?book=GEN&chapter=2`, { waitUntil: "networkidle" });
+  await page.goto(`${BASE}/read?book=GEN&chapter=2`, { waitUntil: "networkidle" });
   await page.getByRole("button", { name: "Places in this chapter" }).click();
   // Wait for the place list, then expand the Euphrates row to reveal its verse chips.
   await page.getByText("Euphrates").first().waitFor({ state: "visible", timeout: 15000 });
@@ -191,6 +199,68 @@ async function capturePlaces(page) {
   await page.waitForTimeout(800);
   await page.screenshot({ path: `${OUT}/places.png` });
   console.log("✓ places.png");
+}
+
+// Multi-translation keyword search (v1.3): switch to the Keyword tab (semantic is the default),
+// search a common word with the scope left at "All translations", and frame the per-translation
+// result snippets. A frequent word makes Concord return a match map across many translations, so
+// the result list shows the labeled, one-snippet-per-translation rendering this shot is about.
+async function captureKeywordSearch(page) {
+  await page.goto(`${BASE}/search`, { waitUntil: "networkidle" });
+  await page.getByRole("tab", { name: "Keyword" }).click();
+  await page.getByLabel("Search query").fill("shepherd");
+  await page.getByRole("button", { name: "Search" }).click();
+  // Wait for the Scripture results, then for a result that rendered ≥2 translation labels (the
+  // multi-translation snippet shape). The labels are the translation-id chips inside a result.
+  const scripture = page.getByRole("region", { name: "Scripture results" });
+  await scripture.getByRole("listitem").first().waitFor({ state: "visible", timeout: 15000 });
+  await page.waitForTimeout(700);
+  await page.screenshot({ path: `${OUT}/search-keyword.png` });
+  console.log("✓ search-keyword.png");
+}
+
+// The places gazetteer (v1.4): the standalone /places route — the browsable, filterable list of
+// every place Concord knows (distinct from the in-reader "Places in this chapter" overlay above).
+async function capturePlacesGazetteer(page) {
+  await page.goto(`${BASE}/places`, { waitUntil: "networkidle" });
+  // Wait for the loaded list (the "N of M" count appears once the first page lands).
+  await page.getByText(/\d+ of \d+/).first().waitFor({ state: "visible", timeout: 15000 });
+  await page.waitForTimeout(500);
+  await page.screenshot({ path: `${OUT}/places-gazetteer.png` });
+  console.log("✓ places-gazetteer.png");
+}
+
+// A place detail page (v1.4): search the gazetteer for a well-known, richly-attested place and open
+// it, so the shot shows the name/status/type, location honesty, and the verse jump-links.
+async function capturePlaceDetail(page) {
+  await page.goto(`${BASE}/places`, { waitUntil: "networkidle" });
+  await page.getByLabel("Search places by name").fill("Jerusalem");
+  await page.getByRole("button", { name: "Search" }).click();
+  const link = page.getByRole("link", { name: "Jerusalem", exact: true }).first();
+  await link.waitFor({ state: "visible", timeout: 15000 });
+  await link.click();
+  // On the detail page: wait for the heading and the verses list before framing.
+  await page.getByRole("heading", { name: "Jerusalem", level: 1 }).waitFor({ state: "visible", timeout: 15000 });
+  await page.getByRole("heading", { name: /Verses/ }).waitFor({ state: "visible", timeout: 15000 });
+  await page.waitForTimeout(600);
+  await page.screenshot({ path: `${OUT}/place-detail.png` });
+  console.log("✓ place-detail.png");
+}
+
+// The Welcome page (v1.5): the home route ("/", not "/?book=…") leads with the verse-of-the-day
+// card — one random verse from Concord with a "show another" re-roll. The seeded notes give the
+// page a populated recent-notes feed and library counts below the card.
+async function captureWelcome(page) {
+  await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
+  // The card renders only when Concord returned a verse; wait for it, but tolerate its absence
+  // (a Concord hiccup) so the run still produces a Welcome shot rather than failing the batch.
+  await page
+    .getByRole("region", { name: "Verse of the day" })
+    .waitFor({ state: "visible", timeout: 15000 })
+    .catch(() => console.warn("⚠ verse-of-the-day card not present — capturing Welcome without it"));
+  await page.waitForTimeout(500);
+  await page.screenshot({ path: `${OUT}/welcome.png` });
+  console.log("✓ welcome.png");
 }
 
 // Open the map modal for the current passage and wait until it has plotted its pins.
@@ -233,7 +303,7 @@ async function isolatedPin(page) {
 
 // Desktop (1440×900): the whole modal — pins on the basemap + the honesty lists below it.
 async function captureMapDesktop(page) {
-  await page.goto(`${BASE}/?book=GEN&chapter=2`, { waitUntil: "networkidle" });
+  await page.goto(`${BASE}/read?book=GEN&chapter=2`, { waitUntil: "networkidle" });
   const dialog = await openMap(page, "Euphrates");
   await dialog.screenshot({ path: `${OUT}/map-desktop.png` });
   console.log("✓ map-desktop.png");
@@ -271,7 +341,7 @@ async function captureMapMobile(browser, channel) {
   const page = await context.newPage();
   try {
     await ensureSignedIn(page);
-    await page.goto(`${BASE}/?book=GEN&chapter=2`, { waitUntil: "networkidle" });
+    await page.goto(`${BASE}/read?book=GEN&chapter=2`, { waitUntil: "networkidle" });
     await openMap(page, "Euphrates");
     // Viewport (not element) screenshot — the honest "what the user sees" framing, which also
     // confirms the modal genuinely covers the small screen rather than sitting in a box.
@@ -314,7 +384,11 @@ async function main() {
       await captureReader(page);
       await captureSermon(page);
       await captureSearch(page);
+      await captureKeywordSearch(page);
       await capturePlaces(page);
+      await capturePlacesGazetteer(page);
+      await capturePlaceDetail(page);
+      await captureWelcome(page);
     }
     await captureMapDesktop(page);
     await captureMapMobile(browser, channel);

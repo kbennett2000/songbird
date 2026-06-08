@@ -32,6 +32,22 @@ The Bible text, search, and maps come from **[Concord](https://github.com/kbenne
 
 ![A passage’s places pinned on the Bible-world map](docs/screenshots/map-desktop.png)
 
+**Search every translation at once.** A keyword search can sweep all the translations — or just the ones you pick — and shows you where each one lands.
+
+![Keyword search results across several translations](docs/screenshots/search-keyword.png)
+
+**Wander the places.** Browse every location named in Scripture — cities, regions, rivers — in one filterable list.
+
+![The places list, ready to browse and filter](docs/screenshots/places-gazetteer.png)
+
+**A place up close.** Open any place to see what it is, how sure we are where it sat, and every verse that names it.
+
+![A single place’s detail, with the verses that name it](docs/screenshots/place-detail.png)
+
+**A verse to greet you.** Your home page opens with a verse of the day, ready to read.
+
+![The home page, with its verse-of-the-day card](docs/screenshots/welcome.png)
+
 <br>
 
 ## What you’ll need
@@ -112,15 +128,17 @@ In the terminal, press **Ctrl + C**, then run `docker compose down`. Your notes 
 - **Switch translations** — pick a different translation up top; your notes stay anchored to the right verses. A note you wrote in one translation is gently marked when you read another. songbird reopens right where you left off — same book, chapter, and translation.
 - **Compare side by side** — open **Compare** to read up to three translations in parallel columns, lined up verse for verse; your notes show in each column they apply to.
 - **Tag and find** — add tags to a note or a sermon, then use the **browse** view to find them by tag.
-- **Search** — find Scripture by **meaning** (“verses about anxiety”) or by an **exact word or phrase** — your choice, with a toggle on the search screen.
+- **Search three ways** — find **Scripture** by meaning (“verses about anxiety”) or by an exact word or phrase, sweeping **all translations at once or just the ones you pick**; search **your own notes** by word; and search **study notes** — the translators’ footnotes that some Scripture engines include. (The standard setup ships no study notes, so that section simply stays hidden until an engine provides them.)
+- **Explore the places** — open **Places** to browse every location named in Scripture — cities, regions, rivers, mountains — filter by name or kind, then open one to see what it is, how sure we are about where it sat, and every verse that names it.
 - **Back up your notes** — from **browse**, **export** all your notes and sermons to a single file, then **import** it back on another computer; importing skips anything you already have.
 - **Go deeper** — hover a verse for its **cross-references**, or tap the **globe** to see a passage’s places on a map, when their locations are known.
+- **A verse to begin** — your home page opens with a **verse of the day** in your reading translation; open it in the reader, or ask for another.
 
 <br>
 
 ## How it works (for the curious)
 
-songbird is the app you use; **[Concord](https://github.com/kbennett2000/concord)** is the Scripture engine it’s built on — the text, the search, the places, and the cross-references all come from Concord over the network, and the single command above starts both for you. songbird keeps only *your* notes; Concord provides the Bible. If you’re technically inclined, [the design notes are here](docs/v1/SPEC.md); the **map view** (v1.1) is described [here](docs/v1.1/MAP-SPEC.md), and **sermon notes** [here](docs/v1.2/SERMON-NOTES-SPEC.md).
+songbird is the app you use; **[Concord](https://github.com/kbennett2000/concord)** is the Scripture engine it’s built on — the text, the search, the places, and the cross-references all come from Concord over the network, and the single command above starts both for you. songbird keeps only *your* notes; Concord provides the Bible. If you’re technically inclined, [the design notes are here](docs/v1/SPEC.md); the **map view** (v1.1) is described [here](docs/v1.1/MAP-SPEC.md), **sermon notes** [here](docs/v1.2/SERMON-NOTES-SPEC.md), the **search expansion** (multi-translation keyword + study-note search, v1.3) [here](docs/v1.3/SEARCH-EXPANSION-SPEC.md), the **places** gazetteer (v1.4) [here](docs/v1.4/PLACES-SPEC.md), and the **verse of the day** (v1.5) [here](docs/v1.5/RANDOM-VERSE-SPEC.md).
 
 <br>
 
