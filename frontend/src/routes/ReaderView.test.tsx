@@ -759,6 +759,17 @@ describe("ReaderView", () => {
     renderReader();
     await screen.findByText(/JHN 3:16/);
     expect(await screen.findByRole("button", { name: "Show map" })).toBeDisabled();
+    // …but the chapter DOES name a place (just unlocated), so the Places panel stays available.
+    expect(screen.getByRole("button", { name: "Places in this chapter" })).toBeEnabled();
+  });
+
+  it("disables 'Places in this chapter' when the chapter names no places (#55)", async () => {
+    // Default /api/v1/places handler returns [] → an empty panel would be pointless.
+    renderReader();
+    await screen.findByText(/JHN 3:16/);
+    expect(
+      await screen.findByRole("button", { name: "Places in this chapter" }),
+    ).toBeDisabled();
   });
 
   it("enables the globe and opens the map modal when there's a located place", async () => {

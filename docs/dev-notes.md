@@ -4,6 +4,23 @@ A running log of per-slice decisions, gotchas, and how each slice was verified. 
 
 ---
 
+## Fix #55 — disable "Places in this chapter" when a chapter names none
+
+- **Date:** 2026-06-08
+- **Branch:** `fix/55-places-disabled-when-empty`
+- **Scope:** one-line reader fix — frontend only.
+
+Opening the Places panel on a chapter with no places showed an empty panel. The reader already
+disables the adjacent "🌐 Map" button on `!hasMappable` (no *located* places); this mirrors that
+for the "Places in this chapter" button on a new `hasPlaces` (no places *at all*, located or not —
+the two conditions are distinct: a chapter can name an unlocated place, which keeps the panel
+worthwhile but the map disabled). `ReaderView.test.tsx` covers: disabled when the chapter names no
+places; **enabled even when the only place is unlocated** (globe disabled, panel still available).
+
+**Verify:** `vitest` 152 passed (ReaderView 33, +2); `tsc` + lint clean.
+
+---
+
 ## Slice 4 (v1.5) — Verse of the day
 
 - **Date:** 2026-06-07
