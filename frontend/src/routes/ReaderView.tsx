@@ -595,7 +595,7 @@ export function ReaderView(): JSX.Element {
                   key={v.verse}
                   id={`v-${v.verse}`}
                   className={`group relative -mx-3 rounded px-3 py-0.5 ${
-                    inScope.length > 0 ? "bg-amber-100" : ""
+                    inScope.length > 0 ? "bg-amber-100 dark:bg-amber-900" : ""
                   } ${highlightVerse === v.verse ? "ring-2 ring-blue-400" : ""}`}
                 >
                   <button
@@ -614,7 +614,7 @@ export function ReaderView(): JSX.Element {
                   {inScope.length > 0 && (
                     <button
                       type="button"
-                      className="ml-2 align-middle text-amber-600 hover:text-amber-800"
+                      className="ml-2 align-middle text-amber-600 hover:text-amber-800 dark:hover:text-amber-400"
                       onClick={() => openExisting(v, inScope[0]!)}
                       aria-label={`View note on verse ${v.verse}`}
                       title="View note"
