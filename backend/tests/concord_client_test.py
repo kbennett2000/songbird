@@ -621,3 +621,50 @@ async def test_list_place_types_empty_when_not_surfaced() -> None:
     client = ConcordClient("http://concord.test", transport=httpx.MockTransport(handler))
     assert await client.list_place_types() == []
     await client.aclose()
+
+
+async def test_random_verse_sends_translation_and_flattens_nested_body() -> None:
+    seen: dict[str, str] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["path"] = request.url.path
+        seen["translation"] = request.url.params.get("translation", "")
+        # Concord nests the verse under `verse` (captured live from v1.1.0); the client flattens it.
+        return httpx.Response(
+            200,
+            json={
+                "translation": "WEB",
+                "book": None,
+                "testament": None,
+                "verse": {
+                    "book": "JHN",
+                    "chapter": 3,
+                    "verse": 16,
+                    "reference": "John 3:16",
+                    "text": "For God so loved the world…",
+                },
+            },
+        )
+
+    client = ConcordClient("http://concord.test", transport=httpx.MockTransport(handler))
+    v = await client.random_verse("WEB")
+    await client.aclose()
+    assert seen == {"path": "/v1/random", "translation": "WEB"}
+    assert (v.translation, v.book, v.chapter, v.verse, v.reference) == (
+        "WEB",
+        "JHN",
+        3,
+        16,
+        "John 3:16",
+    )
+    assert v.text == "For God so loved the world…"
+
+
+async def test_random_verse_404_is_not_found() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(404, json={"error": {"code": "unknown_translation"}})
+
+    client = ConcordClient("http://concord.test", transport=httpx.MockTransport(handler))
+    with pytest.raises(ConcordNotFoundError):
+        await client.random_verse("ZZZ")
+    await client.aclose()

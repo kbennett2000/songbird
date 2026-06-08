@@ -201,6 +201,18 @@ export type ResolvedReference = z.infer<typeof resolvedReferenceSchema>;
 export type CrossReference = z.infer<typeof crossReferenceSchema>;
 export type NoteCrossReference = z.infer<typeof noteCrossReferenceSchema>;
 export type TranslatorNote = z.infer<typeof translatorNoteSchema>;
+// One random verse from Concord for the Welcome "verse of the day" card (flat — songbird flattens
+// Concord's nested body). Fresh on every fetch (`/v1/random` is no-store).
+export const randomVerseSchema = z.object({
+  translation: z.string(),
+  book: z.string(),
+  chapter: z.number(),
+  verse: z.number(),
+  reference: z.string(),
+  text: z.string(),
+});
+export type RandomVerse = z.infer<typeof randomVerseSchema>;
+
 export type Place = z.infer<typeof placeSchema>;
 export type PlaceDetail = z.infer<typeof placeDetailSchema>;
 export type PlacesPage = z.infer<typeof placesPageSchema>;

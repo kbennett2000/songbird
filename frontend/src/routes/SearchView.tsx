@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { type FormEvent, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 
-import { useAuth } from "@/hooks/useAuth";
+import { useReadingTranslation } from "@/hooks/useReadingTranslation";
 import { markSegments } from "@/lib/highlight";
 import { noteReference, notePreview, readerLink, studyNoteBadge } from "@/lib/notes";
 import {
@@ -14,10 +14,6 @@ import {
   semanticSearch,
 } from "@/lib/reader";
 import type { KeywordResult, SemanticResult } from "@/schemas";
-
-// Fallback display translation for SEMANTIC search when the profile has no reading translation
-// yet. Keyword search needs no such fallback — it defaults to ALL translations.
-const DEFAULT_TRANSLATION = "KJV";
 
 type Mode = "semantic" | "keyword";
 
@@ -81,10 +77,9 @@ export function SearchView(): JSX.Element {
   // spins up Concord's heavy embedding model (issue #46).
   const [mode, setMode] = useState<Mode>("semantic");
 
-  const { user } = useAuth();
   // Semantic search ranks in WEB meaning-space but renders in ONE display translation; show it in
-  // the reader's translation (the profile's last-used), not a hardcoded default.
-  const readingTranslation = user?.last_translation ?? DEFAULT_TRANSLATION;
+  // the reader's translation (the profile's last-used), not a hardcoded default. Shared resolution.
+  const readingTranslation = useReadingTranslation();
 
   // Keyword scope: which translations to search. Empty = ALL (the default). In-memory only —
   // resets on reload, never persisted.

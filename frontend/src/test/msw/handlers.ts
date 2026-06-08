@@ -119,4 +119,15 @@ export const defaultHandlers = [
   // Study notes default to empty — the public image ships none, so the Search page's "Study notes"
   // section stays hidden; study-notes tests override per-case via server.use().
   http.get("/api/v1/study-notes-search", () => HttpResponse.json([])),
+  // Verse of the day default — Welcome's card; verse-of-the-day tests override per-case.
+  http.get("/api/v1/random-verse", () =>
+    HttpResponse.json({
+      translation: "KJV",
+      book: "JHN",
+      chapter: 3,
+      verse: 16,
+      reference: "John 3:16",
+      text: "For God so loved the world…",
+    }),
+  ),
 ];

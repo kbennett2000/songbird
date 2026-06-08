@@ -43,10 +43,13 @@ only `translation`.
 - **songbird API**: `GET /api/v1/random-verse?translation=` → `RandomVerse`. `api/schemas.py`
   gains the model. A real outage may surface as `502`; the **frontend hides the card on error**
   (the Welcome page must not break if Concord is down — consistent with this being a bonus).
-- **Frontend** (`WelcomeView.tsx`): a "verse of the day" card near the top, using
-  `user.last_translation` (fallback to a sensible default) as the display translation. Shows
-  reference + text, an "Open" link to the reader at that verse, and a subtle "show another"
-  button that refetches. **Hidden when the query errors** (no error banner on Welcome).
+- **Frontend** (`WelcomeView.tsx`): a "verse of the day" card near the top, using the shared
+  `useReadingTranslation()` hook (the Slice 1 resolution — `user.last_translation` with a KJV
+  fallback — extracted so it isn't duplicated). Shows reference + text, an "Open" link to the
+  reader at that verse (verse-only jump), and a subtle "show another" button that refetches.
+  **Hidden when the query errors** (no error banner on Welcome). *(Implementation note: Concord's
+  `/v1/random` body nests the verse under `verse`; songbird flattens it into the flat `RandomVerse`
+  — reality-corrects-spec, Slice 4.)*
 
 ## 5. Tests
 

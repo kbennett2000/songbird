@@ -3,8 +3,15 @@ import { useMemo } from "react";
 import { Link } from "react-router-dom";
 
 import { useAuth } from "@/hooks/useAuth";
+import { useReadingTranslation } from "@/hooks/useReadingTranslation";
 import { noteReference, notePreview, readerLink } from "@/lib/notes";
-import { browseAnnotations, browseSermonNotes, fetchBooks, fetchTags } from "@/lib/reader";
+import {
+  browseAnnotations,
+  browseSermonNotes,
+  fetchBooks,
+  fetchRandomVerse,
+  fetchTags,
+} from "@/lib/reader";
 import type { Annotation, SermonNote } from "@/schemas";
 
 const RECENT_LIMIT = 6;
@@ -41,6 +48,16 @@ export function WelcomeView(): JSX.Element {
     queryFn: () => browseSermonNotes([], "all"),
   });
   const tagsQuery = useQuery({ queryKey: ["tags"], queryFn: fetchTags });
+
+  // Verse of the day — the page's only Scripture (the rest is songbird's own DB). Best-effort &
+  // bonus: a fresh random verse per mount/click (no-store, not daily-pinned). On any error the
+  // card just doesn't render — no banner — so a Concord-down Welcome still shows everything else.
+  const readingTranslation = useReadingTranslation();
+  const randomVerse = useQuery({
+    queryKey: ["random-verse", readingTranslation],
+    queryFn: () => fetchRandomVerse(readingTranslation),
+    retry: false,
+  });
 
   const booksById = useMemo(
     () => new Map((booksQuery.data ?? []).map((b) => [b.id, b])),
@@ -114,6 +131,40 @@ export function WelcomeView(): JSX.Element {
             Annotate Scripture — read a translation, highlight a verse, find it later.
           </p>
         </section>
+
+        {/* Verse of the day — only renders when Concord returned one; hidden (no banner) on error
+            so a Concord outage never breaks the page. */}
+        {randomVerse.data && (
+          <section
+            aria-label="Verse of the day"
+            className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm"
+          >
+            <div className="flex items-baseline gap-2">
+              <span className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+                Verse of the day
+              </span>
+              <span className="text-xs text-gray-400">· {randomVerse.data.translation}</span>
+              <button
+                type="button"
+                onClick={() => void randomVerse.refetch()}
+                disabled={randomVerse.isFetching}
+                className="ml-auto text-sm text-blue-700 hover:underline disabled:opacity-50"
+              >
+                Show another
+              </button>
+            </div>
+            <p className="mt-2 font-serif text-lg text-gray-800">{randomVerse.data.text}</p>
+            <div className="mt-2 flex items-baseline gap-3">
+              <span className="font-semibold">{randomVerse.data.reference}</span>
+              <Link
+                to={`/read?book=${randomVerse.data.book}&chapter=${randomVerse.data.chapter}&verse=${randomVerse.data.verse}`}
+                className="text-sm text-blue-700 hover:underline"
+              >
+                Open
+              </Link>
+            </div>
+          </section>
+        )}
 
         <Link
           to="/read"

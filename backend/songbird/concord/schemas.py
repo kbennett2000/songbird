@@ -132,6 +132,49 @@ class SemanticSearchResponse(BaseModel):
     results: list[SemanticResult]
 
 
+class _RandomVerseInner(BaseModel):
+    """The inner verse object Concord nests under `verse` in its `/v1/random` body."""
+
+    book: str  # USFM code — canonical
+    chapter: int
+    verse: int
+    reference: str
+    text: str
+
+
+class _ConcordRandomVerse(BaseModel):
+    """Concord's `/v1/random` wire shape: a top-level `translation` + the nested verse object.
+    Flattened into the public `RandomVerse` so the rest of songbird sees one flat record."""
+
+    translation: str
+    verse: _RandomVerseInner
+
+
+class RandomVerse(BaseModel):
+    """One random verse from Concord (`/v1/random`), flattened. `no-store` on Concord's side, so
+    every call is a fresh verse — there's nothing to cache."""
+
+    translation: str
+    book: str  # USFM code — canonical
+    chapter: int
+    verse: int
+    reference: str
+    text: str
+
+    @classmethod
+    def parse_concord(cls, payload: object) -> "RandomVerse":
+        """Validate Concord's nested `/v1/random` body and flatten it into this record."""
+        wire = _ConcordRandomVerse.model_validate(payload)
+        return cls(
+            translation=wire.translation,
+            book=wire.verse.book,
+            chapter=wire.verse.chapter,
+            verse=wire.verse.verse,
+            reference=wire.verse.reference,
+            text=wire.verse.text,
+        )
+
+
 class KeywordResult(BaseModel):
     """One exact word/phrase match from Concord's `/v1/search`. Concord returns the verse as a
     `snippet` with the matched term(s) wrapped in `<mark>…</mark>` for highlighting; there is no

@@ -28,6 +28,7 @@ from songbird.concord.schemas import (
     PlaceDetail,
     PlacesPage,
     PlaceVersesResponse,
+    RandomVerse,
     SemanticSearchResponse,
     Translation,
     VersePlacesResponse,
@@ -60,6 +61,7 @@ class FakeConcordClient:
         places_page: PlacesPage | None = None,
         place_detail: PlaceDetail | None = None,
         place_types: list[str] | None = None,
+        random: RandomVerse | None = None,
         error: Exception | None = None,
         base_url: str = "http://concord.test",
     ) -> None:
@@ -77,9 +79,12 @@ class FakeConcordClient:
         self._places_page = places_page
         self._place_detail = place_detail
         self._place_types = place_types or []
+        self._random = random
         self._error = error
         # Records the last `list_places` filter args so tests can assert filter/pagination passthrough.
         self.last_list_places: dict[str, object] = {}
+        # Records the last `random_verse` translation arg so tests can assert passthrough.
+        self.last_random_translation: str | None = None
         self.base_url = base_url
         # Records the last `keyword_search` translations arg so tests can assert the endpoint's
         # CSV→list parse and the absent→None (search-all) default.
@@ -164,6 +169,13 @@ class FakeConcordClient:
     async def list_place_types(self) -> list[str]:
         # The real client swallows failures to [] (the UI hides the filter), so the fake never raises.
         return self._place_types
+
+    async def random_verse(self, translation: str | None = None) -> RandomVerse:
+        self.last_random_translation = translation
+        if self._error is not None:
+            raise self._error
+        assert self._random is not None
+        return self._random
 
     async def get_notes(self, translation: str, book: str, chapter: int) -> NotesResponse:
         if self._error is not None:

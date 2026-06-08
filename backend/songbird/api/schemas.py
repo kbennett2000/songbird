@@ -269,6 +269,18 @@ class PlacesPageOut(BaseModel):
     total: int
 
 
+class RandomVerse(BaseModel):
+    """One random verse from Concord, for the Welcome "verse of the day" card. Canonical coords →
+    "Open" reuses the verse jump. Fresh on every call (`/v1/random` is `no-store`)."""
+
+    translation: str
+    book: str  # USFM code — canonical
+    chapter: int
+    verse: int
+    reference: str
+    text: str
+
+
 class PlaceVerse(BaseModel):
     book: str  # USFM code — canonical
     chapter: int
