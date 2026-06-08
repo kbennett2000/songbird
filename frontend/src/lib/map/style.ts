@@ -44,6 +44,17 @@ export function buildStyle(origin: string): StyleSpecification {
       { id: "bg", type: "background", paint: { "background-color": PALETTE.sea } },
       { id: "relief", type: "raster", source: "relief" },
       {
+        // Inland seas/lakes (Dead Sea, Sea of Galilee) are Polygons sitting atop land-colored
+        // relief, so they need a water fill or they'd read as empty outlines (issue #83). Drawn
+        // under the line layers below so the `lakes` shoreline stroke still renders on top, and
+        // tinted `sea` to match the open Mediterranean for one consistent water tone.
+        id: "lakes-fill",
+        type: "fill",
+        source: "physical",
+        filter: ["==", ["get", "kind"], "lake"],
+        paint: { "fill-color": PALETTE.sea },
+      },
+      {
         id: "reefs",
         type: "line",
         source: "physical",

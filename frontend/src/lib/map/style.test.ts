@@ -32,6 +32,7 @@ describe("buildStyle — offline + physical-only contract", () => {
     const allowed = new Set([
       "bg",
       "relief",
+      "lakes-fill",
       "reefs",
       "rivers",
       "lakes",
@@ -48,6 +49,15 @@ describe("buildStyle — offline + physical-only contract", () => {
     expect(layerIds).toEqual(
       expect.arrayContaining(["relief", "coastline", "rivers", "clusters", "unclustered-point", "selected-point"]),
     );
+  });
+
+  it("fills inland seas/lakes, not just their outline (issue #83)", () => {
+    const fill = style.layers.find(
+      (l) => l.type === "fill" && JSON.stringify(l.filter).includes('"lake"'),
+    );
+    expect(fill).toBeDefined();
+    // The shoreline outline still renders on top of the fill.
+    expect(layerIds).toContain("lakes");
   });
 
   it("colors unclustered points by tier (the honesty model, data-driven)", () => {
