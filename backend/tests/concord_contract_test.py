@@ -33,6 +33,7 @@ _REQUIRED_ENDPOINTS = {
     ("GET", "/v1/translations"),
     ("GET", "/v1/books"),
     ("GET", "/v1/search"),
+    ("GET", "/v1/notes/search"),
     ("GET", "/v1/semantic-search"),
     ("GET", "/v1/chapters/{}/{}"),
     ("GET", "/v1/cross-references/{}"),

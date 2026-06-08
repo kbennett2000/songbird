@@ -1,4 +1,5 @@
 import { Popover } from "@/components/Popover";
+import { NOTE_TYPE_LABELS } from "@/lib/notes";
 import type { TranslatorNote } from "@/schemas";
 
 interface NotePopoverProps {
@@ -10,16 +11,9 @@ interface NotePopoverProps {
   onJump: (book: string, chapter: number, verse: number) => void;
 }
 
-const TYPE_LABELS: Record<string, string> = {
-  tn: "Translator’s note",
-  sn: "Study note",
-  tc: "Text-critical note",
-  map: "Map note",
-};
-
 function typeLabel(type: string | null): string {
   if (!type) return "Footnote";
-  return TYPE_LABELS[type] ?? "Note";
+  return NOTE_TYPE_LABELS[type] ?? "Note";
 }
 
 /**

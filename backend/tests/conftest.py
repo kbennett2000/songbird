@@ -23,6 +23,7 @@ from songbird.concord.schemas import (
     ConcordHealth,
     CrossRefResponse,
     KeywordSearchResponse,
+    NoteSearchResponse,
     NotesResponse,
     PlaceVersesResponse,
     SemanticSearchResponse,
@@ -53,6 +54,7 @@ class FakeConcordClient:
         notes: NotesResponse | None = None,
         semantic: SemanticSearchResponse | None = None,
         keyword: KeywordSearchResponse | None = None,
+        note_search: NoteSearchResponse | None = None,
         error: Exception | None = None,
         base_url: str = "http://concord.test",
     ) -> None:
@@ -66,6 +68,7 @@ class FakeConcordClient:
         self._notes = notes
         self._semantic = semantic
         self._keyword = keyword
+        self._note_search = note_search
         self._error = error
         self.base_url = base_url
         # Records the last `keyword_search` translations arg so tests can assert the endpoint's
@@ -152,6 +155,11 @@ class FakeConcordClient:
         if self._error is not None:
             raise self._error
         return self._keyword if self._keyword is not None else KeywordSearchResponse(hits=[])
+
+    async def search_notes(self, q: str, limit: int = 20) -> NoteSearchResponse:
+        if self._error is not None:
+            raise self._error
+        return self._note_search if self._note_search is not None else NoteSearchResponse(hits=[])
 
 
 @pytest_asyncio.fixture

@@ -112,4 +112,7 @@ export const defaultHandlers = [
   http.get("/api/v1/places", () => HttpResponse.json([])),
   http.get("/api/v1/places/:placeId/verses", () => HttpResponse.json([])),
   http.get("/api/v1/semantic-search", () => HttpResponse.json([])),
+  // Study notes default to empty — the public image ships none, so the Search page's "Study notes"
+  // section stays hidden; study-notes tests override per-case via server.use().
+  http.get("/api/v1/study-notes-search", () => HttpResponse.json([])),
 ];

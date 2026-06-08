@@ -384,8 +384,60 @@ async def test_keyword_search_404_is_not_found() -> None:
 
     client = ConcordClient("http://concord.test", transport=httpx.MockTransport(handler))
     with pytest.raises(ConcordNotFoundError):
-        await client.keyword_search("peace", "ZZZ")
+        await client.keyword_search("peace", ["ZZZ"])
     await client.aclose()
+
+
+async def test_search_notes_hits_v1_notes_search_and_parses() -> None:
+    seen: dict[str, object] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["path"] = request.url.path
+        seen["q"] = request.url.params.get("q", "")
+        seen["timeout"] = request.extensions.get("timeout")
+        # The real Concord /v1/notes/search body: a `hits` array of notes with canonical coords, a
+        # `translation`, a `type`, and a `snippet` with the match wrapped in <mark>…</mark>.
+        return httpx.Response(
+            200,
+            json={
+                "query": "love",
+                "total": 1,
+                "hits": [
+                    {
+                        "book": "JHN",
+                        "chapter": 3,
+                        "verse": 16,
+                        "reference": "John 3:16",
+                        "translation": "NET",
+                        "type": "sn",
+                        "char_offset": 19,
+                        "marker": "7",
+                        "ordinal": 0,
+                        "snippet": "The word for <mark>love</mark> is ἀγάπη.",
+                    }
+                ],
+            },
+        )
+
+    client = ConcordClient("http://concord.test", transport=httpx.MockTransport(handler))
+    result = await client.search_notes("love")
+    await client.aclose()
+    assert seen["path"] == "/v1/notes/search"
+    assert seen["q"] == "love"
+    # Rides the same generous read budget as keyword search (notes search can be slow too).
+    timeout = seen["timeout"]
+    assert isinstance(timeout, dict)
+    assert timeout["read"] == 30.0
+    assert timeout["connect"] == 5.0
+    hit = result.hits[0]
+    assert (hit.book, hit.chapter, hit.verse, hit.translation, hit.type) == (
+        "JHN",
+        3,
+        16,
+        "NET",
+        "sn",
+    )
+    assert hit.snippet is not None and "<mark>love</mark>" in hit.snippet
 
 
 async def test_semantic_search_422_is_not_found() -> None:

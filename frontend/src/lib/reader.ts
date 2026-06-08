@@ -11,6 +11,7 @@ import {
   type KeywordResult,
   type SemanticResult,
   type SermonNote,
+  type StudyNoteResult,
   type Translation,
   type TranslatorNote,
   annotationSchema,
@@ -24,6 +25,7 @@ import {
   keywordResultsSchema,
   semanticResultsSchema,
   sermonNoteSchema,
+  studyNoteResultsSchema,
   sermonNotesListSchema,
   tagsListSchema,
   translationsResponseSchema,
@@ -246,4 +248,14 @@ export async function keywordSearch(
 export async function searchAnnotations(q: string): Promise<Annotation[]> {
   const data = await apiRequest<unknown>("GET", `/annotations?q=${encodeURIComponent(q)}`);
   return annotationsListSchema.parse(data);
+}
+
+/**
+ * Keyword search over Concord's translator's/study notes — the "Study notes" section, distinct
+ * from the user's own "Your notes". Best-effort: the backend swallows any failure to [], so this
+ * resolves to an empty list (and the section won't render) rather than throwing.
+ */
+export async function searchStudyNotes(q: string): Promise<StudyNoteResult[]> {
+  const data = await apiRequest<unknown>("GET", `/study-notes-search?q=${encodeURIComponent(q)}`);
+  return studyNoteResultsSchema.parse(data);
 }

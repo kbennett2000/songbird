@@ -17,6 +17,7 @@ from songbird.concord.schemas import (
     ConcordHealth,
     CrossRefResponse,
     KeywordSearchResponse,
+    NoteSearchResponse,
     NotesResponse,
     PlaceVersesResponse,
     SemanticSearchResponse,
@@ -219,6 +220,28 @@ class ConcordClient:
         except httpx.HTTPError as exc:
             raise ConcordUnreachableError(self._base_url, exc) from exc
         return NotesResponse.model_validate(response.json())
+
+    async def search_notes(self, q: str, limit: int = 20) -> NoteSearchResponse:
+        """Keyword-search Concord's translator's/study notes via `/v1/notes/search` (v1.1.0). v1 is
+        q-only — `type`/`book`/`translation` filters are deferred. Same error mapping and (slow-
+        search) read budget as `keyword_search`; the caller treats this as best-effort and swallows
+        any failure to empty, so the Study-notes section never degrades the rest of the page."""
+        try:
+            response = await self._client.get(
+                "/v1/notes/search",
+                params={"q": q, "limit": str(limit)},
+                timeout=_SEARCH_TIMEOUT,
+            )
+            response.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code in (400, 404, 422):
+                raise ConcordNotFoundError(
+                    f"Concord could not run that notes search: {exc.response.status_code}"
+                ) from exc
+            raise ConcordUnreachableError(self._base_url, exc) from exc
+        except httpx.HTTPError as exc:
+            raise ConcordUnreachableError(self._base_url, exc) from exc
+        return NoteSearchResponse.model_validate(response.json())
 
     async def get_place_verses(self, place_id: str) -> PlaceVersesResponse:
         """The verses that mention a place (canonical coords → jump reuses navigation)."""

@@ -237,9 +237,10 @@ filters are deferred). Each hit: `book, chapter, verse, reference, translation, 
   - `SearchView.tsx`: a **"Study notes"** section, placed **after "Your notes"** (the
     rarely-populated reference layer sits last; easy to reorder). **Renders only when
     `data && data.length > 0`.** Each hit: reference heading + a small **type badge**
-    (Translator's note / Study note / Text-critical / Map, from tn/sn/tc/map) + the
-    `<mark>`-highlighted snippet + "Open in reader" (jumps to the verse; the reader's existing
-    translator's-notes markers handle the rest). Fires only when `query.length > 0`.
+    (Translator's note / Study note / Text-critical / Map, from tn/sn/tc/map — reusing the reader's
+    `NOTE_TYPE_LABELS`; any other/unknown type → a neutral **"Note"** badge, never a raw code) + the
+    `<mark>`-highlighted snippet + "Open in reader" (jumps to the verse only — no translation
+    switch). Fires only when `query.length > 0`.
 
 ### Tests
 
