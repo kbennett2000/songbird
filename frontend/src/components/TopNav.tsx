@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { Link, useLocation } from "react-router-dom";
 
 import { useAuth } from "@/hooks/useAuth";
+import { useThemeControl } from "@/hooks/useTheme";
 
 interface TopNavProps {
   /** Tailwind max-width for the centered row (match the page body). Defaults to `max-w-3xl`. */
@@ -34,11 +35,12 @@ export function TopNav({
   children,
 }: TopNavProps): JSX.Element {
   const { user, logout } = useAuth();
+  const { isDark, setTheme } = useThemeControl();
   const { pathname } = useLocation();
   const links = [...LINKS, { to: compareHref, label: "Compare" }];
 
   return (
-    <header className="border-b border-gray-200 bg-white">
+    <header className="border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
       <div className={`mx-auto flex flex-col gap-3 p-4 ${maxWidth}`}>
         <div className="flex flex-wrap items-center gap-3">
           <Link to="/" className="text-2xl font-bold tracking-tight hover:opacity-80">
@@ -53,7 +55,7 @@ export function TopNav({
                 key={l.label}
                 to={l.to}
                 className={`text-sm hover:underline ${
-                  active ? "font-semibold text-blue-800" : "text-blue-700"
+                  active ? "font-semibold text-blue-800 dark:text-blue-300" : "text-blue-700 dark:text-blue-400"
                 }`}
               >
                 {l.label}
@@ -62,12 +64,21 @@ export function TopNav({
           })}
           <div className="ml-auto flex flex-wrap items-center gap-3 text-sm">
             {actions}
+            <button
+              type="button"
+              onClick={() => setTheme(isDark ? "light" : "dark")}
+              aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}
+              title={isDark ? "Switch to light mode" : "Switch to dark mode"}
+              className="rounded px-1 text-base leading-none hover:opacity-80"
+            >
+              {isDark ? "☀️" : "🌙"}
+            </button>
             {user && (
-              <span className="flex items-center gap-2 text-gray-500">
+              <span className="flex items-center gap-2 text-gray-500 dark:text-gray-400">
                 <span title={user.is_admin ? "Admin" : undefined}>{user.username}</span>
                 <button
                   type="button"
-                  className="text-blue-700 hover:underline"
+                  className="text-blue-700 dark:text-blue-400 hover:underline"
                   onClick={() => void logout()}
                 >
                   Log out

@@ -4,6 +4,51 @@ A running log of per-slice decisions, gotchas, and how each slice was verified. 
 
 ---
 
+## #60 — per-profile light/dark mode
+
+- **Date:** 2026-06-08
+- **Branch:** `feat/60-dark-mode`
+- **Scope:** backend (a profile preference + migration) + frontend (a theme manager, a toggle, and
+  a `dark:` sweep across the UI). The first of the recent fixes to touch the backend.
+
+### Backend (mirrors the reading-position pattern exactly)
+`User.theme` (`"light" | "dark" | "system"`, nullable) + migration **`0009_user_theme`** (revises
+`0008`); `UserResponse.theme`; `UserUpdate.theme: Literal[...]` (so an unknown value → 422 for free);
+`update_me` applies it via the existing `model_fields_set` partial-patch (saving theme never
+clobbers the reading position). `saveTheme` on the frontend; `auth_test.py` covers persist / 422 /
+no-clobber.
+
+### Frontend
+- **Theme manager** (`hooks/useTheme.ts`): the resolved appearance = `user.theme` when set, else
+  **follow the OS** (`matchMedia('(prefers-color-scheme: dark)')`, re-applied when the OS flips while
+  "system"). `useApplyTheme()` (mounted once in `App`) toggles `.dark` on `<html>`;
+  `useThemeControl()` powers the toggle in `TopNav` and persists optimistically.
+- **No flash:** an inline boot script in `index.html` reads the last choice from `localStorage`
+  (kept in sync by the hook) and applies `.dark` before React mounts.
+- **The sweep:** a scripted single-pass regex added `dark:` variants to ~315 colour utilities across
+  ~27 route/component files (`bg-white`→`dark:bg-gray-800`, `text-gray-900`→`dark:text-gray-100`,
+  borders, hovers, blue accents). `darkMode: "class"` was already set in `tailwind.config.ts`.
+
+### Gotchas (caught by a live screenshot pass, then fixed)
+The sweep only touches elements that *already* carry a colour class. Two categories didn't and
+showed wrong on dark, fixed with **base-layer rules in `index.css`**:
+1. **Untinted text** (page headings, stat numbers, plain `font-semibold` spans) inherited the
+   default black → set `body { @apply … dark:bg-gray-900 dark:text-gray-100 }`.
+2. **Form controls** (search box, the Places status/type selects) fell back to a white field → a
+   `.dark input/select/textarea` rule gives them a dark surface (checkboxes/radios excluded).
+
+### Verify
+- Backend `pytest` 191 passed (3 new theme tests); Pyright-strict + Ruff clean.
+- Frontend `vitest` 162 passed (`TopNav.test.tsx`: the toggle applies `.dark` + PATCHes the theme,
+  and reflects a dark profile); `tsc` + lint + `vite build` clean.
+- **End-to-end (`docker compose up`):** migration applied (`alembic current` → `0009_user_theme`,
+  `theme` column present); PATCH `theme` persists, an invalid value → 422; the anti-flash script is
+  in the served HTML. **Visual:** Playwright dark-mode screenshots of Welcome / Reader / Search /
+  Places confirm readable headings, dark cards, and dark form controls; the choice **persisted
+  across a rebuild + re-login** (it's on the profile).
+
+---
+
 ## #62b — shared `TopNav` across pages (closes #62)
 
 - **Date:** 2026-06-08

@@ -29,8 +29,8 @@ function tierFor(place: Place): ConfidenceTier {
 
 const MARKER_CLASS: Record<ConfidenceTier, string> = {
   solid: "border-blue-700 bg-blue-600 text-white",
-  hollow: "border-blue-400 bg-white text-blue-400 opacity-80",
-  disputed: "border-amber-600 bg-white text-amber-700",
+  hollow: "border-blue-400 bg-white dark:bg-gray-800 text-blue-400 opacity-80",
+  disputed: "border-amber-600 bg-white dark:bg-gray-800 text-amber-700",
 };
 
 interface PositionedPin {
@@ -100,25 +100,25 @@ function PlaceCard({
   });
 
   return (
-    <div data-testid="place-card" className="mt-3 rounded border border-gray-200 bg-white p-3 shadow-sm">
+    <div data-testid="place-card" className="mt-3 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-3 shadow-sm">
       <div className="flex items-center gap-2">
         <span className="font-medium">{place.name}</span>
-        <span className="rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-600">{place.status}</span>
+        <span className="rounded bg-gray-100 dark:bg-gray-700 px-1.5 py-0.5 text-xs text-gray-600 dark:text-gray-300">{place.status}</span>
         {place.confidence && (
-          <span className="text-xs text-gray-400">{place.confidence} confidence</span>
+          <span className="text-xs text-gray-400 dark:text-gray-500">{place.confidence} confidence</span>
         )}
       </div>
       <div className="mt-2">
-        <p className="mb-1 text-xs text-gray-500">Jump to verses:</p>
-        {versesQuery.isPending && <p className="text-xs text-gray-400">Loading verses…</p>}
-        {versesQuery.isError && <p className="text-xs text-red-600">Couldn&rsquo;t load verses.</p>}
+        <p className="mb-1 text-xs text-gray-500 dark:text-gray-400">Jump to verses:</p>
+        {versesQuery.isPending && <p className="text-xs text-gray-400 dark:text-gray-500">Loading verses…</p>}
+        {versesQuery.isError && <p className="text-xs text-red-600 dark:text-red-400">Couldn&rsquo;t load verses.</p>}
         {versesQuery.data && (
           <ul className="flex flex-wrap gap-1">
             {versesQuery.data.map((v) => (
               <li key={`${v.book}-${v.chapter}-${v.verse}`}>
                 <button
                   type="button"
-                  className="rounded border border-gray-200 px-2 py-1 text-xs text-blue-700 hover:bg-gray-50"
+                  className="rounded border border-gray-200 dark:border-gray-700 px-2 py-1 text-xs text-blue-700 dark:text-blue-400 hover:bg-gray-50 dark:hover:bg-gray-700"
                   onClick={() => onJump(v.book, v.chapter, v.verse)}
                 >
                   {v.reference}
@@ -136,7 +136,7 @@ function PlaceCard({
 function PlaceList({ label, places }: { label: string; places: Place[] }): JSX.Element | null {
   if (places.length === 0) return null;
   return (
-    <p className="mt-2 text-sm italic text-gray-400">
+    <p className="mt-2 text-sm italic text-gray-400 dark:text-gray-500">
       {label}: {places.map((p) => p.name).join(", ")}
     </p>
   );
@@ -154,16 +154,16 @@ export function MapView({ book, chapter, onJump }: MapViewProps): JSX.Element {
     queryFn: () => fetchPlaces(book, chapter),
   });
 
-  if (query.isPending) return <p className="text-sm text-gray-500">Loading places…</p>;
+  if (query.isPending) return <p className="text-sm text-gray-500 dark:text-gray-400">Loading places…</p>;
   if (query.isError)
-    return <p className="text-sm text-red-600">Couldn&rsquo;t load (is Concord reachable?).</p>;
+    return <p className="text-sm text-red-600 dark:text-red-400">Couldn&rsquo;t load (is Concord reachable?).</p>;
 
   const { pins, offMap, unknown } = layout(query.data);
   const selected = pins.find((p) => p.place.id === selectedId)?.place ?? null;
 
   return (
     <div>
-      <div className="relative w-full overflow-hidden rounded border border-gray-200 aspect-[5/4]">
+      <div className="relative w-full overflow-hidden rounded border border-gray-200 dark:border-gray-700 aspect-[5/4]">
         <img src={mapUrl} alt="Map of the biblical world" className="absolute inset-0 h-full w-full" />
         {pins.map((pin) => {
           const tier = tierFor(pin.place);
@@ -195,7 +195,7 @@ export function MapView({ book, chapter, onJump }: MapViewProps): JSX.Element {
       <PlaceList label="Off this map" places={offMap} />
 
       {pins.length === 0 && (
-        <p className="mt-2 text-sm text-gray-500">No places in this chapter fall on the map.</p>
+        <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">No places in this chapter fall on the map.</p>
       )}
     </div>
   );

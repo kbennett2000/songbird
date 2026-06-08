@@ -104,7 +104,7 @@ export function WelcomeView(): JSX.Element {
       : "Start reading";
 
   return (
-    <div className="min-h-screen bg-stone-50">
+    <div className="min-h-screen bg-stone-50 dark:bg-gray-900">
       <TopNav maxWidth="max-w-4xl" />
 
       <main className="mx-auto flex max-w-4xl flex-col gap-8 p-6">
@@ -112,7 +112,7 @@ export function WelcomeView(): JSX.Element {
           <h2 className="text-3xl font-bold tracking-tight">
             Welcome{user?.username ? `, ${user.username}` : ""}
           </h2>
-          <p className="mt-1 text-gray-600">
+          <p className="mt-1 text-gray-600 dark:text-gray-300">
             Annotate Scripture — read a translation, highlight a verse, find it later.
           </p>
         </section>
@@ -122,28 +122,28 @@ export function WelcomeView(): JSX.Element {
         {randomVerse.data && (
           <section
             aria-label="Verse of the day"
-            className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm"
+            className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-5 shadow-sm"
           >
             <div className="flex items-baseline gap-2">
-              <span className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+              <span className="text-xs font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">
                 Verse of the day
               </span>
-              <span className="text-xs text-gray-400">· {randomVerse.data.translation}</span>
+              <span className="text-xs text-gray-400 dark:text-gray-500">· {randomVerse.data.translation}</span>
               <button
                 type="button"
                 onClick={() => void randomVerse.refetch()}
                 disabled={randomVerse.isFetching}
-                className="ml-auto text-sm text-blue-700 hover:underline disabled:opacity-50"
+                className="ml-auto text-sm text-blue-700 dark:text-blue-400 hover:underline disabled:opacity-50"
               >
                 Show another
               </button>
             </div>
-            <p className="mt-2 font-serif text-lg text-gray-800">{randomVerse.data.text}</p>
+            <p className="mt-2 font-serif text-lg text-gray-800 dark:text-gray-100">{randomVerse.data.text}</p>
             <div className="mt-2 flex items-baseline gap-3">
               <span className="font-semibold">{randomVerse.data.reference}</span>
               <Link
                 to={`/read?book=${randomVerse.data.book}&chapter=${randomVerse.data.chapter}&verse=${randomVerse.data.verse}`}
-                className="text-sm text-blue-700 hover:underline"
+                className="text-sm text-blue-700 dark:text-blue-400 hover:underline"
               >
                 Open
               </Link>
@@ -153,12 +153,12 @@ export function WelcomeView(): JSX.Element {
 
         <Link
           to="/read"
-          className="block rounded-lg border border-gray-200 bg-white p-5 shadow-sm transition hover:border-blue-400 hover:shadow"
+          className="block rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-5 shadow-sm transition hover:border-blue-400 hover:shadow"
         >
-          <span className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+          <span className="text-xs font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">
             Pick up where you left off
           </span>
-          <div className="mt-1 text-xl font-semibold text-blue-700">{continueLabel} →</div>
+          <div className="mt-1 text-xl font-semibold text-blue-700 dark:text-blue-400">{continueLabel} →</div>
         </Link>
 
         <section aria-label="Library" className="grid grid-cols-3 gap-4">
@@ -171,14 +171,14 @@ export function WelcomeView(): JSX.Element {
         </section>
 
         <section aria-label="Recent notes">
-          <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-500">
+          <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
             Recent notes
           </h3>
-          {!notesLoaded && <p className="text-gray-500">Loading…</p>}
+          {!notesLoaded && <p className="text-gray-500 dark:text-gray-400">Loading…</p>}
           {notesLoaded && recent.length === 0 && (
-            <p className="text-gray-500">
+            <p className="text-gray-500 dark:text-gray-400">
               No notes yet —{" "}
-              <Link to="/read" className="text-blue-700 hover:underline">
+              <Link to="/read" className="text-blue-700 dark:text-blue-400 hover:underline">
                 open the reader
               </Link>{" "}
               and highlight a verse to begin.
@@ -188,7 +188,7 @@ export function WelcomeView(): JSX.Element {
             {recent.map((r) => (
               <li
                 key={`${r.kind}-${r.id}`}
-                className="rounded border border-gray-200 bg-white p-4"
+                className="rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4"
               >
                 <div className="flex items-center gap-3">
                   <span
@@ -203,12 +203,12 @@ export function WelcomeView(): JSX.Element {
                   <span className="font-semibold">{noteReference(r.item, booksById)}</span>
                   <Link
                     to={readerLink(r.item)}
-                    className="ml-auto text-sm text-blue-700 hover:underline"
+                    className="ml-auto text-sm text-blue-700 dark:text-blue-400 hover:underline"
                   >
                     Open
                   </Link>
                 </div>
-                <p className="mt-1 text-sm text-gray-600">
+                <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">
                   {r.kind === "sermon" ? r.item.title : notePreview(r.item.note_markdown)}
                 </p>
               </li>
@@ -221,10 +221,10 @@ export function WelcomeView(): JSX.Element {
             <Link
               key={q.to}
               to={q.to}
-              className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm transition hover:border-blue-400 hover:shadow"
+              className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4 shadow-sm transition hover:border-blue-400 hover:shadow"
             >
-              <div className="font-semibold text-blue-700">{q.title}</div>
-              <p className="mt-1 text-sm text-gray-500">{q.blurb}</p>
+              <div className="font-semibold text-blue-700 dark:text-blue-400">{q.title}</div>
+              <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{q.blurb}</p>
             </Link>
           ))}
         </section>
@@ -235,9 +235,9 @@ export function WelcomeView(): JSX.Element {
 
 function Stat({ label, value }: { label: string; value: number | null }): JSX.Element {
   return (
-    <div className="rounded-lg border border-gray-200 bg-white p-4 text-center">
+    <div className="rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4 text-center">
       <div className="text-2xl font-bold tabular-nums">{value ?? "—"}</div>
-      <div className="text-xs uppercase tracking-wide text-gray-500">{label}</div>
+      <div className="text-xs uppercase tracking-wide text-gray-500 dark:text-gray-400">{label}</div>
     </div>
   );
 }

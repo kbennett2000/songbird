@@ -75,7 +75,7 @@ export function Popover({ anchor, onClose, ariaLabel, children }: PopoverProps):
       ref={popRef}
       role="dialog"
       aria-label={ariaLabel}
-      className="fixed z-40 w-72 overflow-y-auto rounded-lg border border-gray-200 bg-white p-3 text-sm shadow-xl"
+      className="fixed z-40 w-72 overflow-y-auto rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-3 text-sm shadow-xl"
       style={
         pos
           ? { top: pos.top, left: pos.left, maxHeight: pos.maxHeight }

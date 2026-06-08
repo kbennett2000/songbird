@@ -42,7 +42,7 @@ function ScriptureSnippet({
   readingTranslation: string;
 }): JSX.Element | null {
   if (!("snippet" in hit)) {
-    return hit.text ? <p className="mt-1 font-serif text-gray-700">{hit.text}</p> : null;
+    return hit.text ? <p className="mt-1 font-serif text-gray-700 dark:text-gray-200">{hit.text}</p> : null;
   }
   const matches = hit.matches ?? null;
   const ids = matches ? Object.keys(matches) : [];
@@ -55,9 +55,9 @@ function ScriptureSnippet({
         {ordered.map((id, i) => (
           <p
             key={id}
-            className={i === 0 ? "font-serif text-gray-700" : "font-serif text-sm text-gray-500"}
+            className={i === 0 ? "font-serif text-gray-700 dark:text-gray-200" : "font-serif text-sm text-gray-500 dark:text-gray-400"}
           >
-            <span className="mr-2 rounded bg-gray-100 px-1.5 py-0.5 align-middle text-xs font-medium text-gray-600">
+            <span className="mr-2 rounded bg-gray-100 dark:bg-gray-700 px-1.5 py-0.5 align-middle text-xs font-medium text-gray-600 dark:text-gray-300">
               {id}
             </span>
             {highlighted(matches[id] ?? "")}
@@ -67,7 +67,7 @@ function ScriptureSnippet({
     );
   }
   return hit.snippet ? (
-    <p className="mt-1 font-serif text-gray-700">{highlighted(hit.snippet)}</p>
+    <p className="mt-1 font-serif text-gray-700 dark:text-gray-200">{highlighted(hit.snippet)}</p>
   ) : null;
 }
 
@@ -143,13 +143,13 @@ export function SearchView(): JSX.Element {
   const scriptureResults: Array<SemanticResult | KeywordResult> = scripture.data ?? [];
 
   return (
-    <div className="min-h-screen bg-stone-50">
+    <div className="min-h-screen bg-stone-50 dark:bg-gray-900">
       <TopNav />
 
       <main className="mx-auto max-w-3xl p-6">
         {/* Semantic/keyword is the primary search selector — always shown. Semantic = meaning-based
             Scripture only; keyword exposes the scope row + translation picker below. */}
-        <div className="mb-3 flex w-full gap-1 rounded-lg bg-gray-100 p-1 sm:w-72" role="tablist">
+        <div className="mb-3 flex w-full gap-1 rounded-lg bg-gray-100 dark:bg-gray-700 p-1 sm:w-72" role="tablist">
             {(["semantic", "keyword"] as const).map((m) => (
               <button
                 key={m}
@@ -157,7 +157,7 @@ export function SearchView(): JSX.Element {
                 role="tab"
                 aria-selected={mode === m}
                 className={`flex-1 rounded-md px-3 py-1 text-sm font-medium ${
-                  mode === m ? "bg-white text-gray-900 shadow" : "text-gray-500 hover:text-gray-700"
+                  mode === m ? "bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 shadow" : "text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
                 }`}
                 onClick={() => setMode(m)}
               >
@@ -179,7 +179,7 @@ export function SearchView(): JSX.Element {
                   : "Search for an exact word or phrase… e.g. living water"
             }
             aria-label="Search query"
-            className="flex-1 rounded border border-gray-300 px-3 py-2"
+            className="flex-1 rounded border border-gray-300 dark:border-gray-600 px-3 py-2"
           />
           <button
             type="submit"
@@ -193,9 +193,9 @@ export function SearchView(): JSX.Element {
             mode (meaning-based Scripture only) hides the whole row; selections return on switch
             back (#66/#67). All on by default; uncheck to exclude a kind. */}
         {mode === "keyword" && (
-          <fieldset className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-gray-700">
+          <fieldset className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-gray-700 dark:text-gray-200">
             <legend className="sr-only">What to search</legend>
-            <span className="text-gray-500">Search:</span>
+            <span className="text-gray-500 dark:text-gray-400">Search:</span>
             <label className="flex items-center gap-1.5">
               <input
                 type="checkbox"
@@ -231,25 +231,25 @@ export function SearchView(): JSX.Element {
               type="button"
               onClick={() => setPickerOpen((o) => !o)}
               aria-expanded={pickerOpen}
-              className="text-sm text-gray-600 hover:text-gray-900"
+              className="text-sm text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100"
             >
               Translations:{" "}
-              <span className="font-medium text-gray-900">
+              <span className="font-medium text-gray-900 dark:text-gray-100">
                 {selected.length === 0 ? "All translations" : selected.join(", ")}
               </span>{" "}
               <span aria-hidden="true">▾</span>
             </button>
             {pickerOpen && (
-              <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-2 rounded border border-gray-200 bg-white p-3">
+              <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-2 rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-3">
                 <button
                   type="button"
                   onClick={() => setSelected([])}
-                  className="text-sm text-blue-700 hover:underline"
+                  className="text-sm text-blue-700 dark:text-blue-400 hover:underline"
                 >
                   All translations
                 </button>
                 {(translationsQuery.data ?? []).map((t) => (
-                  <label key={t.id} className="flex items-center gap-1.5 text-sm text-gray-700">
+                  <label key={t.id} className="flex items-center gap-1.5 text-sm text-gray-700 dark:text-gray-200">
                     <input
                       type="checkbox"
                       checked={selected.includes(t.id)}
@@ -268,7 +268,7 @@ export function SearchView(): JSX.Element {
         )}
 
         {query.length === 0 && (
-          <p className="text-gray-500">
+          <p className="text-gray-500 dark:text-gray-400">
             {mode === "semantic"
               ? "Enter a query to search Scripture by meaning."
               : "Enter a query to search Scripture (by exact word or phrase) and your notes."}
@@ -278,30 +278,30 @@ export function SearchView(): JSX.Element {
         {query.length > 0 && (
           <div className="flex flex-col gap-8">
             {mode === "keyword" && nothingSelected && (
-              <p className="text-gray-500">Pick what to search above.</p>
+              <p className="text-gray-500 dark:text-gray-400">Pick what to search above.</p>
             )}
             {/* Scripture — semantic or keyword search via Concord, per the mode toggle */}
             {showScripture && (
             <section aria-label="Scripture results">
               <h2 className="mb-2 text-lg font-semibold">
                 Scripture{" "}
-                <span className="text-sm font-normal text-gray-400">
+                <span className="text-sm font-normal text-gray-400 dark:text-gray-500">
                   ({mode === "semantic" ? "semantic" : "keyword"})
                 </span>
               </h2>
-              {scripture.isPending && <p className="text-gray-500">Searching…</p>}
+              {scripture.isPending && <p className="text-gray-500 dark:text-gray-400">Searching…</p>}
               {scripture.isError && (
-                <p className="text-red-600">Couldn&rsquo;t search (is Concord reachable?).</p>
+                <p className="text-red-600 dark:text-red-400">Couldn&rsquo;t search (is Concord reachable?).</p>
               )}
               {scripture.data && scriptureResults.length === 0 && (
-                <div className="text-gray-500">
+                <div className="text-gray-500 dark:text-gray-400">
                   <p>No matching verses.</p>
                   {/* A keyword query Concord can't run (FTS5 punctuation) comes back empty; offer the
                       same text in the other mode — semantic doesn't use FTS5 (issue #51). */}
                   <button
                     type="button"
                     onClick={() => setMode(otherMode)}
-                    className="mt-1 text-sm text-blue-700 hover:underline"
+                    className="mt-1 text-sm text-blue-700 dark:text-blue-400 hover:underline"
                   >
                     {mode === "keyword"
                       ? `Search “${query}” by meaning instead →`
@@ -313,16 +313,16 @@ export function SearchView(): JSX.Element {
                 {scriptureResults.map((r) => (
                   <li
                     key={`${r.book}-${r.chapter}-${r.verse}`}
-                    className="rounded border border-gray-200 bg-white p-4"
+                    className="rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4"
                   >
                     <div className="flex items-baseline gap-2">
                       <span className="font-semibold">{r.reference}</span>
                       {"score" in r && (
-                        <span className="text-xs text-gray-400">score {r.score.toFixed(3)}</span>
+                        <span className="text-xs text-gray-400 dark:text-gray-500">score {r.score.toFixed(3)}</span>
                       )}
                       <Link
                         to={`/read?book=${r.book}&chapter=${r.chapter}&verse=${r.verse}`}
-                        className="ml-auto text-sm text-blue-700 hover:underline"
+                        className="ml-auto text-sm text-blue-700 dark:text-blue-400 hover:underline"
                       >
                         Open
                       </Link>
@@ -339,35 +339,35 @@ export function SearchView(): JSX.Element {
             {mode === "keyword" && yourNotesOn && (
             <section aria-label="Note results">
               <h2 className="mb-1 text-lg font-semibold">
-                Your notes <span className="text-sm font-normal text-gray-400">(keyword)</span>
+                Your notes <span className="text-sm font-normal text-gray-400 dark:text-gray-500">(keyword)</span>
               </h2>
-              <p className="mb-2 text-xs text-gray-400">
+              <p className="mb-2 text-xs text-gray-400 dark:text-gray-500">
                 Notes are matched by keyword for now; semantic note search is coming.
               </p>
-              {notes.isPending && <p className="text-gray-500">Searching…</p>}
-              {notes.isError && <p className="text-red-600">Couldn&rsquo;t search your notes.</p>}
+              {notes.isPending && <p className="text-gray-500 dark:text-gray-400">Searching…</p>}
+              {notes.isError && <p className="text-red-600 dark:text-red-400">Couldn&rsquo;t search your notes.</p>}
               {notes.data && notes.data.length === 0 && (
-                <p className="text-gray-500">No matching notes.</p>
+                <p className="text-gray-500 dark:text-gray-400">No matching notes.</p>
               )}
               <ul className="flex flex-col gap-3">
                 {notes.data?.map((a) => (
-                  <li key={a.id} className="rounded border border-gray-200 bg-white p-4">
+                  <li key={a.id} className="rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4">
                     <div className="flex items-center gap-3">
                       <span className="font-semibold">{noteReference(a, booksById)}</span>
                       <Link
                         to={readerLink(a)}
-                        className="ml-auto text-sm text-blue-700 hover:underline"
+                        className="ml-auto text-sm text-blue-700 dark:text-blue-400 hover:underline"
                       >
                         Open in reader
                       </Link>
                     </div>
-                    <p className="mt-1 text-sm text-gray-600">{notePreview(a.note_markdown)}</p>
+                    <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">{notePreview(a.note_markdown)}</p>
                     {a.tags.length > 0 && (
                       <div className="mt-2 flex flex-wrap gap-1">
                         {a.tags.map((tag) => (
                           <span
                             key={tag}
-                            className="rounded bg-blue-100 px-2 py-0.5 text-xs text-blue-800"
+                            className="rounded bg-blue-100 dark:bg-blue-900 px-2 py-0.5 text-xs text-blue-800 dark:text-blue-300"
                           >
                             {tag}
                           </span>
@@ -387,13 +387,13 @@ export function SearchView(): JSX.Element {
               <section aria-label="Study notes results">
                 <h2 className="mb-2 text-lg font-semibold">
                   Study notes{" "}
-                  <span className="text-sm font-normal text-gray-400">(keyword)</span>
+                  <span className="text-sm font-normal text-gray-400 dark:text-gray-500">(keyword)</span>
                 </h2>
                 <ul className="flex flex-col gap-3">
                   {studyNotes.data.map((n) => (
                     <li
                       key={`${n.book}-${n.chapter}-${n.verse}-${n.translation}-${n.type ?? ""}`}
-                      className="rounded border border-gray-200 bg-white p-4"
+                      className="rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4"
                     >
                       <div className="flex items-center gap-2">
                         <span className="font-semibold">{n.reference}</span>
@@ -402,13 +402,13 @@ export function SearchView(): JSX.Element {
                         </span>
                         <Link
                           to={`/read?book=${n.book}&chapter=${n.chapter}&verse=${n.verse}`}
-                          className="ml-auto text-sm text-blue-700 hover:underline"
+                          className="ml-auto text-sm text-blue-700 dark:text-blue-400 hover:underline"
                         >
                           Open in reader
                         </Link>
                       </div>
                       {n.snippet && (
-                        <p className="mt-1 font-serif text-gray-700">{highlighted(n.snippet)}</p>
+                        <p className="mt-1 font-serif text-gray-700 dark:text-gray-200">{highlighted(n.snippet)}</p>
                       )}
                     </li>
                   ))}

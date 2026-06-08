@@ -21,18 +21,18 @@ export function SidePanel({
   if (!open) return null;
   return (
     <aside
-      className="fixed inset-y-0 right-0 z-20 flex w-full max-w-md flex-col border-l border-gray-200 bg-white shadow-xl"
+      className="fixed inset-y-0 right-0 z-20 flex w-full max-w-md flex-col border-l border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-xl"
       aria-label="Note panel"
     >
-      <header className="flex items-start justify-between border-b border-gray-200 p-4">
+      <header className="flex items-start justify-between border-b border-gray-200 dark:border-gray-700 p-4">
         <div>
           <h2 className="text-lg font-semibold">{title}</h2>
-          {subtitle && <p className="mt-1 text-sm text-gray-500">{subtitle}</p>}
+          {subtitle && <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{subtitle}</p>}
           {scopeLabel && <p className="mt-1 text-sm text-amber-700">⚠ {scopeLabel}</p>}
         </div>
         <button
           type="button"
-          className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700"
+          className="rounded p-1 text-gray-400 dark:text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-700 dark:hover:text-gray-200"
           onClick={onClose}
           aria-label="Close note panel"
         >

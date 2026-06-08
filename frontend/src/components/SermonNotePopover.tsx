@@ -31,7 +31,7 @@ export function SermonNotePopover({
         </span>
         <button
           type="button"
-          className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700"
+          className="rounded p-1 text-gray-400 dark:text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-700 dark:hover:text-gray-200"
           onClick={onClose}
           aria-label="Close"
         >
