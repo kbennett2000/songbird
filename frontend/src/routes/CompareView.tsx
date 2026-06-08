@@ -260,7 +260,7 @@ export function CompareView(): JSX.Element {
                       <div
                         key={`v-${n}-${i}`}
                         className={`py-1 font-serif text-base leading-7 ${
-                          inScope.length > 0 ? "rounded bg-amber-100 px-1" : ""
+                          inScope.length > 0 ? "rounded bg-amber-100 dark:bg-amber-900 px-1" : ""
                         }`}
                       >
                         {v ? (
@@ -269,7 +269,7 @@ export function CompareView(): JSX.Element {
                             {inScope.length > 0 && (
                               <button
                                 type="button"
-                                className="ml-2 align-middle text-amber-600 hover:text-amber-800"
+                                className="ml-2 align-middle text-amber-600 hover:text-amber-800 dark:hover:text-amber-400"
                                 onClick={(e) =>
                                   setOpenNote({ annotation: inScope[0]!, anchor: e.currentTarget })
                                 }
