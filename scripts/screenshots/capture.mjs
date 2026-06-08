@@ -263,13 +263,17 @@ async function captureWelcome(page) {
   console.log("✓ welcome.png");
 }
 
-// Open the map modal for the current passage and wait until it has plotted its pins.
-async function openMap(page, knownPin) {
+// Open the map modal for the current passage and wait until it has rendered.
+// Since the MapLibre rewrite (ADR 0003) place pins are GL circles with no DOM node, while the
+// bundled physical features (seas, rivers, regions) render as DOM labels (data-testid="map-label").
+// Waiting for a label confirms the relief raster + vector overlay painted; the settle then lets the
+// GL place circles/clusters finish drawing before the shot.
+async function openMap(page) {
   await page.getByRole("button", { name: "Show map" }).click();
   const dialog = page.getByRole("dialog");
   await dialog.waitFor({ state: "visible", timeout: 15000 });
-  await page.getByRole("button", { name: knownPin }).first().waitFor({ state: "visible", timeout: 15000 });
-  await page.waitForTimeout(500);
+  await page.getByTestId("map-label").first().waitFor({ state: "visible", timeout: 15000 });
+  await page.waitForTimeout(1500);
   return dialog;
 }
 
@@ -301,11 +305,14 @@ async function isolatedPin(page) {
   return best;
 }
 
-// Desktop (1440×900): the whole modal — pins on the basemap + the honesty lists below it.
+// Desktop (1440×900): the reader with the map modal open — pins on the basemap framed by the
+// songbird chrome, matching the other README shots (a viewport, not a bare-modal, screenshot).
+// Framed on Acts 27 (Paul's voyage to Rome): its places spread across the Mediterranean for a
+// striking hero, and the Holy-Land corner shows the filled inland seas (Dead Sea, Sea of Galilee).
 async function captureMapDesktop(page) {
-  await page.goto(`${BASE}/read?book=GEN&chapter=2`, { waitUntil: "networkidle" });
-  const dialog = await openMap(page, "Euphrates");
-  await dialog.screenshot({ path: `${OUT}/map-desktop.png` });
+  await page.goto(`${BASE}/read?book=ACT&chapter=27`, { waitUntil: "networkidle" });
+  const dialog = await openMap(page);
+  await page.screenshot({ path: `${OUT}/map-desktop.png` });
   console.log("✓ map-desktop.png");
 
   try {
@@ -342,7 +349,7 @@ async function captureMapMobile(browser, channel) {
   try {
     await ensureSignedIn(page);
     await page.goto(`${BASE}/read?book=GEN&chapter=2`, { waitUntil: "networkidle" });
-    await openMap(page, "Euphrates");
+    await openMap(page);
     // Viewport (not element) screenshot — the honest "what the user sees" framing, which also
     // confirms the modal genuinely covers the small screen rather than sitting in a box.
     await page.screenshot({ path: `${OUT}/map-mobile.png` });
