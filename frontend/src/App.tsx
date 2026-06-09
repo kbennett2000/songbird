@@ -5,6 +5,7 @@ import { useApplyTheme } from "@/hooks/useTheme";
 import { BrowseView } from "@/routes/BrowseView";
 import { CompareView } from "@/routes/CompareView";
 import { JourneyDetailView } from "@/routes/JourneyDetailView";
+import { JourneysView } from "@/routes/JourneysView";
 import { LoginPage } from "@/routes/LoginPage";
 import { PlaceDetailView } from "@/routes/PlaceDetailView";
 import { PlacesView } from "@/routes/PlacesView";
@@ -86,6 +87,14 @@ const router = createBrowserRouter([
     element: (
       <RequireAuth>
         <TopicDetailView />
+      </RequireAuth>
+    ),
+  },
+  {
+    path: "/journeys",
+    element: (
+      <RequireAuth>
+        <JourneysView />
       </RequireAuth>
     ),
   },

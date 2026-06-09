@@ -195,6 +195,22 @@ export const strongsDetailSchema = z.object({
 export const strongsVerseSchema = topicVerseSchema;
 export const strongsVersesSchema = z.array(strongsVerseSchema);
 
+// A curated journey's summary (from Concord). `dating` is null when genuinely debated.
+export const journeySummarySchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  scripture: z.string(),
+  dating: z.string().nullable(),
+  stop_count: z.number(),
+});
+
+// One page of the journeys list — `total` lets the view paginate ("Load more"). Mirrors the other
+// page-outs: no limit/offset in the body (the view tracks those itself).
+export const journeysPageSchema = z.object({
+  journeys: z.array(journeySummarySchema),
+  total: z.number(),
+});
+
 // Journeys (from Concord's curated routes). One ordered stop of a journey, resolved to its place.
 // coords/confidence/status are null when the place has no confident location (honesty model) — such
 // a stop is listed but not mapped; `reference` is the optional scripture citation for the leg.
@@ -313,6 +329,8 @@ export type WordToken = z.infer<typeof wordTokenSchema>;
 export type VerseWords = z.infer<typeof verseWordsSchema>;
 export type StrongsDetail = z.infer<typeof strongsDetailSchema>;
 export type StrongsVerse = z.infer<typeof strongsVerseSchema>;
+export type JourneySummary = z.infer<typeof journeySummarySchema>;
+export type JourneysPage = z.infer<typeof journeysPageSchema>;
 export type JourneyStop = z.infer<typeof journeyStopSchema>;
 export type JourneyDetail = z.infer<typeof journeyDetailSchema>;
 export type NoteCrossReference = z.infer<typeof noteCrossReferenceSchema>;
