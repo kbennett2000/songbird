@@ -26,6 +26,8 @@ from songbird.concord.schemas import (
     PlaceVersesResponse,
     RandomVerse,
     SemanticSearchResponse,
+    StrongsDetail,
+    StrongsVersesResponse,
     TopicDetail,
     TopicsResponse,
     TopicVersesResponse,
@@ -33,6 +35,7 @@ from songbird.concord.schemas import (
     TranslationsResponse,
     VersePlacesResponse,
     VerseTopicsResponse,
+    VerseWordsResponse,
 )
 
 # Keyword search can be slow on a cold Concord — multi-translation FTS over the whole corpus, and
@@ -298,6 +301,63 @@ class ConcordClient:
         except httpx.HTTPError as exc:
             raise ConcordUnreachableError(self._base_url, exc) from exc
         return TopicDetail.model_validate(response.json())
+
+    async def get_verse_words(self, book: str, chapter: int, verse: int) -> VerseWordsResponse:
+        """A verse's tagged original-language tokens, from Concord (songbird owns no text). No
+        `text` param — Concord auto-selects Hebrew/Greek by testament. A 400/404 (bad ref) is a
+        not-found; a VALID ref with no tagged original is a normal empty 200 (tokens: []), not an
+        error."""
+        ref = f"{book} {chapter}:{verse}"
+        try:
+            response = await self._client.get(f"/v1/verses/{quote(ref, safe='')}/words")
+            response.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code in (400, 404):
+                raise ConcordNotFoundError(f"Concord could not resolve '{ref}'") from exc
+            raise ConcordUnreachableError(self._base_url, exc) from exc
+        except httpx.HTTPError as exc:
+            raise ConcordUnreachableError(self._base_url, exc) from exc
+        return VerseWordsResponse.model_validate(response.json())
+
+    async def get_strongs(self, strongs_id: str) -> StrongsDetail:
+        """A single Strong's lexicon entry (`/v1/strongs/{id}`), the lexical payoff. A 400/404
+        (unknown id) is a real not-found, not unreachability."""
+        try:
+            response = await self._client.get(f"/v1/strongs/{quote(strongs_id, safe='')}")
+            response.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code in (400, 404):
+                raise ConcordNotFoundError(f"Concord has no Strong's entry '{strongs_id}'") from exc
+            raise ConcordUnreachableError(self._base_url, exc) from exc
+        except httpx.HTTPError as exc:
+            raise ConcordUnreachableError(self._base_url, exc) from exc
+        return StrongsDetail.model_validate(response.json())
+
+    async def get_strongs_verses(
+        self, strongs_id: str, translation: str | None = None, limit: int = 50, offset: int = 0
+    ) -> StrongsVersesResponse:
+        """The verses where a Strong's number occurs (the concordance), from Concord.
+        `include_text=true` returns the verse snippets (with `translation` when given). A 400/404
+        (unknown id) is a not-found, not unreachability."""
+        params: dict[str, str] = {
+            "include_text": "true",
+            "limit": str(limit),
+            "offset": str(offset),
+        }
+        if translation:
+            params["translation"] = translation
+        try:
+            response = await self._client.get(
+                f"/v1/strongs/{quote(strongs_id, safe='')}/verses", params=params
+            )
+            response.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code in (400, 404):
+                raise ConcordNotFoundError(f"Concord has no Strong's entry '{strongs_id}'") from exc
+            raise ConcordUnreachableError(self._base_url, exc) from exc
+        except httpx.HTTPError as exc:
+            raise ConcordUnreachableError(self._base_url, exc) from exc
+        return StrongsVersesResponse.model_validate(response.json())
 
     async def get_places(self, book: str, chapter: int) -> VersePlacesResponse:
         """Places named in a chapter, from Concord (songbird owns no place data). Carries the

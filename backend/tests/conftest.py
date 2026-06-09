@@ -31,12 +31,15 @@ from songbird.concord.schemas import (
     PlaceVersesResponse,
     RandomVerse,
     SemanticSearchResponse,
+    StrongsDetail,
+    StrongsVersesResponse,
     TopicDetail,
     TopicsResponse,
     TopicVersesResponse,
     Translation,
     VersePlacesResponse,
     VerseTopicsResponse,
+    VerseWordsResponse,
 )
 from songbird.db import models  # noqa: F401  (register models on Base.metadata)
 from songbird.db.base import Base
@@ -62,6 +65,9 @@ class FakeConcordClient:
         topic_verses: TopicVersesResponse | None = None,
         topics_page: TopicsResponse | None = None,
         topic_detail: TopicDetail | None = None,
+        verse_words: VerseWordsResponse | None = None,
+        strongs: StrongsDetail | None = None,
+        strongs_verses: StrongsVersesResponse | None = None,
         places: VersePlacesResponse | None = None,
         place_verses: PlaceVersesResponse | None = None,
         notes: NotesResponse | None = None,
@@ -88,6 +94,9 @@ class FakeConcordClient:
         self._topic_verses = topic_verses
         self._topics_page = topics_page
         self._topic_detail = topic_detail
+        self._verse_words = verse_words
+        self._strongs = strongs
+        self._strongs_verses = strongs_verses
         self._places = places
         self._place_verses = place_verses
         self._notes = notes
@@ -207,6 +216,43 @@ class FakeConcordClient:
             raise self._error
         assert self._topic_detail is not None
         return self._topic_detail
+
+    async def get_verse_words(self, book: str, chapter: int, verse: int) -> VerseWordsResponse:
+        if self._error is not None:
+            raise self._error
+        return (
+            self._verse_words
+            if self._verse_words is not None
+            else VerseWordsResponse(
+                reference=f"{book} {chapter}:{verse}", text_id="SBLGNT", total=0, tokens=[]
+            )
+        )
+
+    async def get_strongs(self, strongs_id: str) -> StrongsDetail:
+        if self._error is not None:
+            raise self._error
+        assert self._strongs is not None
+        return self._strongs
+
+    async def get_strongs_verses(
+        self, strongs_id: str, translation: str | None = None, limit: int = 50, offset: int = 0
+    ) -> StrongsVersesResponse:
+        if self._error is not None:
+            raise self._error
+        return (
+            self._strongs_verses
+            if self._strongs_verses is not None
+            else StrongsVersesResponse(
+                strongs_id=strongs_id,
+                text_id="SBLGNT",
+                translation=translation,
+                include_text=True,
+                limit=limit,
+                offset=offset,
+                total=0,
+                verses=[],
+            )
+        )
 
     async def get_places(self, book: str, chapter: int) -> VersePlacesResponse:
         if self._error is not None:

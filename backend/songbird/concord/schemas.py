@@ -135,6 +135,69 @@ class TopicDetail(BaseModel):
     verse_count: int
 
 
+class WordTokenOut(BaseModel):
+    """One tagged word of a verse (from Concord's original-language text). `surface_form` is the
+    word as printed; the lemma/transliteration/gloss/strongs_id/morph_code are null for untagged
+    tokens (punctuation, particles) or a Strong's with no lexicon entry."""
+
+    position: int
+    surface_form: str
+    strongs_id: str | None = None
+    morph_code: str | None = None
+    lemma: str | None = None
+    transliteration: str | None = None
+    gloss: str | None = None
+
+
+class VerseWordsResponse(BaseModel):
+    """A verse's tagged original-language tokens. `text_id` is the tagged text used (auto-selected
+    by testament: OT → Hebrew/OSHB, NT → Greek/SBLGNT). A valid ref with no tagged original
+    (e.g. deuterocanon) returns tokens: [] (200), not an error."""
+
+    reference: str
+    text_id: str
+    total: int
+    tokens: list[WordTokenOut]
+
+
+class StrongsDetail(BaseModel):
+    """A single Strong's lexicon entry's full detail, including the definition and its source."""
+
+    strongs_id: str
+    language: str
+    lemma: str
+    transliteration: str
+    gloss: str
+    definition: str
+    source: str
+
+
+class StrongsVerse(BaseModel):
+    """One verse where a Strong's number occurs (the concordance row). `text` is null when not
+    requested or absent. Structurally identical to TopicVerse but kept distinct, mirroring
+    Concord's own model."""
+
+    book: str  # USFM code — canonical
+    chapter: int
+    verse: int
+    reference: str
+    text: str | None = None
+
+
+class StrongsVersesResponse(BaseModel):
+    """A page of the verses where a Strong's number occurs (the concordance), echoing the request
+    state. `text_id` is the tagged text searched; `translation` is null unless include_text=true."""
+
+    strongs_id: str
+    text_id: str
+    translation: str | None = None
+    include_text: bool
+    limit: int
+    offset: int
+    total: int
+    verses: list[StrongsVerse]
+
+
 class Place(BaseModel):
     """A place named in Scripture, with Concord's honesty model: coordinates + confidence are
     null for unknown/symbolic/multiple places — surfaced, not hidden."""

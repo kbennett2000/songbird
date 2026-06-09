@@ -26,6 +26,7 @@ from songbird.api.notes import router as notes_router
 from songbird.api.read import router as read_router
 from songbird.api.search import router as search_router
 from songbird.api.sermon_notes import router as sermon_notes_router
+from songbird.api.strongs import router as strongs_router
 from songbird.api.tags import router as tags_router
 from songbird.api.topics import router as topics_router
 from songbird.concord.client import ConcordClient
@@ -110,6 +111,7 @@ def create_app() -> FastAPI:
     app.include_router(notes_router, dependencies=gated)
     app.include_router(headings_router, dependencies=gated)
     app.include_router(topics_router, dependencies=gated)
+    app.include_router(strongs_router, dependencies=gated)
     app.include_router(sermon_notes_router, dependencies=gated)
     app.include_router(search_router, dependencies=gated)
     app.include_router(import_export_router, dependencies=gated)
