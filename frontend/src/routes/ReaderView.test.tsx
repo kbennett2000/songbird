@@ -1192,4 +1192,72 @@ describe("ReaderView", () => {
       expect(screen.queryByText(/headings unavailable/i)).not.toBeInTheDocument();
     });
   });
+
+  // Topical Bible (v1.6, Slice 1b) — the panel is a fourth SidePanel mode. These guard the
+  // clear-everywhere wiring: opening Topics closes any other panel, and any other panel closes
+  // Topics. (A missed setTopics(null) would leave two panels "open" at once.)
+  describe("topics panel", () => {
+    it("opens a Topics panel mutually-exclusive with cross-references", async () => {
+      const user = userEvent.setup();
+      renderReader();
+      await screen.findByText(/JHN 3:16/);
+
+      // Open cross-references.
+      await user.click(screen.getByRole("button", { name: "Cross-references for verse 16" }));
+      expect(
+        await screen.findByRole("heading", { name: /Cross-references — / }),
+      ).toBeInTheDocument();
+
+      // Opening Topics closes the xref panel.
+      await user.click(screen.getByRole("button", { name: "Topics for verse 16" }));
+      expect(await screen.findByRole("heading", { name: /Topics — / })).toBeInTheDocument();
+      expect(
+        screen.queryByRole("heading", { name: /Cross-references — / }),
+      ).not.toBeInTheDocument();
+
+      // Opening xref again closes the Topics panel.
+      await user.click(screen.getByRole("button", { name: "Cross-references for verse 16" }));
+      expect(
+        await screen.findByRole("heading", { name: /Cross-references — / }),
+      ).toBeInTheDocument();
+      expect(screen.queryByRole("heading", { name: /Topics — / })).not.toBeInTheDocument();
+    });
+
+    it("is mutually-exclusive with the places panel too", async () => {
+      server.use(
+        http.get("/api/v1/places", () =>
+          HttpResponse.json([
+            {
+              id: "a15257a",
+              friendly_id: "Jerusalem",
+              name: "Jerusalem",
+              type: "settlement",
+              latitude: 31.78,
+              longitude: 35.23,
+              confidence: "high",
+              confidence_score: 90,
+              status: "identified",
+            },
+          ]),
+        ),
+      );
+      const user = userEvent.setup();
+      renderReader();
+      await screen.findByText(/JHN 3:16/);
+
+      // Open places (enabled once the chapter's places load).
+      await user.click(await screen.findByRole("button", { name: "Places in this chapter" }));
+      expect(await screen.findByRole("heading", { name: /Places — / })).toBeInTheDocument();
+
+      // Opening Topics closes the places panel.
+      await user.click(screen.getByRole("button", { name: "Topics for verse 16" }));
+      expect(await screen.findByRole("heading", { name: /Topics — / })).toBeInTheDocument();
+      expect(screen.queryByRole("heading", { name: /Places — / })).not.toBeInTheDocument();
+
+      // Opening places again closes the Topics panel.
+      await user.click(screen.getByRole("button", { name: "Places in this chapter" }));
+      expect(await screen.findByRole("heading", { name: /Places — / })).toBeInTheDocument();
+      expect(screen.queryByRole("heading", { name: /Topics — / })).not.toBeInTheDocument();
+    });
+  });
 });

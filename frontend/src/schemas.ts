@@ -127,6 +127,27 @@ export const crossReferenceSchema = z.object({
 });
 export const crossReferencesSchema = z.array(crossReferenceSchema);
 
+// A topic from Concord's curated topical index (songbird owns none). `see_also` is another
+// topic's id for a "See X" redirect (those carry no verses of their own), else null.
+export const topicSummarySchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  section: z.string(),
+  see_also: z.string().nullable(),
+});
+export const topicSummariesSchema = z.array(topicSummarySchema);
+
+// One verse curated under a topic (from Concord). Canonical coords; `text` is the verse snippet
+// in the read translation, or null when absent.
+export const topicVerseSchema = z.object({
+  book: z.string(),
+  chapter: z.number(),
+  verse: z.number(),
+  reference: z.string(),
+  text: z.string().nullable(),
+});
+export const topicVersesSchema = z.array(topicVerseSchema);
+
 // A translator's note (from Concord) — NET's tn/sn/tc/map footnotes. Translation-specific:
 // `char_offset` is a point anchor into THAT translation's verse text where the marker attaches.
 // The note's cross-refs are canonical → tapping one reuses the reader's coordinate navigation.
@@ -211,6 +232,8 @@ export type ReadVerse = z.infer<typeof readVerseSchema>;
 export type ReadChapter = z.infer<typeof readChapterSchema>;
 export type ResolvedReference = z.infer<typeof resolvedReferenceSchema>;
 export type CrossReference = z.infer<typeof crossReferenceSchema>;
+export type TopicSummary = z.infer<typeof topicSummarySchema>;
+export type TopicVerse = z.infer<typeof topicVerseSchema>;
 export type NoteCrossReference = z.infer<typeof noteCrossReferenceSchema>;
 export type TranslatorNote = z.infer<typeof translatorNoteSchema>;
 export type SectionHeading = z.infer<typeof sectionHeadingSchema>;
