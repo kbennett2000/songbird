@@ -1,5 +1,14 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { type FormEvent, lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
+import {
+  type FormEvent,
+  Fragment,
+  lazy,
+  Suspense,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useSearchParams } from "react-router-dom";
 
 import { CrossReferences } from "@/components/CrossReferences";
@@ -29,6 +38,7 @@ import {
   deleteSermonNote,
   fetchBooks,
   fetchChapter,
+  fetchHeadings,
   fetchNotes,
   fetchPlaces,
   fetchTags,
@@ -37,7 +47,14 @@ import {
   updateAnnotation,
   updateSermonNote,
 } from "@/lib/reader";
-import type { ReadAnnotation, ReadVerse, Scope, SermonNote, TranslatorNote } from "@/schemas";
+import type {
+  ReadAnnotation,
+  ReadVerse,
+  Scope,
+  SectionHeading,
+  SermonNote,
+  TranslatorNote,
+} from "@/schemas";
 
 const DEFAULT_TRANSLATION = "KJV";
 
@@ -79,7 +96,9 @@ export function ReaderView(): JSX.Element {
   // Reopen to where this profile last read (RequireAuth guarantees `user` is loaded by the time
   // the reader mounts). Priority: an explicit deep link (?book=&chapter= from Browse) wins, then
   // the saved position, then the first-time defaults.
-  const [translation, setTranslation] = useState(() => user?.last_translation ?? DEFAULT_TRANSLATION);
+  const [translation, setTranslation] = useState(
+    () => user?.last_translation ?? DEFAULT_TRANSLATION,
+  );
   const [book, setBook] = useState(() => searchParams.get("book") ?? user?.last_book ?? "JHN");
   const [chapter, setChapter] = useState(() =>
     Number(searchParams.get("chapter") ?? user?.last_chapter ?? 3),
@@ -151,6 +170,26 @@ export function ReaderView(): JSX.Element {
     }
     return map;
   }, [notesQuery.data]);
+
+  // Section headings for the chapter, in the CURRENT translation. Keyed like notes so switching
+  // translation refetches. Pure enrichment: on error OR empty we render nothing and show NO
+  // banner — a heading-less chapter is the normal state for most translations, so a notice
+  // would be noise (the deliberate divergence from notes, which DOES banner a genuine outage).
+  const headingsQuery = useQuery({
+    queryKey: ["headings", translation, chapterBook, chapter],
+    queryFn: () => fetchHeadings(translation, chapterBook, chapter),
+  });
+  const headingsByBeforeVerse = useMemo(() => {
+    const map = new Map<number, SectionHeading[]>();
+    for (const heading of headingsQuery.data ?? []) {
+      const list = map.get(heading.before_verse);
+      if (list) list.push(heading);
+      else map.set(heading.before_verse, [heading]);
+    }
+    // Multiple headings before one verse render in ordinal order.
+    for (const list of map.values()) list.sort((a, b) => a.ordinal - b.ordinal);
+    return map;
+  }, [headingsQuery.data]);
 
   const translations = useMemo(() => translationsQuery.data ?? [], [translationsQuery.data]);
   const books = useMemo(() => booksQuery.data ?? [], [booksQuery.data]);
@@ -469,103 +508,109 @@ export function ReaderView(): JSX.Element {
         compareHref={`/compare?translation=${encodeURIComponent(translation)}&book=${encodeURIComponent(book)}&chapter=${chapter}`}
       >
         <div className="flex flex-wrap items-center gap-2 text-sm">
-              <label className="flex items-center gap-1">
-                <span className="text-gray-500 dark:text-gray-400">Book</span>
-                <select
-                  className="rounded border border-gray-300 dark:border-gray-600 px-2 py-1"
-                  value={book}
-                  onChange={(e) => navigate(e.target.value, 1)}
-                  aria-label="Book"
-                >
-                  {(books.length > 0 ? books : [{ id: book, name: book }]).map((b) => (
-                    <option key={b.id} value={b.id}>
-                      {b.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="flex items-center gap-1">
-                <span className="text-gray-500 dark:text-gray-400">Chapter</span>
-                <select
-                  className="rounded border border-gray-300 dark:border-gray-600 px-2 py-1"
-                  value={chapter}
-                  onChange={(e) => navigate(book, Number(e.target.value))}
-                  aria-label="Chapter"
-                >
-                  {chapterOptions.map((c) => (
-                    <option key={c} value={c}>
-                      {c}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="flex items-center gap-1">
-                <span className="text-gray-500 dark:text-gray-400">Translation</span>
-                <select
-                  className="rounded border border-gray-300 dark:border-gray-600 px-2 py-1"
-                  value={translation}
-                  onChange={(e) => changeTranslation(e.target.value)}
-                  aria-label="Translation"
-                >
-                  {(translations.length > 0
-                    ? translations
-                    : [{ id: translation, name: translation }]
-                  ).map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.id}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </div>
+          <label className="flex items-center gap-1">
+            <span className="text-gray-500 dark:text-gray-400">Book</span>
+            <select
+              className="rounded border border-gray-300 dark:border-gray-600 px-2 py-1"
+              value={book}
+              onChange={(e) => navigate(e.target.value, 1)}
+              aria-label="Book"
+            >
+              {(books.length > 0 ? books : [{ id: book, name: book }]).map((b) => (
+                <option key={b.id} value={b.id}>
+                  {b.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex items-center gap-1">
+            <span className="text-gray-500 dark:text-gray-400">Chapter</span>
+            <select
+              className="rounded border border-gray-300 dark:border-gray-600 px-2 py-1"
+              value={chapter}
+              onChange={(e) => navigate(book, Number(e.target.value))}
+              aria-label="Chapter"
+            >
+              {chapterOptions.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex items-center gap-1">
+            <span className="text-gray-500 dark:text-gray-400">Translation</span>
+            <select
+              className="rounded border border-gray-300 dark:border-gray-600 px-2 py-1"
+              value={translation}
+              onChange={(e) => changeTranslation(e.target.value)}
+              aria-label="Translation"
+            >
+              {(translations.length > 0
+                ? translations
+                : [{ id: translation, name: translation }]
+              ).map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.id}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
 
         <div className="flex flex-wrap items-center gap-3">
-            <form onSubmit={submitRef} className="flex w-full items-center gap-2 sm:w-auto">
-              <input
-                type="text"
-                value={refInput}
-                onChange={(e) => setRefInput(e.target.value)}
-                placeholder="Jump to… e.g. John 3, Gen 1:1"
-                aria-label="Jump to reference"
-                className="min-w-0 flex-1 rounded border border-gray-300 dark:border-gray-600 px-2 py-1 text-sm sm:w-56 sm:flex-none"
-              />
-              <button
-                type="submit"
-                className="rounded bg-blue-600 px-3 py-1 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
-                disabled={resolveMutation.isPending}
-              >
-                Go
-              </button>
-              {resolveError && <span className="text-sm text-red-600 dark:text-red-400">{resolveError}</span>}
-            </form>
+          <form onSubmit={submitRef} className="flex w-full items-center gap-2 sm:w-auto">
+            <input
+              type="text"
+              value={refInput}
+              onChange={(e) => setRefInput(e.target.value)}
+              placeholder="Jump to… e.g. John 3, Gen 1:1"
+              aria-label="Jump to reference"
+              className="min-w-0 flex-1 rounded border border-gray-300 dark:border-gray-600 px-2 py-1 text-sm sm:w-56 sm:flex-none"
+            />
+            <button
+              type="submit"
+              className="rounded bg-blue-600 px-3 py-1 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+              disabled={resolveMutation.isPending}
+            >
+              Go
+            </button>
+            {resolveError && (
+              <span className="text-sm text-red-600 dark:text-red-400">{resolveError}</span>
+            )}
+          </form>
 
-            <div className="ml-auto flex items-center gap-2">
-              <button
-                type="button"
-                className="rounded border border-gray-300 dark:border-gray-600 px-3 py-1 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-40"
-                onClick={() => prev && navigate(prev.book, prev.chapter)}
-                disabled={!prev}
-                aria-label="Previous chapter"
-              >
-                ← Prev
-              </button>
-              <button
-                type="button"
-                className="rounded border border-gray-300 dark:border-gray-600 px-3 py-1 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-40"
-                onClick={() => next && navigate(next.book, next.chapter)}
-                disabled={!next}
-                aria-label="Next chapter"
-              >
-                Next →
-              </button>
-            </div>
+          <div className="ml-auto flex items-center gap-2">
+            <button
+              type="button"
+              className="rounded border border-gray-300 dark:border-gray-600 px-3 py-1 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-40"
+              onClick={() => prev && navigate(prev.book, prev.chapter)}
+              disabled={!prev}
+              aria-label="Previous chapter"
+            >
+              ← Prev
+            </button>
+            <button
+              type="button"
+              className="rounded border border-gray-300 dark:border-gray-600 px-3 py-1 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-40"
+              onClick={() => next && navigate(next.book, next.chapter)}
+              disabled={!next}
+              aria-label="Next chapter"
+            >
+              Next →
+            </button>
+          </div>
         </div>
       </TopNav>
 
       <main className="mx-auto max-w-3xl p-6">
-        {chapterQuery.isPending && <p className="text-gray-500 dark:text-gray-400">Loading chapter…</p>}
+        {chapterQuery.isPending && (
+          <p className="text-gray-500 dark:text-gray-400">Loading chapter…</p>
+        )}
         {chapterQuery.isError && (
-          <p className="text-red-600 dark:text-red-400">Couldn&rsquo;t load this chapter. Is Concord reachable?</p>
+          <p className="text-red-600 dark:text-red-400">
+            Couldn&rsquo;t load this chapter. Is Concord reachable?
+          </p>
         )}
         {chapterQuery.data && (
           <article className="font-serif text-lg leading-8">
@@ -599,85 +644,99 @@ export function ReaderView(): JSX.Element {
             {chapterQuery.data.verses.map((v) => {
               const inScope = v.annotations.filter((a) => a.in_scope);
               const outScope = v.annotations.filter((a) => !a.in_scope);
+              const headings = headingsByBeforeVerse.get(v.verse) ?? [];
               return (
-                <p
-                  key={v.verse}
-                  id={`v-${v.verse}`}
-                  className={`group relative -mx-3 rounded px-3 py-0.5 ${
-                    inScope.length > 0 ? "bg-amber-100 dark:bg-amber-900" : ""
-                  } ${highlightVerse === v.verse ? "ring-2 ring-blue-400" : ""}`}
-                >
-                  <button
-                    type="button"
-                    className="mr-1 align-super text-xs font-sans font-semibold text-blue-700 dark:text-blue-400 hover:underline"
-                    onClick={() => openNew(v)}
-                    aria-label={`Annotate verse ${v.verse}`}
+                <Fragment key={v.verse}>
+                  {/* Section headings sit above the whole verse row (number button + text) —
+                      a real <h3> for screen-reader structure, nested under the chapter <h2>.
+                      A third, quieter layer, distinct from blue verse numbers and violet
+                      note markers. */}
+                  {headings.map((h) => (
+                    <h3
+                      key={h.ordinal}
+                      className="mt-6 mb-2 font-sans text-sm font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400"
+                    >
+                      {h.text}
+                    </h3>
+                  ))}
+                  <p
+                    id={`v-${v.verse}`}
+                    className={`group relative -mx-3 rounded px-3 py-0.5 ${
+                      inScope.length > 0 ? "bg-amber-100 dark:bg-amber-900" : ""
+                    } ${highlightVerse === v.verse ? "ring-2 ring-blue-400" : ""}`}
                   >
-                    {v.verse}
-                  </button>
-                  <VerseText
-                    text={v.text ?? ""}
-                    notes={notesByVerse.get(v.verse) ?? []}
-                    onOpenNote={(note, anchor) => setOpenNote({ note, anchor })}
-                  />
-                  {inScope.length > 0 && (
                     <button
                       type="button"
-                      className="ml-2 align-middle text-amber-600 hover:text-amber-800 dark:hover:text-amber-400"
-                      onClick={() => openExisting(v, inScope[0]!)}
-                      aria-label={`View note on verse ${v.verse}`}
-                      title="View note"
+                      className="mr-1 align-super text-xs font-sans font-semibold text-blue-700 dark:text-blue-400 hover:underline"
+                      onClick={() => openNew(v)}
+                      aria-label={`Annotate verse ${v.verse}`}
                     >
-                      ●
+                      {v.verse}
                     </button>
-                  )}
-                  {outScope.length > 0 && (
+                    <VerseText
+                      text={v.text ?? ""}
+                      notes={notesByVerse.get(v.verse) ?? []}
+                      onOpenNote={(note, anchor) => setOpenNote({ note, anchor })}
+                    />
+                    {inScope.length > 0 && (
+                      <button
+                        type="button"
+                        className="ml-2 align-middle text-amber-600 hover:text-amber-800 dark:hover:text-amber-400"
+                        onClick={() => openExisting(v, inScope[0]!)}
+                        aria-label={`View note on verse ${v.verse}`}
+                        title="View note"
+                      >
+                        ●
+                      </button>
+                    )}
+                    {outScope.length > 0 && (
+                      <button
+                        type="button"
+                        className="ml-2 align-middle text-gray-400 dark:text-gray-500 hover:text-gray-600"
+                        onClick={() => openExisting(v, outScope[0]!)}
+                        aria-label={`View out-of-scope note on verse ${v.verse}`}
+                        title={`Written for ${outScope[0]!.scope_translations.join(", ")}`}
+                      >
+                        ○
+                      </button>
+                    )}
+                    {v.sermon_notes.length > 0 && (
+                      <button
+                        type="button"
+                        className="ml-2 align-middle text-emerald-600 hover:text-emerald-800"
+                        onClick={(e) =>
+                          setOpenSermon({
+                            notes: v.sermon_notes,
+                            anchor: e.currentTarget,
+                            verse: v,
+                          })
+                        }
+                        aria-label={
+                          v.sermon_notes.length === 1
+                            ? `Sermon on verse ${v.verse}`
+                            : `${v.sermon_notes.length} sermons on verse ${v.verse}`
+                        }
+                        title={v.sermon_notes.length === 1 ? "Sermon" : "Sermons"}
+                      >
+                        ▶
+                        {v.sermon_notes.length > 1 && (
+                          <span className="ml-0.5 rounded-full bg-emerald-100 px-1 text-[0.7em] font-semibold text-emerald-700">
+                            {v.sermon_notes.length}
+                          </span>
+                        )}
+                      </button>
+                    )}
                     <button
                       type="button"
-                      className="ml-2 align-middle text-gray-400 dark:text-gray-500 hover:text-gray-600"
-                      onClick={() => openExisting(v, outScope[0]!)}
-                      aria-label={`View out-of-scope note on verse ${v.verse}`}
-                      title={`Written for ${outScope[0]!.scope_translations.join(", ")}`}
+                      className="ml-2 align-middle text-xs text-gray-300 opacity-0 transition hover:text-blue-600 group-hover:opacity-100"
+                      onClick={() => openXref(v)}
+                      aria-label={`Cross-references for verse ${v.verse}`}
+                      title="Cross-references"
                     >
-                      ○
+                      ⇄
                     </button>
-                  )}
-                  {v.sermon_notes.length > 0 && (
-                    <button
-                      type="button"
-                      className="ml-2 align-middle text-emerald-600 hover:text-emerald-800"
-                      onClick={(e) =>
-                        setOpenSermon({
-                          notes: v.sermon_notes,
-                          anchor: e.currentTarget,
-                          verse: v,
-                        })
-                      }
-                      aria-label={
-                        v.sermon_notes.length === 1
-                          ? `Sermon on verse ${v.verse}`
-                          : `${v.sermon_notes.length} sermons on verse ${v.verse}`
-                      }
-                      title={v.sermon_notes.length === 1 ? "Sermon" : "Sermons"}
-                    >
-                      ▶
-                      {v.sermon_notes.length > 1 && (
-                        <span className="ml-0.5 rounded-full bg-emerald-100 px-1 text-[0.7em] font-semibold text-emerald-700">
-                          {v.sermon_notes.length}
-                        </span>
-                      )}
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    className="ml-2 align-middle text-xs text-gray-300 opacity-0 transition hover:text-blue-600 group-hover:opacity-100"
-                    onClick={() => openXref(v)}
-                    aria-label={`Cross-references for verse ${v.verse}`}
-                    title="Cross-references"
-                  >
-                    ⇄
-                  </button>
-                </p>
+                  </p>
+                </Fragment>
               );
             })}
           </article>
@@ -705,7 +764,10 @@ export function ReaderView(): JSX.Element {
           <div className="flex flex-col gap-4">
             {/* Type toggle — only for a brand-new note (an existing note's kind is fixed). */}
             {editing.annotationId === null && editing.sermonId === null && (
-              <div className="flex gap-1 rounded-lg bg-gray-100 dark:bg-gray-700 p-1" role="tablist">
+              <div
+                className="flex gap-1 rounded-lg bg-gray-100 dark:bg-gray-700 p-1"
+                role="tablist"
+              >
                 {(["annotation", "sermon"] as const).map((k) => (
                   <button
                     key={k}
@@ -785,11 +847,7 @@ export function ReaderView(): JSX.Element {
           />
         )}
         {geo && (
-          <Geography
-            book={chapterBook}
-            chapter={chapter}
-            onJump={(b, c, v) => navigate(b, c, v)}
-          />
+          <Geography book={chapterBook} chapter={chapter} onJump={(b, c, v) => navigate(b, c, v)} />
         )}
       </SidePanel>
 
@@ -799,7 +857,9 @@ export function ReaderView(): JSX.Element {
         onClose={() => setMap(false)}
       >
         {map && (
-          <Suspense fallback={<p className="text-sm text-gray-500 dark:text-gray-400">Loading map…</p>}>
+          <Suspense
+            fallback={<p className="text-sm text-gray-500 dark:text-gray-400">Loading map…</p>}
+          >
             <MapView book={chapterBook} chapter={chapter} onJump={(b, c, v) => navigate(b, c, v)} />
           </Suspense>
         )}
