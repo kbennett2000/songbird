@@ -160,6 +160,41 @@ export const topicDetailSchema = topicSummarySchema.extend({
   verse_count: z.number(),
 });
 
+// Word study (from Concord's tagged original-language text). One tagged word of a verse — the
+// lexical fields are null for untagged tokens (punctuation, particles) or a Strong's with no entry.
+export const wordTokenSchema = z.object({
+  position: z.number(),
+  surface_form: z.string(),
+  strongs_id: z.string().nullable(),
+  morph_code: z.string().nullable(),
+  lemma: z.string().nullable(),
+  transliteration: z.string().nullable(),
+  gloss: z.string().nullable(),
+});
+// The verse's tokens, with `text_id` (the tagged text — Hebrew/OSHB for OT, Greek/SBLGNT for NT)
+// so the client can pick text direction (RTL for Hebrew). A valid verse with no tagged original
+// returns tokens: [] (the "no data" state — not an error).
+export const verseWordsSchema = z.object({
+  reference: z.string(),
+  text_id: z.string(),
+  tokens: z.array(wordTokenSchema),
+});
+
+// A single Strong's lexicon entry — the lexical payoff.
+export const strongsDetailSchema = z.object({
+  strongs_id: z.string(),
+  language: z.string(),
+  lemma: z.string(),
+  transliteration: z.string(),
+  gloss: z.string(),
+  definition: z.string(),
+  source: z.string(),
+});
+
+// One concordance verse where a Strong's number occurs — identical shape to a topic verse (reuse).
+export const strongsVerseSchema = topicVerseSchema;
+export const strongsVersesSchema = z.array(strongsVerseSchema);
+
 // A translator's note (from Concord) — NET's tn/sn/tc/map footnotes. Translation-specific:
 // `char_offset` is a point anchor into THAT translation's verse text where the marker attaches.
 // The note's cross-refs are canonical → tapping one reuses the reader's coordinate navigation.
@@ -248,6 +283,10 @@ export type TopicSummary = z.infer<typeof topicSummarySchema>;
 export type TopicVerse = z.infer<typeof topicVerseSchema>;
 export type TopicsPage = z.infer<typeof topicsPageSchema>;
 export type TopicDetail = z.infer<typeof topicDetailSchema>;
+export type WordToken = z.infer<typeof wordTokenSchema>;
+export type VerseWords = z.infer<typeof verseWordsSchema>;
+export type StrongsDetail = z.infer<typeof strongsDetailSchema>;
+export type StrongsVerse = z.infer<typeof strongsVerseSchema>;
 export type NoteCrossReference = z.infer<typeof noteCrossReferenceSchema>;
 export type TranslatorNote = z.infer<typeof translatorNoteSchema>;
 export type SectionHeading = z.infer<typeof sectionHeadingSchema>;

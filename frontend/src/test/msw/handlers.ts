@@ -114,6 +114,12 @@ export const defaultHandlers = [
   // Topics browse default (Slice 2b) — the TopicsView list; browse-specific tests override
   // per-case. (No /topics/{id} detail default: TopicDetailView is test-only and sets its own.)
   http.get("/api/v1/topics", () => HttpResponse.json({ topics: [], total: 0 })),
+  // Word study (v1.6) default — the verse-words strip fetches on panel open; word-study tests
+  // override per-case. (No /strongs/{id} or /strongs/{id}/verses defaults: those fetch only on
+  // level-2 drill-in, exercised by WordStudy.test which sets its own handlers.)
+  http.get("/api/v1/verse-words/:book/:chapter/:verse", () =>
+    HttpResponse.json({ reference: "JHN 3:16", text_id: "SBLGNT", tokens: [] }),
+  ),
   // Notes default to empty — most translations (and the public image) ship none, so the reader
   // shows no markers; notes-specific tests override per-case via server.use().
   http.get("/api/v1/notes/:translation/:book/:chapter", () => HttpResponse.json([])),

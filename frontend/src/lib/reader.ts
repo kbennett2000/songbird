@@ -15,6 +15,8 @@ import {
   type SemanticResult,
   type SectionHeading,
   type SermonNote,
+  type StrongsDetail,
+  type StrongsVerse,
   type StudyNoteResult,
   type TopicDetail,
   type TopicsPage,
@@ -22,6 +24,7 @@ import {
   type TopicVerse,
   type Translation,
   type TranslatorNote,
+  type VerseWords,
   annotationSchema,
   annotationsListSchema,
   booksResponseSchema,
@@ -37,10 +40,13 @@ import {
   keywordResultsSchema,
   sectionHeadingsSchema,
   semanticResultsSchema,
+  strongsDetailSchema,
+  strongsVersesSchema,
   topicDetailSchema,
   topicSummariesSchema,
   topicsPageSchema,
   topicVersesSchema,
+  verseWordsSchema,
   sermonNoteSchema,
   studyNoteResultsSchema,
   sermonNotesListSchema,
@@ -132,6 +138,42 @@ export async function fetchTopics(filters: TopicFilters = {}): Promise<TopicsPag
 export async function fetchTopic(topicId: string): Promise<TopicDetail> {
   const data = await apiRequest<unknown>("GET", `/topics/${encodeURIComponent(topicId)}`);
   return topicDetailSchema.parse(data);
+}
+
+/** A verse's tagged original-language tokens (with text_id) — from Concord (songbird owns none).
+ * A valid verse with no tagged original returns tokens: [] (the "no data" state, not an error). */
+export async function fetchVerseWords(
+  book: string,
+  chapter: number,
+  verse: number,
+): Promise<VerseWords> {
+  const data = await apiRequest<unknown>("GET", `/verse-words/${book}/${chapter}/${verse}`);
+  return verseWordsSchema.parse(data);
+}
+
+/** A single Strong's lexicon entry (lemma, definition, source). */
+export async function fetchStrongs(strongsId: string): Promise<StrongsDetail> {
+  const data = await apiRequest<unknown>("GET", `/strongs/${encodeURIComponent(strongsId)}`);
+  return strongsDetailSchema.parse(data);
+}
+
+/** The verses where a Strong's number occurs (the concordance, with text in the read translation). */
+export async function fetchStrongsVerses(
+  strongsId: string,
+  translation: string,
+  limit?: number,
+  offset?: number,
+): Promise<StrongsVerse[]> {
+  const params = new URLSearchParams();
+  if (translation) params.set("translation", translation);
+  if (limit !== undefined) params.set("limit", String(limit));
+  if (offset !== undefined) params.set("offset", String(offset));
+  const qs = params.toString();
+  const data = await apiRequest<unknown>(
+    "GET",
+    `/strongs/${encodeURIComponent(strongsId)}/verses${qs ? `?${qs}` : ""}`,
+  );
+  return strongsVersesSchema.parse(data);
 }
 
 /** Translator's notes for a whole chapter in one translation — from Concord (songbird stores
