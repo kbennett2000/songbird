@@ -4,6 +4,86 @@ A running log of per-slice decisions, gotchas, and how each slice was verified. 
 
 ---
 
+## Docs Slice 1 — screenshot capture expansion (the user-guide's dependency)
+
+- **Date:** 2026-06-09
+- **Branch:** `slice/docs-1-screenshots`
+
+### Why
+The forthcoming user's guide needs a screenshot of every v1.6 feature plus a refresh of two stale
+ones. This slice extends the maintainer screenshot tool (`scripts/screenshots/capture.mjs`) to
+produce them; the guide prose + README trim are later slices (no `USER-GUIDE.md`/`README.md`/app
+change here). The capture script is a maintainer tool outside the gated suites, so `make check` /
+`make check-frontend` are unaffected.
+
+### Capture stack (documented in the script header)
+The full set requires songbird pointed at a Concord with the **complete data** — every translation
+**including NET** (its translator's footnotes drive `translator-notes.png`) and the curated topical
+index / journeys / Strong's lexicon. That's the **LAN Concord at `http://192.168.1.62:8000`** (set
+songbird's `CONCORD_BASE_URL` to it). Run against a **throwaway songbird** (clean `DATA_DIR`) so the
+capture account holds only the script's seeded demo data — no real notes leak into a shot.
+
+### What shipped (script only)
+- Header rewritten: the full shot list, the LAN-Concord-with-NET requirement + how to point there,
+  the throwaway-account note, and the per-shot data assumptions (named constants up top).
+- Seeding extended (idempotent check-then-POST): a **rich-text note** (bold/italics/list, on JHN 1:1)
+  for `note-editor.png`; **two sermons on Romans 8:28** so it shows "2 sermons" → the chooser for
+  `sermon-chooser.png` (kept off Psalm 23 so the single-sermon `sermon.png` stays single).
+- **17 new shots** + **2 refreshed**: `reader` (now WEB so section headings show), `place-detail`
+  (now a place on a journey → the "Journeys through here" section); new: `note-editor`,
+  `cross-references`, `topics-verse`, `topics-drill`, `topics-browse`, `topic-detail`, `word-study`
+  (OT verse, Hebrew RTL asserted via the `dir="rtl"` strip), `word-study-strongs`, `geography-panel`,
+  `journeys-list`, `journey-detail`, `compare`, `browse`, `notes-search`, `reader-dark`,
+  `translator-notes` (NET), `sermon-chooser`.
+- Selectors derived by reading the actual components (the reader's `aria-label` verse triggers, the
+  SidePanel `<aside aria-label="Note panel">`, VerseText's `Translator's note N` markers, etc.) —
+  not guessed.
+
+### Gotchas / decisions
+- **Reader translation is profile-driven, not URL-driven** — `reader.png` (WEB headings) and
+  `translator-notes.png` (NET) select the translation via the in-reader dropdown, not a `?translation=`
+  param. NET is guarded (skip-with-warning) so a non-LAN run still produces the rest.
+- **Dynamic journey discovery** — rather than guess journey/place ids against data this environment
+  can't see, the script queries `/api/v1/journeys`, finds one with ≥2 located stops + a note, and
+  reuses its id (`journey-detail`) and a stop's `place_id` (`place-detail`). It runs **last** and
+  throws on a data gap, so the gap surfaces loudly but every other shot is already saved.
+- `reader-dark.png` toggles the theme then **restores light** (the choice persists to the profile, #60).
+- `geography-panel.png` is the same in-reader Geography side-panel as the README's `places.png`,
+  captured under the guide's filename (the names can be unified later if desired).
+
+### Producing the images (done here, against the LAN Concord)
+The LAN Concord (`192.168.1.62:8000`) **was** reachable from the dev environment after all (19
+translations incl. NET, 5 journeys, 5319 topics, Hebrew OSHB tokens, 71 NET notes on John 3). So
+the images were captured here, not deferred: build the SPA (`npm run build`), point a throwaway
+songbird at the LAN Concord (`CONCORD_BASE_URL=http://192.168.1.62:8000`, `DATA_DIR=/tmp/...`,
+`FRONTEND_DIST_DIR=…/frontend/dist`, `alembic upgrade head`, then uvicorn — the prod single-unit
+serves the SPA + API), and run the capture against it. The throwaway DB + DATA_DIR were wiped
+afterward; the LAN Concord was read-only.
+
+The committed set is exactly the **17 new + 2 refreshed** PNGs; the reused-as-is shots
+(search/keyword, the map shots, places, places-gazetteer, welcome, sermon) were `git restore`d so
+they stay byte-identical to `main`.
+
+### Fixes the live run surfaced (selectors are guesses until a real browser disagrees)
+- `reader.png` frames the **chapter top** (WEB John 3's lone heading sits at v1) with the note
+  drawer open, instead of scrolling to the noted v16.
+- `exact: true` on the verse-number triggers — `"…for verse 1"` substring-matched verses 10–18.
+- the sermon-chooser pair moved to **Romans 8:28** (Psalm 23 stays single-sermon for `sermon.png`).
+- the in-reader Geography "Euphrates" click is **scoped to the panel** — "Euphrates" also appears in
+  the verse text behind the open panel and was intercepting the click.
+- discovery picked the **Exodus** journey (15 located stops + a note); `place-detail` landed on
+  **Rameses**, one of its stops — so the "Journeys through here" section is populated.
+
+### Verified
+- The full batch ran clean end-to-end (no `⚠`); the load-bearing shots were eyeballed —
+  `reader` (heading + note), `word-study` (Hebrew **RTL** strip), `journey-detail` (Exodus route +
+  numbered markers + note callout), `translator-notes` (NET inline markers), `sermon-chooser`
+  ("Sermons · 2"), `compare` (3 columns), `place-detail` ("Journeys through here").
+- `make check` — 241 passed, 4 deselected; `make check-frontend` — 221 passed, build clean
+  (both unaffected — the script + PNGs are in neither suite).
+
+---
+
 ## Slice 2 (v1.6 Journeys) — "Journeys through here" on PlaceDetailView (frontend)
 
 - **Date:** 2026-06-09
