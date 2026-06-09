@@ -4,6 +4,43 @@ A running log of per-slice decisions, gotchas, and how each slice was verified. 
 
 ---
 
+## Slice 2 (v1.6 Journeys) — "Journeys through here" on PlaceDetailView (frontend)
+
+- **Date:** 2026-06-09
+- **Branch:** `slice/journeys-2-place-hook`
+
+### Why
+The reverse lookup that closes the journeys loop: a **"Journeys through here"** section on
+`PlaceDetailView` listing the journeys that pass through a place, each linking to its detail
+(`/journeys/:id`). Backend shipped in Slice 1a (`get_place_journeys`); frontend only here.
+**Completes the v1.6 fan-out epic** (headings, topical Bible, word study, journeys). Spec:
+`docs/v1.6/JOURNEYS-SPEC.md` §4 Slice 2.
+
+### What shipped
+- `schemas.ts`: `journeySummariesSchema = z.array(journeySummarySchema)` (reuses 1c's
+  `journeySummarySchema`). `lib/reader.ts`: `fetchPlaceJourneys(placeId) -> JourneySummary[]`
+  (bare list, the 1a route shape).
+- `routes/PlaceDetailView.tsx`: a `journeysQuery` (gated `enabled: placeQuery.isSuccess`, like
+  `versesQuery`) and a "Journeys through here" section after the verses section — pending / inline
+  error / **a clean "No journeys pass through here." line for the common empty case** / a list
+  linking each journey to `/journeys/:id`. Mirrors the verses section exactly.
+
+### Gotcha — the new query needs a default handler
+`PlaceDetailView` now fires `/places/{id}/journeys` on every render, so a global MSW default
+(`/places/:placeId/journeys` → `[]`) was added beside the place-verses default — otherwise the
+*existing* PlaceDetailView tests would hit an unhandled request.
+
+### Tests
+- `PlaceDetailView.test.tsx` (extended): a place with journeys lists them + links to
+  `/journeys/{id}`; a place with none shows the "none" line (not an error); the error state renders
+  inline. Existing place/verses tests stay green.
+
+### Verified
+- `make check-frontend` — eslint, tsc, vitest **221 passed (36 files)**, build clean.
+- `make check` — unchanged (no backend edits): 241 passed, 4 deselected.
+
+---
+
 ## Slice 1c (v1.6 Journeys) — the Journeys list surface (frontend)
 
 - **Date:** 2026-06-09
