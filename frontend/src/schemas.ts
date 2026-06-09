@@ -203,6 +203,7 @@ export const journeySummarySchema = z.object({
   dating: z.string().nullable(),
   stop_count: z.number(),
 });
+export const journeySummariesSchema = z.array(journeySummarySchema);
 
 // One page of the journeys list — `total` lets the view paginate ("Load more"). Mirrors the other
 // page-outs: no limit/offset in the body (the view tracks those itself).

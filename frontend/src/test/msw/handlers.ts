@@ -134,6 +134,9 @@ export const defaultHandlers = [
   http.get("/api/v1/places/browse", () => HttpResponse.json({ places: [], total: 0 })),
   http.get("/api/v1/place-types", () => HttpResponse.json([])),
   http.get("/api/v1/places/:placeId/verses", () => HttpResponse.json([])),
+  // Journeys through a place (v1.6 Slice 2) — most places are on no journey, so the default is
+  // empty; place-journeys tests override per-case.
+  http.get("/api/v1/places/:placeId/journeys", () => HttpResponse.json([])),
   http.get("/api/v1/places/:placeId", () => HttpResponse.json({})),
   http.get("/api/v1/semantic-search", () => HttpResponse.json([])),
   // Study notes default to empty — the public image ships none, so the Search page's "Study notes"

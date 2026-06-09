@@ -14,6 +14,7 @@ import {
   type KeywordResult,
   type SemanticResult,
   type JourneyDetail,
+  type JourneySummary,
   type JourneysPage,
   type SectionHeading,
   type SermonNote,
@@ -44,6 +45,7 @@ import {
   semanticResultsSchema,
   strongsDetailSchema,
   journeyDetailSchema,
+  journeySummariesSchema,
   journeysPageSchema,
   strongsVersesSchema,
   topicDetailSchema,
@@ -195,6 +197,12 @@ export async function fetchJourneys(limit?: number, offset?: number): Promise<Jo
   const qs = params.toString();
   const data = await apiRequest<unknown>("GET", `/journeys${qs ? `?${qs}` : ""}`);
   return journeysPageSchema.parse(data);
+}
+
+/** The journeys that pass through a place (the reverse lookup) — a bare list. */
+export async function fetchPlaceJourneys(placeId: string): Promise<JourneySummary[]> {
+  const data = await apiRequest<unknown>("GET", `/places/${encodeURIComponent(placeId)}/journeys`);
+  return journeySummariesSchema.parse(data);
 }
 
 /** Translator's notes for a whole chapter in one translation — from Concord (songbird stores
