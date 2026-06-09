@@ -27,8 +27,8 @@ capture account holds only the script's seeded demo data — no real notes leak 
 - Header rewritten: the full shot list, the LAN-Concord-with-NET requirement + how to point there,
   the throwaway-account note, and the per-shot data assumptions (named constants up top).
 - Seeding extended (idempotent check-then-POST): a **rich-text note** (bold/italics/list, on JHN 1:1)
-  for `note-editor.png`; a **second Psalm 23 sermon** so verse 1 has 2 → the chooser for
-  `sermon-chooser.png`.
+  for `note-editor.png`; **two sermons on Romans 8:28** so it shows "2 sermons" → the chooser for
+  `sermon-chooser.png` (kept off Psalm 23 so the single-sermon `sermon.png` stays single).
 - **17 new shots** + **2 refreshed**: `reader` (now WEB so section headings show), `place-detail`
   (now a place on a journey → the "Journeys through here" section); new: `note-editor`,
   `cross-references`, `topics-verse`, `topics-drill`, `topics-browse`, `topic-detail`, `word-study`
@@ -51,16 +51,36 @@ capture account holds only the script's seeded demo data — no real notes leak 
 - `geography-panel.png` is the same in-reader Geography side-panel as the README's `places.png`,
   captured under the guide's filename (the names can be unified later if desired).
 
-### Who produces the images
-The capture needs the LAN Concord, which is Kris's environment — not reachable here. So: the script
-was **written + statically verified** (`node --check`, selectors reviewed against the components,
-both gates re-run green); **Kris runs `npm run capture`** against the LAN stack and the PNGs are
-committed to the PR.
+### Producing the images (done here, against the LAN Concord)
+The LAN Concord (`192.168.1.62:8000`) **was** reachable from the dev environment after all (19
+translations incl. NET, 5 journeys, 5319 topics, Hebrew OSHB tokens, 71 NET notes on John 3). So
+the images were captured here, not deferred: build the SPA (`npm run build`), point a throwaway
+songbird at the LAN Concord (`CONCORD_BASE_URL=http://192.168.1.62:8000`, `DATA_DIR=/tmp/...`,
+`FRONTEND_DIST_DIR=…/frontend/dist`, `alembic upgrade head`, then uvicorn — the prod single-unit
+serves the SPA + API), and run the capture against it. The throwaway DB + DATA_DIR were wiped
+afterward; the LAN Concord was read-only.
+
+The committed set is exactly the **17 new + 2 refreshed** PNGs; the reused-as-is shots
+(search/keyword, the map shots, places, places-gazetteer, welcome, sermon) were `git restore`d so
+they stay byte-identical to `main`.
+
+### Fixes the live run surfaced (selectors are guesses until a real browser disagrees)
+- `reader.png` frames the **chapter top** (WEB John 3's lone heading sits at v1) with the note
+  drawer open, instead of scrolling to the noted v16.
+- `exact: true` on the verse-number triggers — `"…for verse 1"` substring-matched verses 10–18.
+- the sermon-chooser pair moved to **Romans 8:28** (Psalm 23 stays single-sermon for `sermon.png`).
+- the in-reader Geography "Euphrates" click is **scoped to the panel** — "Euphrates" also appears in
+  the verse text behind the open panel and was intercepting the click.
+- discovery picked the **Exodus** journey (15 located stops + a note); `place-detail` landed on
+  **Rameses**, one of its stops — so the "Journeys through here" section is populated.
 
 ### Verified
-- `node --check scripts/screenshots/capture.mjs` — clean.
+- The full batch ran clean end-to-end (no `⚠`); the load-bearing shots were eyeballed —
+  `reader` (heading + note), `word-study` (Hebrew **RTL** strip), `journey-detail` (Exodus route +
+  numbered markers + note callout), `translator-notes` (NET inline markers), `sermon-chooser`
+  ("Sermons · 2"), `compare` (3 columns), `place-detail` ("Journeys through here").
 - `make check` — 241 passed, 4 deselected; `make check-frontend` — 221 passed, build clean
-  (both unaffected — the script isn't in either suite).
+  (both unaffected — the script + PNGs are in neither suite).
 
 ---
 
