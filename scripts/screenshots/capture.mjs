@@ -122,19 +122,32 @@ const SERMON_NOTES = [
     event_date: "2026-05-18",
     tags: ["comfort", "trust"],
   },
-  // A SECOND sermon on Psalm 23 (a verse legitimately carries many) so verse 1 shows "2 sermons"
-  // and tapping the marker opens the chooser — the subject of sermon-chooser.png.
+  // TWO sermons on Romans 8:28 (a verse legitimately carries many) so it shows "2 sermons" and
+  // tapping the marker opens the chooser — the subject of sermon-chooser.png. Kept off Psalm 23 so
+  // the single-sermon sermon.png stays a single sermon.
   {
-    title: "Through the Valley",
+    title: "In All Things, Good",
     sermon_url: "https://www.youtube.com/watch?v=Qm2tHFiYrU0",
-    reference: "Psalm 23",
-    book_usfm: "PSA",
-    start_chapter: 23,
-    start_verse: 1,
-    end_chapter: 23,
-    end_verse: 6,
-    event_date: "2026-05-25",
-    tags: ["comfort", "grief"],
+    reference: "Romans 8:28",
+    book_usfm: "ROM",
+    start_chapter: 8,
+    start_verse: 28,
+    end_chapter: 8,
+    end_verse: 28,
+    event_date: "2026-04-20",
+    tags: ["providence", "hope"],
+  },
+  {
+    title: "The Golden Chain",
+    sermon_url: "https://www.youtube.com/watch?v=ON9bop1Lcc0",
+    reference: "Romans 8:28",
+    book_usfm: "ROM",
+    start_chapter: 8,
+    start_verse: 28,
+    end_chapter: 8,
+    end_verse: 28,
+    event_date: "2026-04-27",
+    tags: ["providence", "assurance"],
   },
 ];
 
@@ -257,15 +270,18 @@ async function captureReader(page) {
         "⚠ no section heading found — does this translation/chapter ship them?",
       ),
     );
-  await page.locator(`#v-${READER_VERSE}`).scrollIntoViewIfNeeded();
-  // …then open the seeded note → the right-hand drawer shows it richly rendered.
+  // Open the seeded note → the right-hand drawer shows it richly rendered. The note button lives on
+  // verse 16's row (Playwright auto-scrolls to click it).
   await page
-    .getByRole("button", { name: `View note on verse ${READER_VERSE}` })
+    .getByRole("button", { name: `View note on verse ${READER_VERSE}`, exact: true })
     .click();
   await page
     .getByRole("button", { name: "Save" })
     .waitFor({ state: "visible" });
-  await page.locator(`#v-${READER_VERSE}`).scrollIntoViewIfNeeded();
+  // The drawer is fixed on the right (stays open regardless of scroll), so scroll the reading column
+  // back to the chapter top — where the section heading sits — so the shot frames the heading AND
+  // the open note drawer together (verse 16 is too far below the lone top heading to share a frame).
+  await page.evaluate(() => window.scrollTo(0, 0));
   await page.waitForTimeout(600);
   await page.screenshot({ path: `${OUT}/reader.png` });
   console.log("✓ reader.png");
@@ -338,12 +354,12 @@ async function capturePlaces(page) {
     waitUntil: "networkidle",
   });
   await page.getByRole("button", { name: "Places in this chapter" }).click();
-  // Wait for the place list, then expand the Euphrates row to reveal its verse chips.
-  await page
-    .getByText("Euphrates")
-    .first()
-    .waitFor({ state: "visible", timeout: 15000 });
-  await page.getByText("Euphrates").first().click();
+  // Wait for the place list, then expand the Euphrates row to reveal its verse chips. Scope to the
+  // panel (<aside aria-label="Note panel">) — "Euphrates" also appears in the verse text, which sits
+  // behind the open panel and would intercept the click.
+  const panel = page.getByRole("complementary", { name: "Note panel" });
+  await panel.getByText("Euphrates").first().waitFor({ state: "visible", timeout: 15000 });
+  await panel.getByText("Euphrates").first().click();
   await page.waitForTimeout(800);
   await page.screenshot({ path: `${OUT}/places.png` });
   console.log("✓ places.png");
@@ -413,7 +429,7 @@ async function captureNoteEditor(page) {
     waitUntil: "networkidle",
   });
   await page.locator("#v-1").scrollIntoViewIfNeeded();
-  await page.getByRole("button", { name: "View note on verse 1" }).click();
+  await page.getByRole("button", { name: "View note on verse 1", exact: true }).click();
   await page
     .getByRole("button", { name: "Save" })
     .waitFor({ state: "visible" });
@@ -427,7 +443,7 @@ async function captureNoteEditor(page) {
 // on this), so no real hover is needed.
 async function openVersePanel(page, triggerName, headingRe) {
   await page.locator(`#v-${READER_VERSE}`).scrollIntoViewIfNeeded();
-  await page.getByRole("button", { name: triggerName }).click();
+  await page.getByRole("button", { name: triggerName, exact: true }).click();
   await page
     .getByRole("heading", { name: headingRe })
     .waitFor({ state: "visible", timeout: 15000 });
@@ -506,7 +522,7 @@ async function captureWordStudy(page) {
   });
   await page.locator(`#v-${OT_VERSE}`).scrollIntoViewIfNeeded();
   await page
-    .getByRole("button", { name: `Original language for verse ${OT_VERSE}` })
+    .getByRole("button", { name: `Original language for verse ${OT_VERSE}`, exact: true })
     .click();
   await page
     .getByRole("heading", { name: /Original language —/ })
@@ -541,11 +557,10 @@ async function captureGeographyPanel(page) {
     waitUntil: "networkidle",
   });
   await page.getByRole("button", { name: "Places in this chapter" }).click();
-  await page
-    .getByText("Euphrates")
-    .first()
-    .waitFor({ state: "visible", timeout: 15000 });
-  await page.getByText("Euphrates").first().click();
+  // Scope to the panel — "Euphrates" also appears in the verse text behind it.
+  const panel = page.getByRole("complementary", { name: "Note panel" });
+  await panel.getByText("Euphrates").first().waitFor({ state: "visible", timeout: 15000 });
+  await panel.getByText("Euphrates").first().click();
   await page.waitForTimeout(800);
   await page.screenshot({ path: `${OUT}/geography-panel.png` });
   console.log("✓ geography-panel.png");
@@ -666,13 +681,17 @@ async function captureTranslatorNotes(page) {
   console.log("✓ translator-notes.png");
 }
 
-// The sermon chooser: a verse with 2+ sermons (the seeded Psalm 23 pair) shows a chooser popover
+// The sermon chooser: a verse with 2+ sermons (the seeded Romans 8:28 pair) shows a chooser popover
 // when its ▶ marker is tapped.
 async function captureSermonChooser(page) {
-  await page.goto(`${BASE}/read?book=PSA&chapter=23`, {
+  await page.goto(`${BASE}/read?book=ROM&chapter=8`, {
     waitUntil: "networkidle",
   });
-  const marker = page.getByRole("button", { name: "2 sermons on verse 1" });
+  const marker = page.getByRole("button", {
+    name: "2 sermons on verse 28",
+    exact: true,
+  });
+  await marker.scrollIntoViewIfNeeded();
   await marker.waitFor({ state: "visible", timeout: 15000 });
   await marker.click();
   await page
