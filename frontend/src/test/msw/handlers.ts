@@ -39,7 +39,7 @@ export const defaultHandlers = [
   http.get("/healthz", () =>
     HttpResponse.json({
       status: "ok",
-      version: "0.1.0",
+      version: "1.6.0",
       concord: {
         base_url: "http://localhost:8000",
         reachable: true,

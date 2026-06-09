@@ -1,6 +1,6 @@
 [project]
 name = "songbird-backend"
-version = "0.1.0"
+version = "1.6.0"
 description = "songbird backend — a FastAPI app for annotating Scripture, a client of Concord."
 requires-python = ">=3.12"
 
