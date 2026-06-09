@@ -4,6 +4,62 @@ A running log of per-slice decisions, gotchas, and how each slice was verified. 
 
 ---
 
+## Slice 1 (v1.6) — Section headings in the reader
+
+- **Date:** 2026-06-08
+- **Branch:** `slice/1-section-headings` (combined backend+frontend PR)
+
+### Why
+Print/study Bibles break a chapter into titled passages ("The Creation", "The Beatitudes").
+songbird's reader showed an unbroken run of verses, so passage boundaries were invisible. This
+slice renders Concord's section headings inline — block `<h3>` above the verse each anchors —
+so a chapter is scannable. Headings are Concord-owned editorial data (now reachable via the
+v1.2.0 pin from **Slice 0**, the shared v1.6 epic prerequisite); songbird stores none. Spec:
+`docs/v1.6/HEADINGS-SPEC.md` (committed in this PR — it is the feature this slice ships).
+
+### Shape — the notes pass-through, with one deliberate divergence
+The whole backend + the fetch layer are a verbatim mirror of translator's notes
+(`api/notes.py` / `get_notes` / `fetchNotes`). The **one divergence**: headings show **NO
+banner** on error or empty — a heading-less chapter is the normal state for most translations,
+so a notice would be noise (notes *do* banner a genuine outage). On error or empty the reader
+simply renders no headings.
+
+### What shipped
+- **Backend** — `concord/schemas.py`: `SectionHeading` + `HeadingsResponse`. `concord/client.py`:
+  `get_headings` (mirrors `get_notes` error mapping: Concord 400/404 → `ConcordNotFoundError`,
+  any other HTTP error → `ConcordUnreachableError`; empty-but-known is a normal 200).
+  `api/schemas.py`: the API-layer `SectionHeading` (the deliberate hand-mirror between the two
+  schema modules is kept, not collapsed). `api/headings.py` (new): `GET
+  /headings/{translation}/{book}/{chapter}` → `list[SectionHeading]`, mounted in `main.py`
+  beside `notes_router`.
+- **Frontend** — `schemas.ts`: `sectionHeadingSchema` + `SectionHeading` type. `lib/reader.ts`:
+  `fetchHeadings`. `ReaderView.tsx`: a `headingsQuery` (no `unreachable` flag), a
+  `headingsByBeforeVerse` memo (`Map<before_verse, SectionHeading[]>`, each bucket sorted by
+  `ordinal`), and the render — inside the verses `.map()`, the `<p>` is wrapped in a
+  `<Fragment key={v.verse}>` and the chapter's matching headings render as `<h3>` *before* the
+  verse row (above the blue verse-number button + text). A heading whose `before_verse` matches
+  no verse is dropped (pure verse-number match, like notes).
+- **Style** — `<h3>` is a third visual layer: `mt-6 mb-2 font-sans text-sm font-semibold
+  uppercase tracking-wide text-gray-500` — quieter/smaller than the chapter `<h2>` title,
+  distinct from the blue verse-number and violet note-marker superscripts.
+
+### Tests
+- Backend `headings_test.py` (cloned from `notes_test.py`): ordered pass-through; known-but-empty
+  → `200 []`; default-unset → `200 []`; unknown → `404 NOT_FOUND`; unreachable → `502`.
+  `FakeConcordClient` gains `get_headings`.
+- Contract: added `("GET", "/v1/translations/{}/headings/{}/{}")` to `_REQUIRED_ENDPOINTS` (the
+  v1.2.0 fixture from Slice 0 already carries the path; the version assert is unchanged).
+- Frontend `ReaderView.test.tsx` + an MSW default handler: a heading renders as an `<h3>` before
+  its `before_verse` verse; two before one verse render in `ordinal` order (supplied out of
+  order → the memo sorts); a no-headings chapter renders unchanged with no `<h3>` and **no
+  banner**; a headings fetch error (502) → verses render, no `<h3>`, **no banner**.
+
+### Verified
+- `make check` — ruff/format/pyright + pytest: **204 passed, 4 deselected**.
+- `make check-frontend` — eslint, tsc, vitest **180 passed (28 files)**, build clean.
+
+---
+
 ## Slice 0 (v1.6) — Concord pin → v1.2.0 (shared epic prerequisite)
 
 - **Date:** 2026-06-08
