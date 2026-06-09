@@ -4,6 +4,54 @@ A running log of per-slice decisions, gotchas, and how each slice was verified. 
 
 ---
 
+## Slice 2b (v1.6 Topical Bible) — Topics browse surface (frontend)
+
+- **Date:** 2026-06-08
+- **Branch:** `slice/topics-2b-frontend`
+
+### Why
+The Topics top-nav surface on Slice 2a's data layer (PR #100): a gazetteer of Concord's curated
+topical index — search + section filter + pagination → a topic → its verses → jump to read.
+Frontend only. Spec: `docs/v1.6/TOPICS-SPEC.md` §4 Slice 2 (frontend), §7 Slice 2b.
+
+### Shape — clone the Places gazetteer (two routes)
+Mirrors the places browse pattern exactly: `TopicsView` (`/topics`, `useInfiniteQuery` +
+"Load more" off `total`, rows link to the detail) and `TopicDetailView` (`/topics/:id`, header +
+verses), wired in `App.tsx` beside the `/places` pair. **Decision (Kris):** the detail is a
+**separate `/topics/:id` route** (mirrors `/places/:id`), not inline — so detail URLs are
+bookmarkable and `see_also` is a plain `<Link>`.
+
+### What shipped
+- `schemas.ts`: `topicsPageSchema` (`{topics, total}`, mirrors `placesPageSchema` — no
+  limit/offset in the body) + `topicDetailSchema` (`topicSummarySchema.extend({ verse_count })`).
+  `lib/reader.ts`: `fetchTopics(filters)` (modeled on `browsePlaces`) + `fetchTopic(id)`.
+- **`TopicVerseList` extracted** (`components/TopicVerseList.tsx`, props `{ topicId, translation,
+  onJump }`): the verse query+rows, now shared by `VerseTopics`'s level-2 drill-in (reader panel)
+  and `TopicDetailView` (browse). VerseTopics keeps the "← Topics" back button + name heading and
+  delegates the list; its existing tests stayed green.
+- `TopicsView`: debounced search (`q`) + a **free-text Section input** (Concord exposes no
+  section vocabulary, so it's a text filter, not a derived select — the deliberate divergence from
+  PlacesView's `type` select); list rows show name + section (no counts — detail-only). Errors
+  **surface** (primary content), like PlacesView.
+- `TopicDetailView`: header (name, section, verse_count) + `TopicVerseList`; `translation =
+  user?.last_translation ?? "KJV"`; a verse jump routes to `/read?...`. **`see_also` is
+  first-class:** a redirect topic renders "→ See {target}" linking to `/topics/{target}` instead of
+  a verse list. 404 → "That topic doesn't exist."
+- `TopNav`: Topics entry between Search and Places. MSW: a `/topics` browse default.
+
+### Tests
+- `TopicsView.test.tsx`: rows link to `/topics/{id}`; `q`/`section` reach the request; "Load more"
+  pages off `total` and appends; error surfaces (502 → inline message).
+- `TopicDetailView.test.tsx`: header + verses; a verse jumps to `/read?...` (location probe); a
+  `see_also` topic renders the redirect link and no verse list; 404 → not-found.
+- `VerseTopics.test.tsx` unchanged and green after the `TopicVerseList` extraction.
+
+### Verified
+- `make check-frontend` — eslint, tsc, vitest **196 passed (31 files)**, build clean.
+- `make check` — unchanged (no backend edits): 220 passed, 4 deselected.
+
+---
+
 ## Slice 2a (v1.6 Topical Bible) — topics browse data layer (backend)
 
 - **Date:** 2026-06-08

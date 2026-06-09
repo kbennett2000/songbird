@@ -111,6 +111,9 @@ export const defaultHandlers = [
   // tests override per-case via server.use().
   http.get("/api/v1/verse-topics/:book/:chapter/:verse", () => HttpResponse.json([])),
   http.get("/api/v1/topics/:topicId/verses", () => HttpResponse.json([])),
+  // Topics browse default (Slice 2b) — the TopicsView list; browse-specific tests override
+  // per-case. (No /topics/{id} detail default: TopicDetailView is test-only and sets its own.)
+  http.get("/api/v1/topics", () => HttpResponse.json({ topics: [], total: 0 })),
   // Notes default to empty — most translations (and the public image) ship none, so the reader
   // shows no markers; notes-specific tests override per-case via server.use().
   http.get("/api/v1/notes/:translation/:book/:chapter", () => HttpResponse.json([])),

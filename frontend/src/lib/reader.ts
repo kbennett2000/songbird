@@ -16,6 +16,8 @@ import {
   type SectionHeading,
   type SermonNote,
   type StudyNoteResult,
+  type TopicDetail,
+  type TopicsPage,
   type TopicSummary,
   type TopicVerse,
   type Translation,
@@ -35,7 +37,9 @@ import {
   keywordResultsSchema,
   sectionHeadingsSchema,
   semanticResultsSchema,
+  topicDetailSchema,
   topicSummariesSchema,
+  topicsPageSchema,
   topicVersesSchema,
   sermonNoteSchema,
   studyNoteResultsSchema,
@@ -103,6 +107,31 @@ export async function fetchTopicVerses(
     `/topics/${encodeURIComponent(topicId)}/verses${qs ? `?${qs}` : ""}`,
   );
   return topicVersesSchema.parse(data);
+}
+
+export interface TopicFilters {
+  q?: string;
+  section?: string;
+  limit?: number;
+  offset?: number;
+}
+
+/** One page of the topical-index browse — filter by name (`q`) / section, paginated
+ * (`{ topics, total }`). Modeled on browsePlaces. */
+export async function fetchTopics(filters: TopicFilters = {}): Promise<TopicsPage> {
+  const params = new URLSearchParams();
+  if (filters.q) params.set("q", filters.q);
+  if (filters.section) params.set("section", filters.section);
+  params.set("limit", String(filters.limit ?? 50));
+  params.set("offset", String(filters.offset ?? 0));
+  const data = await apiRequest<unknown>("GET", `/topics?${params.toString()}`);
+  return topicsPageSchema.parse(data);
+}
+
+/** A single topic's full record (name, section, see_also, verse_count). */
+export async function fetchTopic(topicId: string): Promise<TopicDetail> {
+  const data = await apiRequest<unknown>("GET", `/topics/${encodeURIComponent(topicId)}`);
+  return topicDetailSchema.parse(data);
 }
 
 /** Translator's notes for a whole chapter in one translation — from Concord (songbird stores

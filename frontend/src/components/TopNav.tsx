@@ -19,6 +19,7 @@ const LINKS = [
   { to: "/read", label: "Reader" },
   { to: "/browse", label: "Browse notes" },
   { to: "/search", label: "Search" },
+  { to: "/topics", label: "Topics" },
   { to: "/places", label: "Places" },
 ] as const;
 
@@ -55,7 +56,9 @@ export function TopNav({
                 key={l.label}
                 to={l.to}
                 className={`text-sm hover:underline ${
-                  active ? "font-semibold text-blue-800 dark:text-blue-300" : "text-blue-700 dark:text-blue-400"
+                  active
+                    ? "font-semibold text-blue-800 dark:text-blue-300"
+                    : "text-blue-700 dark:text-blue-400"
                 }`}
               >
                 {l.label}

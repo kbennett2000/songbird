@@ -1,7 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 
-import { fetchTopicVerses, fetchVerseTopics } from "@/lib/reader";
+import { TopicVerseList } from "@/components/TopicVerseList";
+import { fetchVerseTopics } from "@/lib/reader";
 import type { TopicSummary } from "@/schemas";
 
 interface VerseTopicsProps {
@@ -26,13 +27,25 @@ export function VerseTopics({
   const [selectedTopic, setSelectedTopic] = useState<TopicSummary | null>(null);
 
   if (selectedTopic) {
+    // A `see_also` topic is a redirect — drill into its target's verses.
     return (
-      <TopicVerseList
-        topic={selectedTopic}
-        translation={translation}
-        onBack={() => setSelectedTopic(null)}
-        onJump={onJump}
-      />
+      <div className="flex flex-col gap-3">
+        <div>
+          <button
+            type="button"
+            className="text-sm text-blue-700 dark:text-blue-400 hover:underline"
+            onClick={() => setSelectedTopic(null)}
+          >
+            ← Topics
+          </button>
+          <h3 className="mt-1 font-semibold">{selectedTopic.name}</h3>
+        </div>
+        <TopicVerseList
+          topicId={selectedTopic.see_also ?? selectedTopic.id}
+          translation={translation}
+          onJump={onJump}
+        />
+      </div>
     );
   }
 
@@ -84,74 +97,5 @@ function TopicList({
         </li>
       ))}
     </ul>
-  );
-}
-
-/** Level 2 — the verses curated under the chosen topic. A `see_also` topic is a redirect, so
- * resolve to its target's verses. */
-function TopicVerseList({
-  topic,
-  translation,
-  onBack,
-  onJump,
-}: {
-  topic: TopicSummary;
-  translation: string;
-  onBack: () => void;
-  onJump: (book: string, chapter: number, verse: number) => void;
-}): JSX.Element {
-  const topicId = topic.see_also ?? topic.id;
-  const query = useQuery({
-    queryKey: ["topic-verses", topicId, translation],
-    queryFn: () => fetchTopicVerses(topicId, translation),
-  });
-
-  return (
-    <div className="flex flex-col gap-3">
-      <div>
-        <button
-          type="button"
-          className="text-sm text-blue-700 dark:text-blue-400 hover:underline"
-          onClick={onBack}
-        >
-          ← Topics
-        </button>
-        <h3 className="mt-1 font-semibold">{topic.name}</h3>
-      </div>
-
-      {query.isPending && (
-        <p className="text-sm text-gray-500 dark:text-gray-400">Loading verses…</p>
-      )}
-      {query.isError && (
-        <p className="text-sm text-red-600 dark:text-red-400">
-          Couldn&rsquo;t load (is Concord reachable?).
-        </p>
-      )}
-      {query.data && query.data.length === 0 && (
-        <p className="text-sm text-gray-500 dark:text-gray-400">No verses for this topic.</p>
-      )}
-      {query.data && query.data.length > 0 && (
-        <ul className="flex flex-col gap-2">
-          {query.data.map((v) => (
-            <li key={`${v.book}-${v.chapter}-${v.verse}`}>
-              <button
-                type="button"
-                className="w-full rounded border border-gray-200 dark:border-gray-700 p-2 text-left hover:bg-gray-50 dark:hover:bg-gray-700"
-                onClick={() => onJump(v.book, v.chapter, v.verse)}
-              >
-                <span className="block font-medium text-blue-700 dark:text-blue-400">
-                  {v.reference}
-                </span>
-                {v.text && (
-                  <span className="mt-0.5 block text-sm text-gray-600 dark:text-gray-300">
-                    {v.text}
-                  </span>
-                )}
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
   );
 }
