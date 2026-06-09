@@ -195,6 +195,32 @@ export const strongsDetailSchema = z.object({
 export const strongsVerseSchema = topicVerseSchema;
 export const strongsVersesSchema = z.array(strongsVerseSchema);
 
+// Journeys (from Concord's curated routes). One ordered stop of a journey, resolved to its place.
+// coords/confidence/status are null when the place has no confident location (honesty model) — such
+// a stop is listed but not mapped; `reference` is the optional scripture citation for the leg.
+export const journeyStopSchema = z.object({
+  ordinal: z.number(),
+  place_id: z.string(),
+  name: z.string().nullable(),
+  friendly_id: z.string().nullable(),
+  latitude: z.number().nullable(),
+  longitude: z.number().nullable(),
+  confidence: z.string().nullable(),
+  status: z.string().nullable(),
+  reference: z.string().nullable(),
+});
+
+// A single journey's full detail: metadata + `source` + the one-reconstruction `note` + stops.
+export const journeyDetailSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  scripture: z.string(),
+  dating: z.string().nullable(),
+  source: z.string(),
+  note: z.string(),
+  stops: z.array(journeyStopSchema),
+});
+
 // A translator's note (from Concord) — NET's tn/sn/tc/map footnotes. Translation-specific:
 // `char_offset` is a point anchor into THAT translation's verse text where the marker attaches.
 // The note's cross-refs are canonical → tapping one reuses the reader's coordinate navigation.
@@ -287,6 +313,8 @@ export type WordToken = z.infer<typeof wordTokenSchema>;
 export type VerseWords = z.infer<typeof verseWordsSchema>;
 export type StrongsDetail = z.infer<typeof strongsDetailSchema>;
 export type StrongsVerse = z.infer<typeof strongsVerseSchema>;
+export type JourneyStop = z.infer<typeof journeyStopSchema>;
+export type JourneyDetail = z.infer<typeof journeyDetailSchema>;
 export type NoteCrossReference = z.infer<typeof noteCrossReferenceSchema>;
 export type TranslatorNote = z.infer<typeof translatorNoteSchema>;
 export type SectionHeading = z.infer<typeof sectionHeadingSchema>;

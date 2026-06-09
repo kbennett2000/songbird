@@ -4,6 +4,60 @@ A running log of per-slice decisions, gotchas, and how each slice was verified. 
 
 ---
 
+## Slice 1b (v1.6 Journeys) — the route map + journey detail (frontend)
+
+- **Date:** 2026-06-09
+- **Branch:** `slice/journeys-1b-map`
+
+### Why
+The journey detail at `/journeys/:id` on Slice 1a's proxy (PR #104) — and the **one genuinely new
+capability in the v1.6 epic: drawing an ordered route on the map.** `MapView` clusters a chapter's
+markers and draws no polyline, so this is a **new component on the shared base-map plumbing**, not
+a MapView variant. Frontend only; the Journeys list + TopNav (1c) and the PlaceDetailView hook (2)
+are later slices (`/journeys/:id` is reachable by URL; 1c adds the nav). Spec:
+`docs/v1.6/JOURNEYS-SPEC.md` §4 Slice 1b, §7.
+
+### The three honesty requirements (load-bearing — songbird's side of Concord's anti-tar-pit scoping)
+1. **The `note` is a prominent callout** — a styled amber box near the map (`role="note"`), not a footnote.
+2. **Unlocated stops are listed but never mapped** — the pure geometry filters them out; no guessed pins.
+3. **confidence/status are shown** — reuse `PlaceHonesty`'s `StatusBadge` + a "Location unknown" affordance.
+
+### What shipped
+- `schemas.ts`: `journeyStopSchema` (coord/confidence/status/name/reference nullable — matches 1a)
+  + `journeyDetailSchema`. `lib/reader.ts`: `fetchJourney` (the list/place-journeys fetchers are
+  deferred to 1c/2 — only what 1b uses).
+- **`lib/map/journey.ts`** (pure, the load-bearing logic; mirrors `places.ts`): `stopsToRoute(stops)`
+  → `{ route: [lng,lat][], markers }` — filters unlocated stops from **both**, orders by `ordinal`.
+  `lib/map/bounds.ts`: added `boundsForCoords` (the route companion to `boundsForPlaces`).
+- **`components/JourneyMap.tsx`** (thin GL glue): reuses MapView's base-map setup (`ensurePmtiles`,
+  `buildStyle`, config bounds, basemap-error notice, cleanup); adds a GL **line layer** from the
+  route + numbered clickable DOM markers; **no clustering, no place fetch**. A marker → its stop's
+  reference (when present) via `onJump`.
+- **`routes/JourneyDetailView.tsx`** (clones the PlaceDetailView shape): metadata (dating shown when
+  present) + the note callout + `JourneyMap` + the ordered stop list (located **and** unlocated,
+  honesty via `StatusBadge`). `App.tsx`: `/journeys/:id` route.
+
+### The jump (Kris's call: resolve-then-navigate)
+A `JourneyStop` carries only a human `reference` string, and `/read` takes canonical coords. So the
+jump mirrors ReaderView's `resolveMutation`: `resolveReference(reference)` → `navigate("/read?book=
+&chapter=&verse=")`. `onJump: (reference: string) => void` is threaded into `JourneyMap` and the
+stop list; a failed resolve shows an inline note. No ReaderView change.
+
+### Tests
+- `journey.test.ts` (the geometry — the real tests): unlocated filtered from route + markers;
+  ordinal ordering (out-of-order input); `[lng,lat]` pairs; all-unlocated → empty.
+- `JourneyMap.test.tsx` (FakeMap/FakeMarker harness, no WebGL): route source fed the filtered/ordered
+  coords; one marker per located stop; a marker click with a reference → `onJump`.
+- `JourneyDetailView.test.tsx`: metadata + **the note callout** + ordered stop list; a reference
+  jumps (resolve → navigate, routed Probe); confidence/status render; unlocated stop listed;
+  `dating=null`/null-reference tolerated; 404 + inline error.
+
+### Verified
+- `make check-frontend` — eslint, tsc, vitest **215 passed (35 files)**, build clean.
+- `make check` — unchanged (no backend edits): 241 passed, 4 deselected.
+
+---
+
 ## Slice 1a (v1.6 Journeys) — list + detail + place-reverse-lookup proxy (backend)
 
 - **Date:** 2026-06-09
