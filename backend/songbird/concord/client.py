@@ -26,9 +26,11 @@ from songbird.concord.schemas import (
     PlaceVersesResponse,
     RandomVerse,
     SemanticSearchResponse,
+    TopicVersesResponse,
     Translation,
     TranslationsResponse,
     VersePlacesResponse,
+    VerseTopicsResponse,
 )
 
 # Keyword search can be slow on a cold Concord — multi-translation FTS over the whole corpus, and
@@ -210,6 +212,49 @@ class ConcordClient:
         except httpx.HTTPError as exc:
             raise ConcordUnreachableError(self._base_url, exc) from exc
         return CrossRefResponse.model_validate(response.json())
+
+    async def get_verse_topics(self, book: str, chapter: int, verse: int) -> VerseTopicsResponse:
+        """The topics a verse appears under, from Concord's curated topical index (songbird owns
+        none). No `include_text` — topics are just id/name/section. A 400/404 (bad/unknown
+        reference) is a not-found, not unreachability."""
+        ref = f"{book} {chapter}:{verse}"
+        try:
+            response = await self._client.get(f"/v1/verses/{quote(ref, safe='')}/topics")
+            response.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code in (400, 404):
+                raise ConcordNotFoundError(f"Concord could not resolve '{ref}'") from exc
+            raise ConcordUnreachableError(self._base_url, exc) from exc
+        except httpx.HTTPError as exc:
+            raise ConcordUnreachableError(self._base_url, exc) from exc
+        return VerseTopicsResponse.model_validate(response.json())
+
+    async def get_topic_verses(
+        self, topic_id: str, translation: str | None = None, limit: int = 50, offset: int = 0
+    ) -> TopicVersesResponse:
+        """The verses curated under a topic, from Concord (songbird owns no topic data).
+        `include_text=true` returns the verse snippets in the same call (with `translation` when
+        given), so the drill-in can show verse text. A 400/404 (unknown topic) is a not-found,
+        not unreachability."""
+        params: dict[str, str] = {
+            "include_text": "true",
+            "limit": str(limit),
+            "offset": str(offset),
+        }
+        if translation:
+            params["translation"] = translation
+        try:
+            response = await self._client.get(
+                f"/v1/topics/{quote(topic_id, safe='')}/verses", params=params
+            )
+            response.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code in (400, 404):
+                raise ConcordNotFoundError(f"Concord has no topic '{topic_id}'") from exc
+            raise ConcordUnreachableError(self._base_url, exc) from exc
+        except httpx.HTTPError as exc:
+            raise ConcordUnreachableError(self._base_url, exc) from exc
+        return TopicVersesResponse.model_validate(response.json())
 
     async def get_places(self, book: str, chapter: int) -> VersePlacesResponse:
         """Places named in a chapter, from Concord (songbird owns no place data). Carries the

@@ -4,6 +4,52 @@ A running log of per-slice decisions, gotchas, and how each slice was verified. 
 
 ---
 
+## Slice 1a (v1.6 Topical Bible) — verse-topics + topic-verses proxy (backend)
+
+- **Date:** 2026-06-08
+- **Branch:** `slice/topics-1a-backend`
+
+### Why
+"What does Scripture say about *X*" is the study entry point songbird lacked. Concord v1.2.0
+ships a ~5,300-topic curated index; this is the **backend half** of the reader-side reverse
+lookup — two proxy routes that pass Concord's topic data through verbatim (songbird owns none).
+Pure songbird, **no new infra gate**: the v1.2.0 pin already landed (epic Slice 0, PR #96). The
+reader panel is Slice 1b. Spec: `docs/v1.6/TOPICS-SPEC.md` (committed in this PR — the first
+topics slice carries the feature spec, as headings did).
+
+### Shape — the cross-references proxy
+Mirrors `get_cross_references` / the `read.py` cross-references route exactly. The **songbird
+routes take path segments** (`/verse-topics/{book}/{chapter}/{verse}`, `/topics/{id}/verses`);
+the **client** builds and quotes the Concord `"{book} {chapter}:{verse}"` ref. A bad/unknown
+ref or topic id → `404 NOT_FOUND`; any other HTTP error → `502 CONCORD_UNREACHABLE`.
+
+### What shipped (backend only)
+- `concord/client.py`: `get_verse_topics(book, chapter, verse)` (no `include_text` — topics
+  carry no text) and `get_topic_verses(topic_id, translation=None, limit=50, offset=0)`
+  (`include_text=true` + `translation` when given, so the drill-in can show verse text).
+- `concord/schemas.py`: `TopicSummary` (`id, name, section, see_also`), `VerseTopicsResponse`,
+  `TopicVerse` (`book, chapter, verse, reference, text`), `TopicVersesResponse`. Field
+  nullability matches Concord's source (`see_also`, `text`, `translation` all nullable).
+- `api/topics.py` (new): `GET /verse-topics/{book}/{chapter}/{verse}` → `list[TopicSummary]`;
+  `GET /topics/{topic_id}/verses?translation=&limit=&offset=` → `list[TopicVerse]`. Mounted in
+  `main.py` beside the others. `api/schemas.py`: the API-layer `TopicSummary` + `TopicVerse`
+  (the deliberate hand-mirror between the two schema modules is **kept**, not collapsed).
+
+### Tests
+- `topics_test.py`: verse-topics passthrough (incl. a `see_also` redirect row defensively);
+  empty/default → `200 []`; unknown ref → `404`; unreachable → `502`. topic-verses passthrough
+  (with and without `translation`); unknown topic → `404`; unreachable → `502`.
+  `FakeConcordClient` gains `get_verse_topics` + `get_topic_verses`.
+- Contract: added `("GET", "/v1/verses/{}/topics")` and `("GET", "/v1/topics/{}/verses")` to
+  `_REQUIRED_ENDPOINTS` (the v1.2.0 fixture from Slice 0 already carries both paths; version
+  assert unchanged).
+
+### Verified
+- `make check` — ruff/format/pyright + pytest: **213 passed, 4 deselected**.
+- `make check-frontend` — unchanged (no frontend edits this slice), green.
+
+---
+
 ## Slice 1 (v1.6) — Section headings in the reader
 
 - **Date:** 2026-06-08
