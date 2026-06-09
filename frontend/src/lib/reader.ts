@@ -16,6 +16,8 @@ import {
   type SectionHeading,
   type SermonNote,
   type StudyNoteResult,
+  type TopicSummary,
+  type TopicVerse,
   type Translation,
   type TranslatorNote,
   annotationSchema,
@@ -33,6 +35,8 @@ import {
   keywordResultsSchema,
   sectionHeadingsSchema,
   semanticResultsSchema,
+  topicSummariesSchema,
+  topicVersesSchema,
   sermonNoteSchema,
   studyNoteResultsSchema,
   sermonNotesListSchema,
@@ -70,6 +74,35 @@ export async function fetchCrossReferences(
     `/cross-references/${book}/${chapter}/${verse}${qs}`,
   );
   return crossReferencesSchema.parse(data);
+}
+
+/** The topics a verse appears under (Concord's reverse lookup) — songbird stores none. */
+export async function fetchVerseTopics(
+  book: string,
+  chapter: number,
+  verse: number,
+): Promise<TopicSummary[]> {
+  const data = await apiRequest<unknown>("GET", `/verse-topics/${book}/${chapter}/${verse}`);
+  return topicSummariesSchema.parse(data);
+}
+
+/** The verses curated under a topic (with text in the read translation) — from Concord. */
+export async function fetchTopicVerses(
+  topicId: string,
+  translation: string,
+  limit?: number,
+  offset?: number,
+): Promise<TopicVerse[]> {
+  const params = new URLSearchParams();
+  if (translation) params.set("translation", translation);
+  if (limit !== undefined) params.set("limit", String(limit));
+  if (offset !== undefined) params.set("offset", String(offset));
+  const qs = params.toString();
+  const data = await apiRequest<unknown>(
+    "GET",
+    `/topics/${encodeURIComponent(topicId)}/verses${qs ? `?${qs}` : ""}`,
+  );
+  return topicVersesSchema.parse(data);
 }
 
 /** Translator's notes for a whole chapter in one translation — from Concord (songbird stores

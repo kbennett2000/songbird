@@ -24,6 +24,7 @@ import { SidePanel } from "@/components/SidePanel";
 import { TagInput } from "@/components/TagInput";
 import { TopNav } from "@/components/TopNav";
 import { VerseText } from "@/components/VerseText";
+import { VerseTopics } from "@/components/VerseTopics";
 import { useAuth } from "@/hooks/useAuth";
 
 // Lazy-loaded: the map pulls in MapLibre (~300 KB gz), only needed when the map modal opens.
@@ -88,6 +89,13 @@ interface XrefView {
   reference: string;
 }
 
+interface TopicsView {
+  book: string;
+  chapter: number;
+  verse: number;
+  reference: string;
+}
+
 export function ReaderView(): JSX.Element {
   const queryClient = useQueryClient();
   const { user } = useAuth();
@@ -105,6 +113,7 @@ export function ReaderView(): JSX.Element {
   );
   const [editing, setEditing] = useState<Editing | null>(null);
   const [xref, setXref] = useState<XrefView | null>(null);
+  const [topics, setTopics] = useState<TopicsView | null>(null);
   const [geo, setGeo] = useState(false);
   const [map, setMap] = useState(false);
   // The translator's note whose popover is open, with the marker it's anchored to.
@@ -255,6 +264,7 @@ export function ReaderView(): JSX.Element {
     setResolveError(null);
     setEditing(null);
     setXref(null);
+    setTopics(null);
     setGeo(false);
     setMap(false);
     setOpenNote(null);
@@ -407,6 +417,7 @@ export function ReaderView(): JSX.Element {
 
   const openNew = (verse: ReadVerse) => {
     setXref(null);
+    setTopics(null);
     setGeo(false);
     setMap(false);
     setSermonSaveError(null);
@@ -426,6 +437,7 @@ export function ReaderView(): JSX.Element {
 
   const openExisting = (verse: ReadVerse, annotation: ReadAnnotation) => {
     setXref(null);
+    setTopics(null);
     setGeo(false);
     setMap(false);
     setEditing({
@@ -449,6 +461,7 @@ export function ReaderView(): JSX.Element {
   const openSermonEdit = (verse: ReadVerse, note: SermonNote) => {
     setOpenSermon(null);
     setXref(null);
+    setTopics(null);
     setGeo(false);
     setMap(false);
     setSermonSaveError(null);
@@ -474,7 +487,21 @@ export function ReaderView(): JSX.Element {
     setEditing(null);
     setGeo(false);
     setMap(false);
+    setTopics(null);
     setXref({
+      book: chapterQuery.data?.book ?? book,
+      chapter,
+      verse: verse.verse,
+      reference: verse.reference,
+    });
+  };
+
+  const openTopics = (verse: ReadVerse) => {
+    setEditing(null);
+    setXref(null);
+    setGeo(false);
+    setMap(false);
+    setTopics({
       book: chapterQuery.data?.book ?? book,
       chapter,
       verse: verse.verse,
@@ -485,6 +512,7 @@ export function ReaderView(): JSX.Element {
   const openGeo = () => {
     setEditing(null);
     setXref(null);
+    setTopics(null);
     setMap(false);
     setGeo(true);
   };
@@ -492,6 +520,7 @@ export function ReaderView(): JSX.Element {
   const openMap = () => {
     setEditing(null);
     setXref(null);
+    setTopics(null);
     setGeo(false);
     setMap(true);
   };
@@ -499,6 +528,7 @@ export function ReaderView(): JSX.Element {
   const closePanel = () => {
     setEditing(null);
     setXref(null);
+    setTopics(null);
     setGeo(false);
   };
 
@@ -735,6 +765,15 @@ export function ReaderView(): JSX.Element {
                     >
                       ⇄
                     </button>
+                    <button
+                      type="button"
+                      className="ml-2 align-middle text-xs text-gray-300 opacity-0 transition hover:text-blue-600 group-hover:opacity-100"
+                      onClick={() => openTopics(v)}
+                      aria-label={`Topics for verse ${v.verse}`}
+                      title="Topics"
+                    >
+                      ※
+                    </button>
                   </p>
                 </Fragment>
               );
@@ -744,7 +783,7 @@ export function ReaderView(): JSX.Element {
       </main>
 
       <SidePanel
-        open={editing !== null || xref !== null || geo}
+        open={editing !== null || xref !== null || topics !== null || geo}
         title={
           editing
             ? editing.kind === "sermon"
@@ -752,9 +791,11 @@ export function ReaderView(): JSX.Element {
               : `Note on ${editing.verse.reference}`
             : xref
               ? `Cross-references — ${xref.reference}`
-              : geo
-                ? `Places — ${chapterQuery.data?.reference ?? ""}`
-                : ""
+              : topics
+                ? `Topics — ${topics.reference}`
+                : geo
+                  ? `Places — ${chapterQuery.data?.reference ?? ""}`
+                  : ""
         }
         subtitle={editing?.verse.text}
         scopeLabel={editing?.scopeLabel}
@@ -842,6 +883,15 @@ export function ReaderView(): JSX.Element {
             book={xref.book}
             chapter={xref.chapter}
             verse={xref.verse}
+            translation={translation}
+            onJump={(b, c, v) => navigate(b, c, v)}
+          />
+        )}
+        {topics && (
+          <VerseTopics
+            book={topics.book}
+            chapter={topics.chapter}
+            verse={topics.verse}
             translation={translation}
             onJump={(b, c, v) => navigate(b, c, v)}
           />

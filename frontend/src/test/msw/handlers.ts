@@ -107,6 +107,10 @@ export const defaultHandlers = [
   http.get("/api/v1/annotations", () => HttpResponse.json([])),
   http.get("/api/v1/sermon-notes", () => HttpResponse.json([])),
   http.get("/api/v1/cross-references/:book/:chapter/:verse", () => HttpResponse.json([])),
+  // Topical Bible (v1.6) defaults — most verses/topics queries are panel-on-demand; topics-specific
+  // tests override per-case via server.use().
+  http.get("/api/v1/verse-topics/:book/:chapter/:verse", () => HttpResponse.json([])),
+  http.get("/api/v1/topics/:topicId/verses", () => HttpResponse.json([])),
   // Notes default to empty — most translations (and the public image) ship none, so the reader
   // shows no markers; notes-specific tests override per-case via server.use().
   http.get("/api/v1/notes/:translation/:book/:chapter", () => HttpResponse.json([])),
