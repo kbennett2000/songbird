@@ -4,6 +4,58 @@ A running log of per-slice decisions, gotchas, and how each slice was verified. 
 
 ---
 
+## Slice 1b (v1.6 Word study) — Original-language reader panel (frontend)
+
+- **Date:** 2026-06-09
+- **Branch:** `slice/word-study-1b-frontend`
+
+### Why
+The reader UI on Slice 1a's proxy (PR #102): from any verse, a hover trigger opens an **Original
+language** SidePanel — the interlinear strip (Hebrew **RTL**), each tagged word drilling in-panel
+to its Strong's definition + concordance, each concordance verse jumping the reader. Frontend
+only. Spec: `docs/v1.6/WORD-STUDY-SPEC.md` §4 Slice 1 (frontend), §7. Slice 2 (lexicon search)
+deferred.
+
+### Shape — the topics panel, as the fifth SidePanel mode
+Mirrors `VerseTopics` (two-level drill-in, inline error) and the `topics` ReaderView mode. The
+`ℵ` trigger joins `⇄` (xref) and `※` (topics) on the verse row.
+
+### Three things this slice had to get right
+1. **Three level-1 states, not conflated:** inline error (404/502); **"No original-language data
+   for this verse."** for a valid-but-untagged 200 (`tokens: []`); the strip. The no-data message
+   is NOT an error.
+2. **RTL from the `strongs_id` "H" prefix** — `tokens.some(t => t.strongs_id?.startsWith("H"))` →
+   `dir="rtl"`, else `dir="ltr"` (not hard-coded by `text_id`). Tested: a Hebrew verse renders
+   `dir="rtl"`.
+3. **Five-mode clear-everywhere** — `setWords(null)` added to all 9 switchers (`navigate`,
+   `openNew`, `openExisting`, `openSermonEdit`, `openXref`, `openTopics`, `openGeo`, `openMap`,
+   `closePanel`); `openWords` clears the other four. Count-audited: 9× `setWords(null)`, 9×
+   `setTopics(null)`. A ReaderView test guards mutual exclusion (Original language ↔ topics ↔ xref).
+
+### What shipped
+- `schemas.ts`: `wordTokenSchema` (strongs_id/morph_code/lemma/transliteration/gloss nullable),
+  `verseWordsSchema` (`{reference, text_id, tokens}`), `strongsDetailSchema`; `strongsVerseSchema =
+  topicVerseSchema` (reused). `lib/reader.ts`: `fetchVerseWords` / `fetchStrongs` /
+  `fetchStrongsVerses`.
+- `components/VerseRefList.tsx` (new): the **presentational** verse-row list (`{verses, onJump}`,
+  no fetching), now shared. `TopicVerseList` keeps its `{topicId, translation, onJump}` fetch +
+  states and delegates its list branch to `VerseRefList` — so `VerseTopics` and `TopicDetailView`
+  (2b) are **untouched** and their tests stay green; `WordStudy`'s concordance renders the same
+  `VerseRefList`. (Deviation from the literal spec — which said move the fetch into VerseTopics —
+  because TopicVerseList has a second 2b caller; keeping it as a thin fetching wrapper shares the
+  markup without touching 2b.)
+- `components/WordStudy.tsx` (new): the two-level panel (strip → token → Strong's detail +
+  concordance), RTL, tagged-vs-untagged tokens.
+- `routes/ReaderView.tsx`: the `words` mode — state, `openWords`, the clear-everywhere wiring, the
+  `ℵ` trigger, and the three SidePanel touch-points (body passes `translation={translation}`).
+  MSW: a `/verse-words` browse-open default.
+
+### Verified
+- `make check-frontend` — eslint, tsc, vitest **203 passed (32 files)**, build clean.
+- `make check` — unchanged (no backend edits): 232 passed, 4 deselected.
+
+---
+
 ## Slice 1a (v1.6 Word study) — verse-words + strongs detail + concordance proxy (backend)
 
 - **Date:** 2026-06-09
