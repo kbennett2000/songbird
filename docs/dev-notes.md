@@ -4,6 +4,48 @@ A running log of per-slice decisions, gotchas, and how each slice was verified. 
 
 ---
 
+## Docs Slice 3 — user guide: Study tools + Finding things
+
+- **Date:** 2026-06-09
+- **Branch:** `slice/docs-3-user-guide`
+
+### Why
+Continues `docs/USER-GUIDE.md` (Slice 2, PR #109): fills two of the stubbed sections in place —
+**Study tools** (the per-verse panels) and **Finding things** (search + browse + backup) — matching
+the established voice and section shape. Exploring / Comparing / Your-data stay as `(Coming soon.)`
+stubs (Slice 4); README trim is Slice 5. Docs-only — `make check` / `make check-frontend` unaffected.
+
+### What shipped
+- **Study tools** — framed once (hover a verse → a row of faint icons), then each panel shown then
+  explained: cross-references (`cross-references.png`), topics + drill-in (`topics-verse.png`,
+  `topics-drill.png`), original-language word study + concordance (`word-study.png`,
+  `word-study-strongs.png`), and the chapter-top "Places in this chapter" button
+  (`geography-panel.png`), which forward-links to the Exploring section.
+- **Finding things** — search by meaning vs exact word, across all/chosen translations, plus the
+  scope row that also covers your notes + (conditional) study notes (`search.png`,
+  `search-keyword.png`); finding your own notes by word or by tag (`notes-search.png`, `browse.png`);
+  and Export/Import backup (`browse.png`).
+
+### Decisions / accuracy guards (verified against ReaderView.tsx + the PNGs)
+- **Hover-trio glyphs named from the source, not guessed:** ⇄ Cross-references, ※ Topics, ℵ Original
+  language (`ReaderView.tsx:793–816`, `opacity-0 group-hover:opacity-100`).
+- **"Places in this chapter" is a chapter-level button** next to the chapter title (`openGeo`,
+  `ReaderView.tsx:681–689`), *not* a per-verse hover icon — so it's presented separately and the map
+  / standalone gazetteer are forward-linked to Exploring rather than duplicated here.
+- **`notes-search.png` regrouped honestly:** it's a keyword *Scripture* search with the **Your notes**
+  scope ticked (query "worry"), so it illustrates "search can include your own notes," paired with
+  `browse.png` for tag-filtering — not presented as a notes-by-tag view.
+- **Word study stated as original-language-only** (no implied tap-an-English-word alignment); **study
+  notes stated as conditional** (same caveat as the translator's notes in Reading).
+
+### Verified
+All 8 newly-referenced images resolve from `docs/`; the forward `#exploring-places-and-journeys` and
+back `#reading` anchors match headings; 3 `(Coming soon.)` stubs remain. Read-back-as-the-reader +
+accuracy pass on both sections. `make check` (241 passed, 4 deselected) + `make check-frontend` (221
+passed, build clean) — unaffected (docs-only).
+
+---
+
 ## Docs Slice 2 — user guide: scaffold + Getting started / Reading / Annotating
 
 - **Date:** 2026-06-09
