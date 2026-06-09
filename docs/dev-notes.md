@@ -4,6 +4,48 @@ A running log of per-slice decisions, gotchas, and how each slice was verified. 
 
 ---
 
+## Docs Slice 4 — user guide: Exploring + Comparing + Your data (content complete)
+
+- **Date:** 2026-06-09
+- **Branch:** `slice/docs-4-user-guide`
+
+### Why
+Fills the last three stubs of `docs/USER-GUIDE.md` (Slices 2–3, PRs #109/#110) — **Exploring places
+and journeys**, **Comparing translations**, **Your data** — completing the guide's content. After
+this slice **no `(Coming soon.)` stub remains**. README trim is the final slice (Slice 5). Docs-only
+— `make check` / `make check-frontend` unaffected.
+
+### What shipped
+- **Exploring** — Places gazetteer (`places-gazetteer.png`: search + Status/Type filters, 1,340
+  locations) → place detail (`place-detail.png`: Rameses, modern name, verses, and the **"Journeys
+  through here"** block bridging into Journeys) → Journeys list (`journeys-list.png`) → journey detail
+  (`journey-detail.png`: route map + numbered stops + ordered Stops list). Honors the forward-link
+  Slice 3's Study-tools section made to this section.
+- **Comparing** — up to three translations in parallel columns, lined up verse for verse, per-column
+  notes read-only (`compare.png`).
+- **Your data** — short closer; recaps privacy / Export-Import / theme with back-links to Getting
+  started, Finding things, Reading (no new screenshots), and a final wrap beat.
+
+### Decisions / accuracy guards (verified against the components + PNGs)
+- **Journeys honesty is the section's spine**, mirroring the in-app amber callout
+  (`JourneyDetailView.tsx:66–71`): one scholarly **reconstruction**, not a GPS track; uncertain
+  crossing/stations shown at low/medium confidence; competing routes & fine dating not modeled; and
+  **unlocated stops listed in order but marked "Location unknown" and left off the map, not pinned**
+  (`JourneyDetailView.tsx:84–123`). Same honest posture as the earlier conditional features.
+- **Compare stated from source** — `MAX_COLUMNS = 3`, read-only annotation overlays scope-filtered
+  per column (`CompareView.tsx:13–20`); per-column notes described as behavior, not claimed visible
+  in the shot.
+- **`## Your data` heading kept** (not renamed to the brief's "& settings") so the existing TOC
+  anchor `#your-data` keeps resolving.
+
+### Verified
+`grep "Coming soon"` → 0; all 5 newly-referenced images resolve from `docs/`; every internal anchor
+referenced (`#study-tools`, `#getting-started-in-the-app`, `#finding-things`, `#reading`) matches a
+heading; TOC unchanged. Read-back-as-the-reader + accuracy pass on all three sections. `make check`
+(241 passed, 4 deselected) + `make check-frontend` (221 passed, build clean) — unaffected (docs-only).
+
+---
+
 ## Docs Slice 3 — user guide: Study tools + Finding things
 
 - **Date:** 2026-06-09

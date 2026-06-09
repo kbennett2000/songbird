@@ -213,12 +213,79 @@ and never locked inside one machine.
 
 ## Exploring places and journeys
 
-*(Coming soon.)*
+The "Places in this chapter" peek from [Study tools](#study-tools) has a fuller home here. songbird
+gives you two ways to wander the world the Bible happens in: **every place** named in it, and a set
+of **journeys** you can trace stop by stop.
+
+**Every place, in one list.** Open **Places** up top for the *gazetteer* — a browsable index of every
+location Scripture names:
+
+![The Places page, a searchable, filterable list of locations with their type, coordinates, and a confidence label](screenshots/places-gazetteer.png)
+
+That's more than thirteen hundred of them. **Search by name**, or narrow the list with the **Status**
+filter (how sure we are of where it sat) and the **Type** filter (river, settlement, region,
+mountain…). Each row tells you what kind of place it is, its coordinates, and — honestly — how
+confident that location is.
+
+**Open a place to see it up close.** Tap any name for its own page: what it is, its modern name if it
+has one, the honest confidence in its location, and **every verse that mentions it** — each one a
+jump straight back into the reader:
+
+![A single place's page — Rameses — showing its details, the verses that name it, and a "Journeys through here" section](screenshots/place-detail.png)
+
+And notice the **"Journeys through here"** section at the bottom — Rameses, it turns out, is a stop on
+*The Exodus from Egypt*. That's the second way to explore.
+
+**Follow a journey.** Open **Journeys** for the curated set — the Exodus, Paul's missionary travels,
+his voyage to Rome — each listed with its passage, rough dating, and how many stops it has:
+
+![The Journeys page, listing five curated journeys with their passages, dating, and stop counts](screenshots/journeys-list.png)
+
+Open one and songbird draws its **route on a map with numbered stops**, followed by a **Stops** list
+in order — each stop tied to the passage it comes from, ready to jump to:
+
+![The Exodus journey, its route drawn on a map of Sinai with numbered stops and a prominent note above the map](screenshots/journey-detail.png)
+
+**One honest caveat, shown right above the map.** A journey like the Exodus is **one scholarly
+reconstruction, not a GPS track.** The route, the Red Sea crossing point, and many wilderness stops
+are genuinely uncertain — some carry low or medium confidence, and songbird says so plainly rather
+than pretending otherwise. Competing routes and fine-grained dating aren't drawn at all. And a stop
+whose location nobody knows is still **listed in order — just marked "Location unknown" and left off
+the map** rather than pinned to a guess. You're seeing a careful best-reading of the text, with its
+seams left honest.
+
+<br>
 
 ## Comparing translations
 
-*(Coming soon.)*
+Sometimes the clearest way to understand a verse is to set wordings side by side. Open **Compare**:
+
+![The Compare page showing John 3 in three translations — NET, AKJV, and ASV — in parallel columns, lined up verse for verse](screenshots/compare.png)
+
+You can read **up to three translations at once**, each in its own column, **lined up verse for
+verse** — so verse 3 in one column sits right beside verse 3 in the others. Pick the translation at
+the top of each column; the Book, Chapter, and **← Prev / Next →** controls work just like the
+reader. Any **notes you've written show up in the column they belong to** (here they're read-only —
+Compare is for reading across, not editing).
+
+It's the quickest cure for a puzzling phrase: a line that reads stiffly in one translation often comes
+clear the moment you see how another renders it.
+
+<br>
 
 ## Your data
 
-*(Coming soon.)*
+That's the whole of songbird. A few things worth keeping in mind as you go.
+
+**Your notes are yours.** Each account's notes are private to the person who wrote them — nobody else
+who uses this songbird can see yours (see [Getting started](#getting-started-in-the-app)).
+
+**They're portable.** You're never locked in: the **Export** and **Import** buttons in Browse notes
+save all your notes and sermons to a single file and load them on another computer — the walkthrough
+is back in [Finding things](#finding-things).
+
+**Read however suits the room.** The light/dark toggle is always in the top corner, and songbird
+remembers your choice (more in [Reading](#reading)).
+
+That's everything. Open a chapter, click a verse, and write the first thing that speaks to you — the
+rest of songbird is just here to help you find it again. 🕊️
