@@ -4,6 +4,72 @@ A running log of per-slice decisions, gotchas, and how each slice was verified. 
 
 ---
 
+## Release prep v1.6.0 — version reconciliation + CHANGELOG (Stop 1 of a two-stop release)
+
+- **Date:** 2026-06-09
+- **Branch:** `slice/release-1.6.0-prep`
+
+### Why
+
+The last release tag was `v1.1.0`, but the package versions never moved off the `0.1.0` scaffold
+default, and everything since — sermon notes (v1.2), search expansion (v1.3), places (v1.4),
+verse-of-the-day (v1.5), the whole v1.6 fan-out, plus the User's Guide — shipped untagged. This
+re-aligns the release tag with the `docs/vX` feature line and reconciles the version drift.
+
+### The version is single-sourced
+
+`backend/songbird/__init__.py`'s `__version__` is the one source of truth for the *served* version:
+`main.py` passes it to `FastAPI(version=__version__)` (so the OpenAPI `info.version` follows) and
+`health.py` returns it on `/healthz`. So only four files declare a `0.1.0` literal, and bumping them
+reconciles everything:
+
+- `backend/pyproject.toml` → `1.6.0`
+- `backend/songbird/__init__.py` (`__version__`) → `1.6.0`  *(drives FastAPI/OpenAPI + `/healthz`)*
+- `frontend/package.json` → `1.6.0`
+- `frontend/src/test/msw/handlers.ts` (the `/healthz` mock) → `1.6.0` *(fixture realism; no test
+  asserts the literal — `health_test.py` only checks it's a `str`)*
+
+### Version-looking values deliberately left alone
+
+- `scripts/screenshots/package.json` `1.0.0` — a separate internal screenshot dev tool, its own
+  versioning, not shipped (Kris's call: leave it).
+- `frontend/src/schemas.ts` `version: z.string()`/`z.number()` and `backend/.../api/schemas.py`
+  `version: int = 1` — the export-bundle **data-format** version, not the app version.
+- `frontend/src/lib/map/style.ts` `version: 8` — MapLibre style-spec version.
+- `backend/tests/concord_contract_test.py` asserts `info["version"] == "1.2.0"` — that's **Concord's**
+  pinned OpenAPI version, not songbird's. Untouched.
+- `Dockerfile` carries no version label; the app UI shows no version string. Nothing to change.
+
+### No published artifact → the release is tag + GitHub Release only
+
+CI runs gates only; the nightly workflow runs the live contract test; there is **no release/publish
+workflow and no GHCR push of a songbird image**. `docker-compose.yml` *builds* songbird locally
+(`build: .`) and only pulls Concord's image; the README installs by clone/ZIP + `docker compose up`.
+So unlike Concord (which publishes a GHCR image), a songbird "release" is just the git tag + a GitHub
+Release — no image-publish step.
+
+### CHANGELOG.md (new)
+
+Keep-a-Changelog style, newest-first, plain language for the same audience as the User's Guide.
+Per-version backfill (1.0.0 → 1.6.0) sourced from this dev-notes log and the `docs/vX` specs, not
+invented. A preamble explains the tag drift and that earlier versions are documented but not
+retroactively tagged. Dates are git-sourced (tags for 1.0/1.1; design-notes first-commit for 1.2–1.5;
+today for 1.6.0).
+
+### Two-stop release
+
+This PR is **files only** (versions + `CHANGELOG.md` + this entry) and leaves both gates green. The
+**tag and GitHub Release are Stop 2** — presented for explicit authorization *after* this PR merges,
+run from a freshly-pulled `main`. The tag is never pushed in the same breath as the PR.
+
+### Verified
+
+- `grep -rnE '0\.1\.0'` (deps/locks excluded) → no matches; the four bumped sites read `1.6.0`.
+- `make check` → green (241 passed / 4 deselected). `make check-frontend` → green (221 passed, build
+  clean). The version bump (incl. the healthz mock) broke no test.
+
+---
+
 ## Docs Slice 5 — README trimmed to a landing page + spec index fixed (docs epic complete)
 
 - **Date:** 2026-06-09
