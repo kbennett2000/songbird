@@ -18,10 +18,13 @@ from songbird.concord.schemas import (
     ConcordHealth,
     CrossRefResponse,
     HeadingsResponse,
+    JourneyDetail,
+    JourneysResponse,
     KeywordSearchResponse,
     NoteSearchResponse,
     NotesResponse,
     PlaceDetail,
+    PlaceJourneysResponse,
     PlacesPage,
     PlaceVersesResponse,
     RandomVerse,
@@ -358,6 +361,51 @@ class ConcordClient:
         except httpx.HTTPError as exc:
             raise ConcordUnreachableError(self._base_url, exc) from exc
         return StrongsVersesResponse.model_validate(response.json())
+
+    async def list_journeys(self, limit: int = 50, offset: int = 0) -> JourneysResponse:
+        """One page of the curated journeys (`/v1/journeys`), paginated. No filters — the endpoint
+        takes only limit/offset. A 400/404 is a client error, not unreachability."""
+        params: dict[str, str] = {"limit": str(limit), "offset": str(offset)}
+        try:
+            response = await self._client.get("/v1/journeys", params=params)
+            response.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code in (400, 404):
+                raise ConcordNotFoundError(
+                    f"Concord could not list journeys: {exc.response.status_code}"
+                ) from exc
+            raise ConcordUnreachableError(self._base_url, exc) from exc
+        except httpx.HTTPError as exc:
+            raise ConcordUnreachableError(self._base_url, exc) from exc
+        return JourneysResponse.model_validate(response.json())
+
+    async def get_journey(self, journey_id: str) -> JourneyDetail:
+        """A single journey's full detail (`/v1/journeys/{id}`), including its ordered stops, the
+        `source`, and the one-reconstruction `note`. A 400/404 is a real not-found."""
+        try:
+            response = await self._client.get(f"/v1/journeys/{quote(journey_id, safe='')}")
+            response.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code in (400, 404):
+                raise ConcordNotFoundError(f"Concord has no journey '{journey_id}'") from exc
+            raise ConcordUnreachableError(self._base_url, exc) from exc
+        except httpx.HTTPError as exc:
+            raise ConcordUnreachableError(self._base_url, exc) from exc
+        return JourneyDetail.model_validate(response.json())
+
+    async def get_place_journeys(self, place_id: str) -> PlaceJourneysResponse:
+        """The journeys that pass through a place (`/v1/places/{id}/journeys`) — the inverse
+        lookup. A 400/404 (unknown place) is a not-found, not unreachability."""
+        try:
+            response = await self._client.get(f"/v1/places/{quote(place_id, safe='')}/journeys")
+            response.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code in (400, 404):
+                raise ConcordNotFoundError(f"Concord has no place '{place_id}'") from exc
+            raise ConcordUnreachableError(self._base_url, exc) from exc
+        except httpx.HTTPError as exc:
+            raise ConcordUnreachableError(self._base_url, exc) from exc
+        return PlaceJourneysResponse.model_validate(response.json())
 
     async def get_places(self, book: str, chapter: int) -> VersePlacesResponse:
         """Places named in a chapter, from Concord (songbird owns no place data). Carries the

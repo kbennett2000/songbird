@@ -23,10 +23,13 @@ from songbird.concord.schemas import (
     ConcordHealth,
     CrossRefResponse,
     HeadingsResponse,
+    JourneyDetail,
+    JourneysResponse,
     KeywordSearchResponse,
     NoteSearchResponse,
     NotesResponse,
     PlaceDetail,
+    PlaceJourneysResponse,
     PlacesPage,
     PlaceVersesResponse,
     RandomVerse,
@@ -68,6 +71,9 @@ class FakeConcordClient:
         verse_words: VerseWordsResponse | None = None,
         strongs: StrongsDetail | None = None,
         strongs_verses: StrongsVersesResponse | None = None,
+        journeys_page: JourneysResponse | None = None,
+        journey: JourneyDetail | None = None,
+        place_journeys: PlaceJourneysResponse | None = None,
         places: VersePlacesResponse | None = None,
         place_verses: PlaceVersesResponse | None = None,
         notes: NotesResponse | None = None,
@@ -97,6 +103,9 @@ class FakeConcordClient:
         self._verse_words = verse_words
         self._strongs = strongs
         self._strongs_verses = strongs_verses
+        self._journeys_page = journeys_page
+        self._journey = journey
+        self._place_journeys = place_journeys
         self._places = places
         self._place_verses = place_verses
         self._notes = notes
@@ -113,6 +122,8 @@ class FakeConcordClient:
         self.last_list_places: dict[str, object] = {}
         # Records the last `list_topics` filter args so tests can assert filter/pagination passthrough.
         self.last_list_topics: dict[str, object] = {}
+        # Records the last `list_journeys` pagination args so tests can assert passthrough.
+        self.last_list_journeys: dict[str, object] = {}
         # Records the last `random_verse` translation arg so tests can assert passthrough.
         self.last_random_translation: str | None = None
         self.base_url = base_url
@@ -252,6 +263,31 @@ class FakeConcordClient:
                 total=0,
                 verses=[],
             )
+        )
+
+    async def list_journeys(self, limit: int = 50, offset: int = 0) -> JourneysResponse:
+        self.last_list_journeys = {"limit": limit, "offset": offset}
+        if self._error is not None:
+            raise self._error
+        return (
+            self._journeys_page
+            if self._journeys_page is not None
+            else JourneysResponse(limit=limit, offset=offset, total=0, journeys=[])
+        )
+
+    async def get_journey(self, journey_id: str) -> JourneyDetail:
+        if self._error is not None:
+            raise self._error
+        assert self._journey is not None
+        return self._journey
+
+    async def get_place_journeys(self, place_id: str) -> PlaceJourneysResponse:
+        if self._error is not None:
+            raise self._error
+        return (
+            self._place_journeys
+            if self._place_journeys is not None
+            else PlaceJourneysResponse(id=place_id, total=0, journeys=[])
         )
 
     async def get_places(self, book: str, chapter: int) -> VersePlacesResponse:

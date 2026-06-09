@@ -4,6 +4,59 @@ A running log of per-slice decisions, gotchas, and how each slice was verified. 
 
 ---
 
+## Slice 1a (v1.6 Journeys) — list + detail + place-reverse-lookup proxy (backend)
+
+- **Date:** 2026-06-09
+- **Branch:** `slice/journeys-1a-backend`
+
+### Why
+The backend data layer for journeys — Concord's curated Scripture routes (Paul's missionary
+journeys, the Exodus): an ordered walk of stops, each tied to a passage, with a per-journey
+honesty model (per-stop confidence/status, unlocated stops, a one-reconstruction `note`).
+Three proxy routes passing Concord's journeys through verbatim (songbird owns none). Pure
+songbird — no infra gate (v1.2.0 pin from epic Slice 0). The route map + detail (1b), the list
+surface (1c), and the place-detail hook (2) are later slices; `get_place_journeys` lands now
+(cheap) for Slice 2. Spec: `docs/v1.6/JOURNEYS-SPEC.md` (committed in this PR — the first
+journeys slice carries the spec). Fourth and final feature of the v1.6 fan-out epic.
+
+### Shape — the topics/places proxy, three response shapes
+Mirrors `api/topics.py` / `list_topics` / `get_topic`. Routes: `GET /api/v1/journeys`,
+`GET /api/v1/journeys/{id}`, `GET /api/v1/places/{id}/journeys`. Bad/unknown id → `404 NOT_FOUND`;
+other HTTP → `502`.
+
+### The three response shapes (the slice's conflation risk)
+- **`/journeys` (list) → `JourneysPageOut` `{journeys, total}`** — mirrors PlacesPageOut/
+  TopicsPageOut; no limit/offset echoed in the body.
+- **`/places/{id}/journeys` → bare `list[JourneySummary]`** (reverse lookup, like `/verse-topics`).
+- **`/journeys/{id}` (detail)** carries the full ordered `stops` + `source` + `note`.
+- **Honesty model passes through verbatim:** `JourneyStop` coord/confidence/status/name/reference
+  are nullable — an unlocated stop (null lat/lng) round-trips (it's listed, never mapped); `dating`
+  may be null. Both tested.
+
+### What shipped (backend only)
+- `concord/client.py`: `list_journeys(limit, offset)` (no filters), `get_journey(id)`,
+  `get_place_journeys(place_id)`.
+- `concord/schemas.py`: `JourneySummary`, `JourneysResponse`, `JourneyStop`, `JourneyDetail`,
+  `PlaceJourneysResponse` (field types verified against Concord's source).
+- `api/journeys.py` (new): the three routes, mounted in `main.py`. `api/schemas.py`: API-layer
+  `JourneySummary`, `JourneysPageOut`, `JourneyStop`, `JourneyDetail` — **both mirrors kept**.
+  `/places/{id}/journeys` lives in the journeys router; `api/geography.py` untouched (the
+  3-segment path doesn't shadow the existing `/places*` routes).
+
+### Tests
+- `journeys_test.py`: list passthrough + `{journeys, total}` key-set assertion + limit/offset
+  passthrough; detail incl. stops/note/source, `dating=null` tolerated, unlocated stop round-trips
+  (nulls pass through); reverse-lookup bare list; unknown id → 404; unreachable → 502.
+  `FakeConcordClient` gains the three methods.
+- Contract: added `/v1/journeys`, `/v1/journeys/{}`, `/v1/places/{}/journeys` (fixture already
+  carries all three; version assert unchanged).
+
+### Verified
+- `make check` — ruff/format/pyright + pytest: **241 passed, 4 deselected**.
+- `make check-frontend` — unchanged (no frontend edits): 203 passed, build clean.
+
+---
+
 ## Slice 1b (v1.6 Word study) — Original-language reader panel (frontend)
 
 - **Date:** 2026-06-09

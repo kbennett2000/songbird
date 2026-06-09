@@ -198,6 +198,63 @@ class StrongsVersesResponse(BaseModel):
     verses: list[StrongsVerse]
 
 
+class JourneySummary(BaseModel):
+    """A curated journey's summary (Concord SPEC v7) — metadata + its stop count. `dating` is null
+    when genuinely debated. songbird owns no journey data; pure pass-through."""
+
+    id: str
+    name: str
+    scripture: str
+    dating: str | None = None
+    stop_count: int
+
+
+class JourneysResponse(BaseModel):
+    """A page of journeys: the echoed pagination state, total count, and summaries."""
+
+    limit: int
+    offset: int
+    total: int
+    journeys: list[JourneySummary]
+
+
+class JourneyStop(BaseModel):
+    """One ordered stop of a journey, resolved to its place. Coordinates/confidence/status are null
+    when the place has no confident location (the honesty model rides along — such a stop is listed
+    but not mapped). `reference` is the optional scripture citation for this leg."""
+
+    ordinal: int
+    place_id: str
+    name: str | None = None
+    friendly_id: str | None = None
+    latitude: float | None = None
+    longitude: float | None = None
+    confidence: str | None = None
+    status: str | None = None
+    reference: str | None = None
+
+
+class JourneyDetail(BaseModel):
+    """A single journey's full detail: its metadata — including `source` and the one-reconstruction
+    `note` (the honesty caveat) — plus its ordered stops."""
+
+    id: str
+    name: str
+    scripture: str
+    dating: str | None = None
+    source: str
+    note: str
+    stops: list[JourneyStop]
+
+
+class PlaceJourneysResponse(BaseModel):
+    """The journeys that pass through a place (the inverse lookup): the full deduped set."""
+
+    id: str
+    total: int
+    journeys: list[JourneySummary]
+
+
 class Place(BaseModel):
     """A place named in Scripture, with Concord's honesty model: coordinates + confidence are
     null for unknown/symbolic/multiple places — surfaced, not hidden."""
