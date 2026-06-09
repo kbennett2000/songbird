@@ -4,6 +4,58 @@ A running log of per-slice decisions, gotchas, and how each slice was verified. 
 
 ---
 
+## Slice 1b (v1.6 Topical Bible) — verse-topics reader panel (frontend)
+
+- **Date:** 2026-06-08
+- **Branch:** `slice/topics-1b-frontend`
+
+### Why
+The reader UI on top of Slice 1a's proxy (PR #98): from any verse, a hover trigger opens a
+**Topics** SidePanel listing that verse's topics; each topic drills in-panel to its verses;
+each verse jumps the reader and closes the panel. Frontend only — no backend/contract change.
+Spec: `docs/v1.6/TOPICS-SPEC.md` §4 Slice 1 (frontend), §7 Slice 1b.
+
+### Shape — the `xref` mode, with two deliberate inversions
+The whole thing mirrors the cross-references panel: `crossReferenceSchema`/`fetchCrossReferences`
+→ topic equivalents; `CrossReferences.tsx` → `VerseTopics.tsx`; the entire `xref` SidePanel mode
+→ a `topics` mode. **Two inversions from the headings slice:**
+1. **Error is INLINE, not silent.** This panel is user-invoked, so an outage renders the same
+   "Couldn't load (is Concord reachable?)." message `CrossReferences` shows — the opposite of the
+   passive headings overlay's silence.
+2. **`setTopics(null)` in every mode-switcher.** A fourth SidePanel mode is only correct if every
+   path that opens/closes another also clears it. Added beside the 7 existing `setXref(null)`
+   sites (`navigate`, `openNew`, `openExisting`, `openSermonEdit`, `openGeo`, `openMap`,
+   `closePanel`) **plus `openXref`** (which sets xref rather than clearing it) = **8 functions**;
+   the new `openTopics` clears the other three modes. A missed one would leave two panels "open".
+
+### What shipped
+- `schemas.ts`: `topicSummarySchema` (`see_also` nullable) + `topicVerseSchema` (`text`
+  nullable) — nullability matches Slice 1a's `api/schemas.py` so the parse never throws on a null.
+  `lib/reader.ts`: `fetchVerseTopics`, `fetchTopicVerses`.
+- `components/VerseTopics.tsx` (new): two levels in one panel — the verse's topics (name +
+  quiet `section` line), then a chosen topic's verses (back button + jump-able rows). A
+  `see_also` topic resolves to its target's verses (`fetchTopicVerses(topic.see_also ?? topic.id)`).
+- `routes/ReaderView.tsx`: a `topics` mode mirroring `xref` — `TopicsView` interface + state,
+  `openTopics`, the clear-everywhere wiring above, a hover-revealed `※` trigger beside the `⇄`
+  button (deliberately not `#`, which reads as the tag system), and the three SidePanel
+  touch-points (`open=`, title chain, body). The body passes `translation={translation}` — the
+  same source `xref` uses.
+- `test/msw/handlers.ts`: default empty handlers for `/verse-topics/...` and `/topics/:id/verses`.
+
+### Tests
+- `VerseTopics.test.tsx`: lists topics; drills into a topic's verses; a verse row calls `onJump`;
+  "← Topics" returns to the list; `see_also` resolves to the target id; empty state; **the error
+  state renders the inline message, not silence**.
+- `ReaderView.test.tsx`: the **clear-everywhere guard** — opening Topics closes an open
+  cross-references panel and vice-versa, and likewise mutually-exclusive with the places panel
+  (asserted via the SidePanel `<h2>` titles).
+
+### Verified
+- `make check-frontend` — eslint, tsc, vitest **188 passed (29 files)**, build clean.
+- `make check` — unchanged (no backend edits): 213 passed, 4 deselected.
+
+---
+
 ## Slice 1a (v1.6 Topical Bible) — verse-topics + topic-verses proxy (backend)
 
 - **Date:** 2026-06-08
