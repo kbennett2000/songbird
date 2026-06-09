@@ -4,6 +4,66 @@ A running log of per-slice decisions, gotchas, and how each slice was verified. 
 
 ---
 
+## Docs Slice 1 — screenshot capture expansion (the user-guide's dependency)
+
+- **Date:** 2026-06-09
+- **Branch:** `slice/docs-1-screenshots`
+
+### Why
+The forthcoming user's guide needs a screenshot of every v1.6 feature plus a refresh of two stale
+ones. This slice extends the maintainer screenshot tool (`scripts/screenshots/capture.mjs`) to
+produce them; the guide prose + README trim are later slices (no `USER-GUIDE.md`/`README.md`/app
+change here). The capture script is a maintainer tool outside the gated suites, so `make check` /
+`make check-frontend` are unaffected.
+
+### Capture stack (documented in the script header)
+The full set requires songbird pointed at a Concord with the **complete data** — every translation
+**including NET** (its translator's footnotes drive `translator-notes.png`) and the curated topical
+index / journeys / Strong's lexicon. That's the **LAN Concord at `http://192.168.1.62:8000`** (set
+songbird's `CONCORD_BASE_URL` to it). Run against a **throwaway songbird** (clean `DATA_DIR`) so the
+capture account holds only the script's seeded demo data — no real notes leak into a shot.
+
+### What shipped (script only)
+- Header rewritten: the full shot list, the LAN-Concord-with-NET requirement + how to point there,
+  the throwaway-account note, and the per-shot data assumptions (named constants up top).
+- Seeding extended (idempotent check-then-POST): a **rich-text note** (bold/italics/list, on JHN 1:1)
+  for `note-editor.png`; a **second Psalm 23 sermon** so verse 1 has 2 → the chooser for
+  `sermon-chooser.png`.
+- **17 new shots** + **2 refreshed**: `reader` (now WEB so section headings show), `place-detail`
+  (now a place on a journey → the "Journeys through here" section); new: `note-editor`,
+  `cross-references`, `topics-verse`, `topics-drill`, `topics-browse`, `topic-detail`, `word-study`
+  (OT verse, Hebrew RTL asserted via the `dir="rtl"` strip), `word-study-strongs`, `geography-panel`,
+  `journeys-list`, `journey-detail`, `compare`, `browse`, `notes-search`, `reader-dark`,
+  `translator-notes` (NET), `sermon-chooser`.
+- Selectors derived by reading the actual components (the reader's `aria-label` verse triggers, the
+  SidePanel `<aside aria-label="Note panel">`, VerseText's `Translator's note N` markers, etc.) —
+  not guessed.
+
+### Gotchas / decisions
+- **Reader translation is profile-driven, not URL-driven** — `reader.png` (WEB headings) and
+  `translator-notes.png` (NET) select the translation via the in-reader dropdown, not a `?translation=`
+  param. NET is guarded (skip-with-warning) so a non-LAN run still produces the rest.
+- **Dynamic journey discovery** — rather than guess journey/place ids against data this environment
+  can't see, the script queries `/api/v1/journeys`, finds one with ≥2 located stops + a note, and
+  reuses its id (`journey-detail`) and a stop's `place_id` (`place-detail`). It runs **last** and
+  throws on a data gap, so the gap surfaces loudly but every other shot is already saved.
+- `reader-dark.png` toggles the theme then **restores light** (the choice persists to the profile, #60).
+- `geography-panel.png` is the same in-reader Geography side-panel as the README's `places.png`,
+  captured under the guide's filename (the names can be unified later if desired).
+
+### Who produces the images
+The capture needs the LAN Concord, which is Kris's environment — not reachable here. So: the script
+was **written + statically verified** (`node --check`, selectors reviewed against the components,
+both gates re-run green); **Kris runs `npm run capture`** against the LAN stack and the PNGs are
+committed to the PR.
+
+### Verified
+- `node --check scripts/screenshots/capture.mjs` — clean.
+- `make check` — 241 passed, 4 deselected; `make check-frontend` — 221 passed, build clean
+  (both unaffected — the script isn't in either suite).
+
+---
+
 ## Slice 2 (v1.6 Journeys) — "Journeys through here" on PlaceDetailView (frontend)
 
 - **Date:** 2026-06-09
