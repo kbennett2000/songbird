@@ -4,6 +4,47 @@ A running log of per-slice decisions, gotchas, and how each slice was verified. 
 
 ---
 
+## Docs Slice 2 — user guide: scaffold + Getting started / Reading / Annotating
+
+- **Date:** 2026-06-09
+- **Branch:** `slice/docs-2-user-guide`
+
+### Why
+With the screenshot set landed (Slice 1, PR #108), the actual guide can start. The README is a
+landing page (greet → install → feature list); this slice begins `docs/USER-GUIDE.md`, a single
+scrollable page with a table of contents that picks up *after* install and walks the new owner
+through using songbird, illustrated with the committed screenshots. Docs-only — no app/test/README
+change — so `make check` / `make check-frontend` are unaffected.
+
+### What shipped
+- New `docs/USER-GUIDE.md`: H1, a one-paragraph intro that assumes songbird is running + links back
+  to the README's "Get it running", and a full table of contents.
+- **Three sections written**, each opening with its screenshot then the explanation (show-the-win
+  voice rule): **Getting started** (`welcome.png` — account/privacy model, verse of the day, "pick up
+  where you left off", recent-notes); **Reading** (`reader.png`, `reader-dark.png`,
+  `translator-notes.png` — navigation, switching translations + the anchored-note invariant, section
+  headings, the conditional translator's notes, light/dark); **Annotating** (`note-editor.png`,
+  `sermon.png`, `sermon-chooser.png` — rich-text notes, tags, sermons + the multi-sermon chooser).
+- **Sections 4–8 are TOC stubs** (`## Heading` + *"(Coming soon.)"*) so the structure is whole and
+  every TOC link resolves now; Slices 3–4 fill them, Slice 5 trims the README.
+
+### Decisions / accuracy guards
+- **Image links are guide-relative** (`screenshots/<file>.png`), not repo-root like the README's
+  `docs/screenshots/…` — the guide sits in `docs/`.
+- **`welcome.png` is the older reused shot**, so the prose describes only its *content* (cards,
+  tally, recent notes), never its top-nav (it predates the Topics/Journeys nav items); navigation is
+  introduced from `reader.png` instead.
+- **Translator's notes are stated as conditional** — "the standard setup includes none, so most
+  readers won't see them" — and met gently ("if you ever see these small numbers…"), never via a
+  break-to-test "switch to NET to try it." Every claim was checked against the actual PNG.
+
+### Verified
+Image paths resolve from `docs/`, every TOC anchor matches a heading, prose re-checked against each
+referenced screenshot, read-back-as-the-reader pass on the three sections. `make check` (241 passed,
+4 deselected) + `make check-frontend` (221 passed, build clean) — unaffected (docs-only).
+
+---
+
 ## Docs Slice 1 — screenshot capture expansion (the user-guide's dependency)
 
 - **Date:** 2026-06-09
