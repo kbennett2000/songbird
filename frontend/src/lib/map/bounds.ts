@@ -28,3 +28,26 @@ export function boundsForPlaces(located: Place[]): LngLatBoundsLike | null {
     [east, north],
   ];
 }
+
+/**
+ * The bounding box of a set of `[lng, lat]` coordinates, for `map.fitBounds` — the journey-route
+ * companion to `boundsForPlaces` (which is `Place`-typed). Returns `null` when empty (caller falls
+ * back to BIBLE_WORLD_BOUNDS).
+ */
+export function boundsForCoords(coords: [number, number][]): LngLatBoundsLike | null {
+  let west = Infinity;
+  let south = Infinity;
+  let east = -Infinity;
+  let north = -Infinity;
+  for (const [lng, lat] of coords) {
+    west = Math.min(west, lng);
+    east = Math.max(east, lng);
+    south = Math.min(south, lat);
+    north = Math.max(north, lat);
+  }
+  if (!Number.isFinite(west)) return null;
+  return [
+    [west, south],
+    [east, north],
+  ];
+}
