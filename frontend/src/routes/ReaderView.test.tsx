@@ -1260,4 +1260,34 @@ describe("ReaderView", () => {
       expect(screen.queryByRole("heading", { name: /Topics — / })).not.toBeInTheDocument();
     });
   });
+
+  // Word study (v1.6, Slice 1b) — the fifth SidePanel mode. Guards the five-mode clear-everywhere
+  // wiring: opening Original language closes any other panel, and any other panel closes it.
+  describe("word-study panel", () => {
+    it("opens an Original language panel mutually-exclusive with topics and cross-references", async () => {
+      const user = userEvent.setup();
+      renderReader();
+      await screen.findByText(/JHN 3:16/);
+
+      // Open topics.
+      await user.click(screen.getByRole("button", { name: "Topics for verse 16" }));
+      expect(await screen.findByRole("heading", { name: /Topics — / })).toBeInTheDocument();
+
+      // Opening Original language closes the topics panel.
+      await user.click(screen.getByRole("button", { name: "Original language for verse 16" }));
+      expect(
+        await screen.findByRole("heading", { name: /Original language — / }),
+      ).toBeInTheDocument();
+      expect(screen.queryByRole("heading", { name: /Topics — / })).not.toBeInTheDocument();
+
+      // Opening cross-references closes the Original language panel.
+      await user.click(screen.getByRole("button", { name: "Cross-references for verse 16" }));
+      expect(
+        await screen.findByRole("heading", { name: /Cross-references — / }),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByRole("heading", { name: /Original language — / }),
+      ).not.toBeInTheDocument();
+    });
+  });
 });

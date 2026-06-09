@@ -25,6 +25,7 @@ import { TagInput } from "@/components/TagInput";
 import { TopNav } from "@/components/TopNav";
 import { VerseText } from "@/components/VerseText";
 import { VerseTopics } from "@/components/VerseTopics";
+import { WordStudy } from "@/components/WordStudy";
 import { useAuth } from "@/hooks/useAuth";
 
 // Lazy-loaded: the map pulls in MapLibre (~300 KB gz), only needed when the map modal opens.
@@ -96,6 +97,13 @@ interface TopicsView {
   reference: string;
 }
 
+interface WordsView {
+  book: string;
+  chapter: number;
+  verse: number;
+  reference: string;
+}
+
 export function ReaderView(): JSX.Element {
   const queryClient = useQueryClient();
   const { user } = useAuth();
@@ -114,6 +122,7 @@ export function ReaderView(): JSX.Element {
   const [editing, setEditing] = useState<Editing | null>(null);
   const [xref, setXref] = useState<XrefView | null>(null);
   const [topics, setTopics] = useState<TopicsView | null>(null);
+  const [words, setWords] = useState<WordsView | null>(null);
   const [geo, setGeo] = useState(false);
   const [map, setMap] = useState(false);
   // The translator's note whose popover is open, with the marker it's anchored to.
@@ -265,6 +274,7 @@ export function ReaderView(): JSX.Element {
     setEditing(null);
     setXref(null);
     setTopics(null);
+    setWords(null);
     setGeo(false);
     setMap(false);
     setOpenNote(null);
@@ -418,6 +428,7 @@ export function ReaderView(): JSX.Element {
   const openNew = (verse: ReadVerse) => {
     setXref(null);
     setTopics(null);
+    setWords(null);
     setGeo(false);
     setMap(false);
     setSermonSaveError(null);
@@ -438,6 +449,7 @@ export function ReaderView(): JSX.Element {
   const openExisting = (verse: ReadVerse, annotation: ReadAnnotation) => {
     setXref(null);
     setTopics(null);
+    setWords(null);
     setGeo(false);
     setMap(false);
     setEditing({
@@ -462,6 +474,7 @@ export function ReaderView(): JSX.Element {
     setOpenSermon(null);
     setXref(null);
     setTopics(null);
+    setWords(null);
     setGeo(false);
     setMap(false);
     setSermonSaveError(null);
@@ -488,6 +501,7 @@ export function ReaderView(): JSX.Element {
     setGeo(false);
     setMap(false);
     setTopics(null);
+    setWords(null);
     setXref({
       book: chapterQuery.data?.book ?? book,
       chapter,
@@ -501,7 +515,22 @@ export function ReaderView(): JSX.Element {
     setXref(null);
     setGeo(false);
     setMap(false);
+    setWords(null);
     setTopics({
+      book: chapterQuery.data?.book ?? book,
+      chapter,
+      verse: verse.verse,
+      reference: verse.reference,
+    });
+  };
+
+  const openWords = (verse: ReadVerse) => {
+    setEditing(null);
+    setXref(null);
+    setGeo(false);
+    setMap(false);
+    setTopics(null);
+    setWords({
       book: chapterQuery.data?.book ?? book,
       chapter,
       verse: verse.verse,
@@ -513,6 +542,7 @@ export function ReaderView(): JSX.Element {
     setEditing(null);
     setXref(null);
     setTopics(null);
+    setWords(null);
     setMap(false);
     setGeo(true);
   };
@@ -521,6 +551,7 @@ export function ReaderView(): JSX.Element {
     setEditing(null);
     setXref(null);
     setTopics(null);
+    setWords(null);
     setGeo(false);
     setMap(true);
   };
@@ -529,6 +560,7 @@ export function ReaderView(): JSX.Element {
     setEditing(null);
     setXref(null);
     setTopics(null);
+    setWords(null);
     setGeo(false);
   };
 
@@ -774,6 +806,15 @@ export function ReaderView(): JSX.Element {
                     >
                       ※
                     </button>
+                    <button
+                      type="button"
+                      className="ml-2 align-middle text-xs text-gray-300 opacity-0 transition hover:text-blue-600 group-hover:opacity-100"
+                      onClick={() => openWords(v)}
+                      aria-label={`Original language for verse ${v.verse}`}
+                      title="Original language"
+                    >
+                      ℵ
+                    </button>
                   </p>
                 </Fragment>
               );
@@ -783,7 +824,7 @@ export function ReaderView(): JSX.Element {
       </main>
 
       <SidePanel
-        open={editing !== null || xref !== null || topics !== null || geo}
+        open={editing !== null || xref !== null || topics !== null || words !== null || geo}
         title={
           editing
             ? editing.kind === "sermon"
@@ -793,9 +834,11 @@ export function ReaderView(): JSX.Element {
               ? `Cross-references — ${xref.reference}`
               : topics
                 ? `Topics — ${topics.reference}`
-                : geo
-                  ? `Places — ${chapterQuery.data?.reference ?? ""}`
-                  : ""
+                : words
+                  ? `Original language — ${words.reference}`
+                  : geo
+                    ? `Places — ${chapterQuery.data?.reference ?? ""}`
+                    : ""
         }
         subtitle={editing?.verse.text}
         scopeLabel={editing?.scopeLabel}
@@ -892,6 +935,15 @@ export function ReaderView(): JSX.Element {
             book={topics.book}
             chapter={topics.chapter}
             verse={topics.verse}
+            translation={translation}
+            onJump={(b, c, v) => navigate(b, c, v)}
+          />
+        )}
+        {words && (
+          <WordStudy
+            book={words.book}
+            chapter={words.chapter}
+            verse={words.verse}
             translation={translation}
             onJump={(b, c, v) => navigate(b, c, v)}
           />
