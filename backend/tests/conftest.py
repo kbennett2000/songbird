@@ -31,8 +31,10 @@ from songbird.concord.schemas import (
     PlaceVersesResponse,
     RandomVerse,
     SemanticSearchResponse,
+    TopicVersesResponse,
     Translation,
     VersePlacesResponse,
+    VerseTopicsResponse,
 )
 from songbird.db import models  # noqa: F401  (register models on Base.metadata)
 from songbird.db.base import Base
@@ -54,6 +56,8 @@ class FakeConcordClient:
         resolved: Chapter | None = None,
         books: list[Book] | None = None,
         cross_refs: CrossRefResponse | None = None,
+        verse_topics: VerseTopicsResponse | None = None,
+        topic_verses: TopicVersesResponse | None = None,
         places: VersePlacesResponse | None = None,
         place_verses: PlaceVersesResponse | None = None,
         notes: NotesResponse | None = None,
@@ -76,6 +80,8 @@ class FakeConcordClient:
         self._resolved = resolved
         self._books = books or []
         self._cross_refs = cross_refs
+        self._verse_topics = verse_topics
+        self._topic_verses = topic_verses
         self._places = places
         self._place_verses = place_verses
         self._notes = notes
@@ -135,6 +141,36 @@ class FakeConcordClient:
             self._cross_refs
             if self._cross_refs is not None
             else CrossRefResponse(cross_references=[])
+        )
+
+    async def get_verse_topics(
+        self, book: str, chapter: int, verse: int
+    ) -> VerseTopicsResponse:
+        if self._error is not None:
+            raise self._error
+        return (
+            self._verse_topics
+            if self._verse_topics is not None
+            else VerseTopicsResponse(reference=f"{book} {chapter}:{verse}", total=0, topics=[])
+        )
+
+    async def get_topic_verses(
+        self, topic_id: str, translation: str | None = None, limit: int = 50, offset: int = 0
+    ) -> TopicVersesResponse:
+        if self._error is not None:
+            raise self._error
+        return (
+            self._topic_verses
+            if self._topic_verses is not None
+            else TopicVersesResponse(
+                id=topic_id,
+                translation=translation,
+                include_text=True,
+                limit=limit,
+                offset=offset,
+                total=0,
+                verses=[],
+            )
         )
 
     async def get_places(self, book: str, chapter: int) -> VersePlacesResponse:

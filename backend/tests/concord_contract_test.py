@@ -38,6 +38,8 @@ _REQUIRED_ENDPOINTS = {
     ("GET", "/v1/random"),
     ("GET", "/v1/chapters/{}/{}"),
     ("GET", "/v1/cross-references/{}"),
+    ("GET", "/v1/verses/{}/topics"),
+    ("GET", "/v1/topics/{}/verses"),
     ("GET", "/v1/verses/{}/places"),
     ("GET", "/v1/translations/{}/notes/{}/{}"),
     ("GET", "/v1/translations/{}/headings/{}/{}"),

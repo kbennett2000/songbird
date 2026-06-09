@@ -235,6 +235,28 @@ class CrossReference(BaseModel):
     text: str | None  # the target's snippet (in the read translation), if available
 
 
+class TopicSummary(BaseModel):
+    """A topic from Concord's curated topical index (songbird owns none). `see_also` is another
+    topic's id for a "See X" redirect (those carry no verses of their own), else null. Pure
+    pass-through of Concord's topic data."""
+
+    id: str
+    name: str
+    section: str
+    see_also: str | None
+
+
+class TopicVerse(BaseModel):
+    """One verse curated under a topic (from Concord). Canonical coords (jump reuses navigation);
+    `text` is the verse snippet in the read translation, or null when absent."""
+
+    book: str  # USFM code — canonical
+    chapter: int
+    verse: int
+    reference: str  # human-readable, e.g. "John 3:16"
+    text: str | None
+
+
 class Place(BaseModel):
     """A place named in Scripture (from Concord). The honesty model is carried through
     verbatim: `latitude`/`longitude`/`confidence` are null for unknown/symbolic/multiple

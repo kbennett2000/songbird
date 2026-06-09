@@ -72,6 +72,47 @@ class CrossRefResponse(BaseModel):
     cross_references: list[CrossRefEntry]
 
 
+class TopicSummary(BaseModel):
+    """A topic from Concord's curated topical index (songbird owns none). `see_also` is another
+    topic's id for a "See X" redirect (those carry no verses of their own), else null."""
+
+    id: str
+    name: str
+    section: str
+    see_also: str | None = None
+
+
+class VerseTopicsResponse(BaseModel):
+    """The topics a verse appears under (the reverse lookup) — the full deduped union."""
+
+    reference: str
+    total: int
+    topics: list[TopicSummary]
+
+
+class TopicVerse(BaseModel):
+    """One verse curated under a topic. `text` is null when not requested or absent."""
+
+    book: str  # USFM code — canonical
+    chapter: int
+    verse: int
+    reference: str
+    text: str | None = None
+
+
+class TopicVersesResponse(BaseModel):
+    """A page of the verses curated under a topic, echoing the request state. `translation` is
+    null unless include_text=true."""
+
+    id: str
+    translation: str | None = None
+    include_text: bool
+    limit: int
+    offset: int
+    total: int
+    verses: list[TopicVerse]
+
+
 class Place(BaseModel):
     """A place named in Scripture, with Concord's honesty model: coordinates + confidence are
     null for unknown/symbolic/multiple places — surfaced, not hidden."""
