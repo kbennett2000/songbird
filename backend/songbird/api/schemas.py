@@ -272,6 +272,53 @@ class TopicsPageOut(BaseModel):
     total: int
 
 
+class WordTokenOut(BaseModel):
+    """One tagged word of a verse (from Concord's original-language text). The
+    strongs_id/morph_code/lemma/transliteration/gloss are null for untagged tokens (punctuation,
+    particles) or a Strong's with no lexicon entry. Pure pass-through."""
+
+    position: int
+    surface_form: str
+    strongs_id: str | None
+    morph_code: str | None
+    lemma: str | None
+    transliteration: str | None
+    gloss: str | None
+
+
+class VerseWordsOut(BaseModel):
+    """A verse's original-language tokens. Carries `text_id` (the tagged text, auto-selected by
+    testament) so the client can choose direction (RTL for Hebrew) — NOT a bare token list."""
+
+    reference: str
+    text_id: str
+    tokens: list[WordTokenOut]
+
+
+class StrongsDetail(BaseModel):
+    """A single Strong's lexicon entry (from Concord) — the lexical payoff. Pure pass-through."""
+
+    strongs_id: str
+    language: str
+    lemma: str
+    transliteration: str
+    gloss: str
+    definition: str
+    source: str
+
+
+class StrongsVerse(BaseModel):
+    """One verse where a Strong's number occurs (the concordance row, from Concord). Canonical
+    coords (jump reuses navigation); `text` is the verse snippet, or null. Structurally identical
+    to TopicVerse but kept distinct, mirroring Concord's own model."""
+
+    book: str  # USFM code — canonical
+    chapter: int
+    verse: int
+    reference: str  # human-readable, e.g. "John 1:1"
+    text: str | None
+
+
 class Place(BaseModel):
     """A place named in Scripture (from Concord). The honesty model is carried through
     verbatim: `latitude`/`longitude`/`confidence` are null for unknown/symbolic/multiple
