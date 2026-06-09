@@ -69,7 +69,11 @@ vi.mock("maplibre-gl", () => ({
     addProtocol() {},
   },
 }));
-vi.mock("pmtiles", () => ({ Protocol: class { tile() {} } }));
+vi.mock("pmtiles", () => ({
+  Protocol: class {
+    tile() {}
+  },
+}));
 
 import { ReaderView } from "@/routes/ReaderView";
 import { server } from "@/test/msw/server";
@@ -216,7 +220,8 @@ describe("ReaderView", () => {
     server.use(
       http.get("/api/v1/auth/me", () => HttpResponse.json({ user: profile("WEB") })),
       http.patch("/api/v1/auth/me", async ({ request }) => {
-        patched = ((await request.json()) as { last_translation?: string }).last_translation ?? null;
+        patched =
+          ((await request.json()) as { last_translation?: string }).last_translation ?? null;
         return HttpResponse.json({ user: profile(patched) });
       }),
       http.get("/api/v1/read/:translation/:book/:chapter", ({ params }) =>
@@ -302,7 +307,8 @@ describe("ReaderView", () => {
   });
 
   it("persists the new full position when navigating chapters (issue #38)", async () => {
-    let body: { last_translation?: string; last_book?: string; last_chapter?: number } | null = null;
+    let body: { last_translation?: string; last_book?: string; last_chapter?: number } | null =
+      null;
     server.use(
       http.patch("/api/v1/auth/me", async ({ request }) => {
         body = (await request.json()) as typeof body;
@@ -395,7 +401,9 @@ describe("ReaderView", () => {
     renderReader();
 
     // KJV (default): the canonical annotation overlay shows, but NO note marker.
-    expect(await screen.findByRole("button", { name: "View note on verse 16" })).toBeInTheDocument();
+    expect(
+      await screen.findByRole("button", { name: "View note on verse 16" }),
+    ).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Translator's note 1" })).not.toBeInTheDocument();
 
     // Switch to WEB → the note marker appears; the annotation overlay is untouched.
@@ -432,9 +440,7 @@ describe("ReaderView", () => {
     server.use(
       // A canonical annotation (amber ●) + a sermon note (emerald ▶) on verse 16…
       http.get("/api/v1/read/:translation/:book/:chapter", ({ params }) =>
-        HttpResponse.json(
-          readResponse([annotation()], String(params.translation), [sermonNote()]),
-        ),
+        HttpResponse.json(readResponse([annotation()], String(params.translation), [sermonNote()])),
       ),
       // …plus a slice-11 translator note (violet inline marker) for NET.
       http.get("/api/v1/notes/:translation/:book/:chapter", ({ params }) =>
@@ -448,7 +454,9 @@ describe("ReaderView", () => {
     await user.selectOptions(await screen.findByLabelText("Translation"), "WEB");
 
     // The three systems coexist as distinct affordances on the same verse.
-    expect(await screen.findByRole("button", { name: "View note on verse 16" })).toBeInTheDocument(); // amber ●
+    expect(
+      await screen.findByRole("button", { name: "View note on verse 16" }),
+    ).toBeInTheDocument(); // amber ●
     expect(screen.getByRole("button", { name: "Translator's note 1" })).toBeInTheDocument(); // violet superscript
     const sermonMarker = screen.getByRole("button", { name: "Sermon on verse 16" }); // emerald ▶
     expect(sermonMarker).toBeInTheDocument();
@@ -554,7 +562,9 @@ describe("ReaderView", () => {
     await user.selectOptions(await screen.findByLabelText("Translation"), "WEB");
 
     // All three systems coexist; the sermon affordance is the counted ▶.
-    expect(await screen.findByRole("button", { name: "View note on verse 16" })).toBeInTheDocument(); // amber ●
+    expect(
+      await screen.findByRole("button", { name: "View note on verse 16" }),
+    ).toBeInTheDocument(); // amber ●
     expect(screen.getByRole("button", { name: "Translator's note 1" })).toBeInTheDocument(); // violet superscript
     expect(screen.getByRole("button", { name: "2 sermons on verse 16" })).toBeInTheDocument(); // emerald counted ▶
   });
@@ -573,7 +583,9 @@ describe("ReaderView", () => {
     const user = userEvent.setup();
     renderReader();
 
-    expect(await screen.findByRole("button", { name: "2 sermons on verse 16" })).toBeInTheDocument();
+    expect(
+      await screen.findByRole("button", { name: "2 sermons on verse 16" }),
+    ).toBeInTheDocument();
     await user.selectOptions(await screen.findByLabelText("Translation"), "WEB");
     expect(await screen.findByText(/WEB text 16/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "2 sermons on verse 16" })).toBeInTheDocument();
@@ -587,9 +599,12 @@ describe("ReaderView", () => {
       ),
       http.post("/api/v1/annotations", async ({ request }) => {
         captured = (await request.json()) as Record<string, unknown>;
-        return HttpResponse.json(annotation({ scope_type: "current", scope_translations: ["KJV"] }), {
-          status: 201,
-        });
+        return HttpResponse.json(
+          annotation({ scope_type: "current", scope_translations: ["KJV"] }),
+          {
+            status: 201,
+          },
+        );
       }),
     );
 
@@ -815,9 +830,7 @@ describe("ReaderView", () => {
     // Default /api/v1/places handler returns [] → an empty panel would be pointless.
     renderReader();
     await screen.findByText(/JHN 3:16/);
-    expect(
-      await screen.findByRole("button", { name: "Places in this chapter" }),
-    ).toBeDisabled();
+    expect(await screen.findByRole("button", { name: "Places in this chapter" })).toBeDisabled();
   });
 
   it("enables the globe and opens the map modal when there's a located place", async () => {
@@ -1045,9 +1058,12 @@ describe("ReaderView", () => {
   it("surfaces the notes notice only on a genuine Concord outage (502)", async () => {
     server.use(
       http.get("/api/v1/notes/:translation/:book/:chapter", () =>
-        HttpResponse.json({ detail: { code: "CONCORD_UNREACHABLE", message: "down" } }, {
-          status: 502,
-        }),
+        HttpResponse.json(
+          { detail: { code: "CONCORD_UNREACHABLE", message: "down" } },
+          {
+            status: 502,
+          },
+        ),
       ),
     );
     renderReader();
@@ -1061,9 +1077,12 @@ describe("ReaderView", () => {
   it("treats a 404 from the notes route as 'no notes' — no notice (Concord v1.1.0 pin)", async () => {
     server.use(
       http.get("/api/v1/notes/:translation/:book/:chapter", () =>
-        HttpResponse.json({ detail: { code: "NOT_FOUND", message: "no notes here" } }, {
-          status: 404,
-        }),
+        HttpResponse.json(
+          { detail: { code: "NOT_FOUND", message: "no notes here" } },
+          {
+            status: 404,
+          },
+        ),
       ),
     );
     renderReader();
@@ -1074,12 +1093,103 @@ describe("ReaderView", () => {
   });
 
   it("shows no notice when the notes route returns an empty 200 (stock no-notes image)", async () => {
-    server.use(
-      http.get("/api/v1/notes/:translation/:book/:chapter", () => HttpResponse.json([])),
-    );
+    server.use(http.get("/api/v1/notes/:translation/:book/:chapter", () => HttpResponse.json([])));
     renderReader();
 
     expect(await screen.findByText(/JHN 3:16/)).toBeInTheDocument();
     expect(screen.queryByText(/Translator.*notes unavailable/)).not.toBeInTheDocument();
+  });
+
+  // Section headings (v1.6) — a third layer above the verse each anchors. Best-effort and
+  // silent: absent or on error → nothing, no banner.
+  describe("section headings", () => {
+    // A multi-verse chapter so a heading can anchor above a specific verse.
+    function multiVerseRead(translation = "KJV") {
+      return {
+        translation,
+        book: "JHN",
+        chapter: 3,
+        reference: "John 3",
+        verses: [1, 2, 3].map((verse) => ({
+          book: "JHN",
+          chapter: 3,
+          verse,
+          reference: `John 3:${verse}`,
+          text: `${translation} text ${verse}`,
+          annotations: [],
+          sermon_notes: [],
+        })),
+      };
+    }
+
+    function heading(before_verse: number, text: string, ordinal: number) {
+      return {
+        book: "JHN",
+        chapter: 3,
+        before_verse,
+        text,
+        ordinal,
+        reference: `John 3:${before_verse}`,
+      };
+    }
+
+    it("renders a heading as an <h3> immediately before its before_verse verse", async () => {
+      server.use(
+        http.get("/api/v1/read/:translation/:book/:chapter", ({ params }) =>
+          HttpResponse.json(multiVerseRead(String(params.translation))),
+        ),
+        http.get("/api/v1/headings/:translation/:book/:chapter", () =>
+          HttpResponse.json([heading(2, "A New Passage", 1)]),
+        ),
+      );
+      renderReader();
+
+      const h = await screen.findByRole("heading", { name: "A New Passage", level: 3 });
+      expect(h).toBeInTheDocument();
+      // It sits above the verse-2 row: the verse-2 annotate button follows it in document order.
+      const v2Button = screen.getByRole("button", { name: "Annotate verse 2" });
+      expect(h.compareDocumentPosition(v2Button) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    });
+
+    it("renders two headings before one verse in ordinal order", async () => {
+      server.use(
+        http.get("/api/v1/read/:translation/:book/:chapter", ({ params }) =>
+          HttpResponse.json(multiVerseRead(String(params.translation))),
+        ),
+        // Deliberately supplied out of order — the memo must sort by ordinal.
+        http.get("/api/v1/headings/:translation/:book/:chapter", () =>
+          HttpResponse.json([heading(1, "Second", 2), heading(1, "First", 1)]),
+        ),
+      );
+      renderReader();
+
+      await screen.findByRole("heading", { name: "First", level: 3 });
+      const texts = screen.getAllByRole("heading", { level: 3 }).map((el) => el.textContent);
+      expect(texts).toEqual(["First", "Second"]);
+    });
+
+    it("renders the chapter unchanged with no headings and no banner when there are none", async () => {
+      // Default headings handler returns []; verses still render, no <h3>, no notice.
+      renderReader();
+
+      expect(await screen.findByText(/JHN 3:16/)).toBeInTheDocument();
+      expect(screen.queryByRole("heading", { level: 3 })).not.toBeInTheDocument();
+      expect(screen.queryByText(/headings unavailable/i)).not.toBeInTheDocument();
+      expect(screen.queryByText(/Translator.*notes unavailable/)).not.toBeInTheDocument();
+    });
+
+    it("renders verses with no headings and no banner when the headings fetch errors", async () => {
+      server.use(
+        http.get("/api/v1/headings/:translation/:book/:chapter", () =>
+          HttpResponse.json({ detail: { code: "CONCORD_UNREACHABLE" } }, { status: 502 }),
+        ),
+      );
+      renderReader();
+
+      // The chapter still loads; a headings outage is silent (no <h3>, no banner).
+      expect(await screen.findByText(/JHN 3:16/)).toBeInTheDocument();
+      expect(screen.queryByRole("heading", { level: 3 })).not.toBeInTheDocument();
+      expect(screen.queryByText(/headings unavailable/i)).not.toBeInTheDocument();
+    });
   });
 });

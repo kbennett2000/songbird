@@ -17,6 +17,7 @@ from songbird.concord.schemas import (
     Chapter,
     ConcordHealth,
     CrossRefResponse,
+    HeadingsResponse,
     KeywordSearchResponse,
     NoteSearchResponse,
     NotesResponse,
@@ -311,6 +312,26 @@ class ConcordClient:
         except httpx.HTTPError as exc:
             raise ConcordUnreachableError(self._base_url, exc) from exc
         return NotesResponse.model_validate(response.json())
+
+    async def get_headings(self, translation: str, book: str, chapter: int) -> HeadingsResponse:
+        """Section headings for a whole chapter in one translation, from Concord (songbird
+        owns no headings). A known translation with no headings is a normal empty 200, not an
+        error; a 400/404 (unknown translation/book) is a not-found, not unreachability."""
+        try:
+            response = await self._client.get(
+                f"/v1/translations/{quote(translation, safe='')}"
+                f"/headings/{quote(book, safe='')}/{chapter}"
+            )
+            response.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code in (400, 404):
+                raise ConcordNotFoundError(
+                    f"Concord has no headings for {book} {chapter} (in {translation})"
+                ) from exc
+            raise ConcordUnreachableError(self._base_url, exc) from exc
+        except httpx.HTTPError as exc:
+            raise ConcordUnreachableError(self._base_url, exc) from exc
+        return HeadingsResponse.model_validate(response.json())
 
     async def search_notes(self, q: str, limit: int = 20) -> NoteSearchResponse:
         """Keyword-search Concord's translator's/study notes via `/v1/notes/search` (v1.1.0). v1 is

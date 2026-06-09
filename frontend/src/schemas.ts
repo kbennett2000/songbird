@@ -152,6 +152,18 @@ export const translatorNoteSchema = z.object({
 });
 export const translatorNotesSchema = z.array(translatorNoteSchema);
 
+// A section heading (from Concord) — an editorial passage title rendered above the verse it
+// anchors. `before_verse` is the verse it sits above; `ordinal` orders headings in the chapter.
+export const sectionHeadingSchema = z.object({
+  book: z.string(), // USFM code — the heading's canonical anchor
+  chapter: z.number(),
+  before_verse: z.number(),
+  text: z.string(),
+  ordinal: z.number(),
+  reference: z.string(), // human-readable, e.g. "Genesis 1:1"
+});
+export const sectionHeadingsSchema = z.array(sectionHeadingSchema);
+
 // A place (from Concord). Honesty model: lat/lon/confidence are null for unknown/symbolic.
 export const placeSchema = z.object({
   id: z.string(),
@@ -201,6 +213,7 @@ export type ResolvedReference = z.infer<typeof resolvedReferenceSchema>;
 export type CrossReference = z.infer<typeof crossReferenceSchema>;
 export type NoteCrossReference = z.infer<typeof noteCrossReferenceSchema>;
 export type TranslatorNote = z.infer<typeof translatorNoteSchema>;
+export type SectionHeading = z.infer<typeof sectionHeadingSchema>;
 // One random verse from Concord for the Welcome "verse of the day" card (flat — songbird flattens
 // Concord's nested body). Fresh on every fetch (`/v1/random` is no-store).
 export const randomVerseSchema = z.object({

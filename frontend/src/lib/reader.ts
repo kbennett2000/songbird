@@ -13,6 +13,7 @@ import {
   type ScopeType,
   type KeywordResult,
   type SemanticResult,
+  type SectionHeading,
   type SermonNote,
   type StudyNoteResult,
   type Translation,
@@ -30,6 +31,7 @@ import {
   readChapterSchema,
   resolvedReferenceSchema,
   keywordResultsSchema,
+  sectionHeadingsSchema,
   semanticResultsSchema,
   sermonNoteSchema,
   studyNoteResultsSchema,
@@ -84,6 +86,21 @@ export async function fetchNotes(
   return translatorNotesSchema.parse(data);
 }
 
+/** Section headings for a whole chapter in one translation — from Concord (songbird stores no
+ * headings). A translation with none returns an empty array (the reader then shows no headings,
+ * and no banner — a heading-less chapter is normal). */
+export async function fetchHeadings(
+  translation: string,
+  book: string,
+  chapter: number,
+): Promise<SectionHeading[]> {
+  const data = await apiRequest<unknown>(
+    "GET",
+    `/headings/${encodeURIComponent(translation)}/${encodeURIComponent(book)}/${chapter}`,
+  );
+  return sectionHeadingsSchema.parse(data);
+}
+
 /** Places named in a chapter — from Concord (songbird stores no place data). */
 export async function fetchPlaces(book: string, chapter: number): Promise<Place[]> {
   const data = await apiRequest<unknown>(
@@ -95,10 +112,7 @@ export async function fetchPlaces(book: string, chapter: number): Promise<Place[
 
 /** The verses that mention a place (canonical coords → jump reuses navigation). */
 export async function fetchPlaceVerses(placeId: string): Promise<PlaceVerse[]> {
-  const data = await apiRequest<unknown>(
-    "GET",
-    `/places/${encodeURIComponent(placeId)}/verses`,
-  );
+  const data = await apiRequest<unknown>("GET", `/places/${encodeURIComponent(placeId)}/verses`);
   return placeVersesSchema.parse(data);
 }
 

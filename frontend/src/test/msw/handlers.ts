@@ -110,6 +110,9 @@ export const defaultHandlers = [
   // Notes default to empty — most translations (and the public image) ship none, so the reader
   // shows no markers; notes-specific tests override per-case via server.use().
   http.get("/api/v1/notes/:translation/:book/:chapter", () => HttpResponse.json([])),
+  // Section headings default to empty — most translations ship none, so the reader shows no
+  // headings (and no banner); headings-specific tests override per-case via server.use().
+  http.get("/api/v1/headings/:translation/:book/:chapter", () => HttpResponse.json([])),
   http.get("/api/v1/places", () => HttpResponse.json([])),
   // Gazetteer (v1.4) defaults — places-specific tests override per-case via server.use().
   http.get("/api/v1/places/browse", () => HttpResponse.json({ places: [], total: 0 })),
