@@ -148,6 +148,18 @@ export const topicVerseSchema = z.object({
 });
 export const topicVersesSchema = z.array(topicVerseSchema);
 
+// One page of the topics browse — `total` lets the view paginate ("Load more"). Mirrors
+// placesPageSchema: no limit/offset in the body (the view tracks those itself).
+export const topicsPageSchema = z.object({
+  topics: topicSummariesSchema,
+  total: z.number(),
+});
+
+// A single topic's full record (browse detail) — the summary fields + its verse count.
+export const topicDetailSchema = topicSummarySchema.extend({
+  verse_count: z.number(),
+});
+
 // A translator's note (from Concord) — NET's tn/sn/tc/map footnotes. Translation-specific:
 // `char_offset` is a point anchor into THAT translation's verse text where the marker attaches.
 // The note's cross-refs are canonical → tapping one reuses the reader's coordinate navigation.
@@ -234,6 +246,8 @@ export type ResolvedReference = z.infer<typeof resolvedReferenceSchema>;
 export type CrossReference = z.infer<typeof crossReferenceSchema>;
 export type TopicSummary = z.infer<typeof topicSummarySchema>;
 export type TopicVerse = z.infer<typeof topicVerseSchema>;
+export type TopicsPage = z.infer<typeof topicsPageSchema>;
+export type TopicDetail = z.infer<typeof topicDetailSchema>;
 export type NoteCrossReference = z.infer<typeof noteCrossReferenceSchema>;
 export type TranslatorNote = z.infer<typeof translatorNoteSchema>;
 export type SectionHeading = z.infer<typeof sectionHeadingSchema>;

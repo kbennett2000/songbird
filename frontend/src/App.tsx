@@ -10,6 +10,8 @@ import { PlacesView } from "@/routes/PlacesView";
 import { ReaderView } from "@/routes/ReaderView";
 import { SearchView } from "@/routes/SearchView";
 import { StatusView } from "@/routes/StatusView";
+import { TopicDetailView } from "@/routes/TopicDetailView";
+import { TopicsView } from "@/routes/TopicsView";
 import { WelcomeView } from "@/routes/WelcomeView";
 
 const router = createBrowserRouter([
@@ -67,6 +69,22 @@ const router = createBrowserRouter([
     element: (
       <RequireAuth>
         <PlaceDetailView />
+      </RequireAuth>
+    ),
+  },
+  {
+    path: "/topics",
+    element: (
+      <RequireAuth>
+        <TopicsView />
+      </RequireAuth>
+    ),
+  },
+  {
+    path: "/topics/:id",
+    element: (
+      <RequireAuth>
+        <TopicDetailView />
       </RequireAuth>
     ),
   },
