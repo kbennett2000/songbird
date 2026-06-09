@@ -4,6 +4,46 @@ A running log of per-slice decisions, gotchas, and how each slice was verified. 
 
 ---
 
+## Slice 0 (v1.6) — Concord pin → v1.2.0 (shared epic prerequisite)
+
+- **Date:** 2026-06-08
+- **Branch:** `slice/0-concord-pin-v1.2.0`
+
+### Why
+The v1.6 fan-out epic — **headings**, **topical Bible**, **word study**, **journeys** (see
+`docs/v1.6/HEADINGS-SPEC.md` §2, "The boundary — a shared pin bump") — all consume Concord
+v1.2.0 endpoints. Rather than each feature slice repeating the bump, this **Slice 0** does it
+once, **infra only, no feature code**. The three feature slices reference this slice rather than
+redo it.
+
+### What changed (exactly three, the pattern from the v1.3 Slice 0 pin)
+- **`docker-compose.yml`** — Concord image pin `v1.1.0` → **`v1.2.0`**.
+- **`backend/tests/fixtures/concord-openapi.json`** — regenerated from Concord's committed
+  `docs/openapi.json` at tag `v1.2.0`. The new spec is a **clean superset** of the old: all 15
+  prior paths remain; it **adds 12** (`/v1/topics` ×3, `/v1/strongs` ×3, `/v1/journeys` ×3 incl.
+  `/v1/places/{id}/journeys`, `/v1/translations/{t}/headings/{book}/{chapter}`,
+  `/v1/verses/{ref}/words`, `/v1/verses/{ref}/topics`) plus their schemas. 15 → 27 paths. The
+  large diff is expected.
+- **`backend/tests/concord_contract_test.py`** — `test_fixture_is_the_pinned_concord_version`
+  now asserts `"1.2.0"`. `_REQUIRED_ENDPOINTS` is **untouched** (songbird calls no v1.2.0-only
+  endpoint yet; wiring the headings endpoint into the required set is Slice 1).
+  `test_endpoints_songbird_calls_exist_in_concord_spec` stays green unchanged because the
+  fixture is a superset.
+
+### Deliberately not done
+No new `ConcordClient` method, proxy route, schema, or frontend change. This slice is the
+prerequisite, not a feature — it stays green on its own. Historical `v1.1.0` prose in this file
+and the older `docs/v1.x` specs is left intact (CLAUDE.md: don't rewrite history; only operative
+references move).
+
+### Verify
+- `make check` — both contract tests pass (version assert is 1.2.0; superset test unchanged).
+- `make check-frontend` — green (no frontend change).
+- No operative `1.1.0` remains in `docker-compose.yml` or `concord_contract_test.py`; fixture
+  `info.version` == `1.2.0`.
+
+---
+
 ## Place-name labels (#86) + docs audit pass
 
 - **Date:** 2026-06-08
