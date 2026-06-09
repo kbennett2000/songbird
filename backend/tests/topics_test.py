@@ -8,7 +8,9 @@ from collections.abc import Callable
 import httpx
 from songbird.concord.client import ConcordNotFoundError, ConcordUnreachableError
 from songbird.concord.schemas import (
+    TopicDetail,
     TopicSummary,
+    TopicsResponse,
     TopicVerse,
     TopicVersesResponse,
     VerseTopicsResponse,
@@ -160,5 +162,114 @@ async def test_topic_verses_unreachable_502(
     err = ConcordUnreachableError("http://concord.test", httpx.ConnectError("boom"))
     async with client_for(make_concord(error=err)) as client:
         resp = await client.get("/api/v1/topics/love/verses")
+    assert resp.status_code == 502
+    assert resp.json()["detail"]["code"] == "CONCORD_UNREACHABLE"
+
+
+# --- topics browse (Slice 2: the gazetteer list + detail) --------------------------------------
+
+
+def _topics_page() -> TopicsResponse:
+    return TopicsResponse(
+        q="lov",
+        section="God",
+        limit=10,
+        offset=20,
+        total=42,
+        topics=[
+            TopicSummary(id="love", name="Love", section="God", see_also=None),
+            TopicSummary(id="charity", name="Charity", section="Virtues", see_also="love"),
+        ],
+    )
+
+
+async def test_browse_topics_pass_through_and_filters(
+    make_concord: type[FakeConcordClient],
+    client_for: Callable[[FakeConcordClient], httpx.AsyncClient],
+) -> None:
+    fake = make_concord(topics_page=_topics_page())
+    async with client_for(fake) as client:
+        resp = await client.get("/api/v1/topics?q=lov&section=God&limit=10&offset=20")
+    assert resp.status_code == 200
+    body = resp.json()
+    # The page-out is {topics, total} — mirrors PlacesPageOut, no limit/offset echoed.
+    assert set(body.keys()) == {"topics", "total"}
+    assert body["total"] == 42
+    assert [t["id"] for t in body["topics"]] == ["love", "charity"]
+    assert body["topics"][1]["see_also"] == "love"
+    # The q / section / limit / offset all reached Concord (passthrough).
+    assert fake.last_list_topics == {"q": "lov", "section": "God", "limit": 10, "offset": 20}
+
+
+async def test_browse_topics_defaults(
+    make_concord: type[FakeConcordClient],
+    client_for: Callable[[FakeConcordClient], httpx.AsyncClient],
+) -> None:
+    # No filters → empty defaults (limit 50, offset 0), an empty page is a normal 200.
+    fake = make_concord()
+    async with client_for(fake) as client:
+        resp = await client.get("/api/v1/topics")
+    assert resp.status_code == 200
+    assert resp.json() == {"topics": [], "total": 0}
+    assert fake.last_list_topics == {"q": None, "section": None, "limit": 50, "offset": 0}
+
+
+async def test_browse_topics_bad_filter_404(
+    make_concord: type[FakeConcordClient],
+    client_for: Callable[[FakeConcordClient], httpx.AsyncClient],
+) -> None:
+    async with client_for(make_concord(error=ConcordNotFoundError("bad section"))) as client:
+        resp = await client.get("/api/v1/topics?section=Nope")
+    assert resp.status_code == 404
+    assert resp.json()["detail"]["code"] == "NOT_FOUND"
+
+
+async def test_browse_topics_unreachable_502(
+    make_concord: type[FakeConcordClient],
+    client_for: Callable[[FakeConcordClient], httpx.AsyncClient],
+) -> None:
+    err = ConcordUnreachableError("http://concord.test", httpx.ConnectError("boom"))
+    async with client_for(make_concord(error=err)) as client:
+        resp = await client.get("/api/v1/topics")
+    assert resp.status_code == 502
+    assert resp.json()["detail"]["code"] == "CONCORD_UNREACHABLE"
+
+
+async def test_topic_detail_pass_through(
+    make_concord: type[FakeConcordClient],
+    client_for: Callable[[FakeConcordClient], httpx.AsyncClient],
+) -> None:
+    detail = TopicDetail(
+        id="charity", name="Charity", section="Virtues", see_also="love", verse_count=0
+    )
+    async with client_for(make_concord(topic_detail=detail)) as client:
+        resp = await client.get("/api/v1/topics/charity")
+    assert resp.status_code == 200
+    assert resp.json() == {
+        "id": "charity",
+        "name": "Charity",
+        "section": "Virtues",
+        "see_also": "love",
+        "verse_count": 0,
+    }
+
+
+async def test_topic_detail_not_found_404(
+    make_concord: type[FakeConcordClient],
+    client_for: Callable[[FakeConcordClient], httpx.AsyncClient],
+) -> None:
+    async with client_for(make_concord(error=ConcordNotFoundError("unknown topic"))) as client:
+        resp = await client.get("/api/v1/topics/nope")
+    assert resp.status_code == 404
+    assert resp.json()["detail"]["code"] == "NOT_FOUND"
+
+
+async def test_topic_detail_unreachable_502(
+    make_concord: type[FakeConcordClient],
+    client_for: Callable[[FakeConcordClient], httpx.AsyncClient],
+) -> None:
+    err = ConcordUnreachableError("http://concord.test", httpx.ConnectError("boom"))
+    async with client_for(make_concord(error=err)) as client:
+        resp = await client.get("/api/v1/topics/love")
     assert resp.status_code == 502
     assert resp.json()["detail"]["code"] == "CONCORD_UNREACHABLE"

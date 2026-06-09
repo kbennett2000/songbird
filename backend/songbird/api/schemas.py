@@ -257,6 +257,21 @@ class TopicVerse(BaseModel):
     text: str | None
 
 
+class TopicDetail(TopicSummary):
+    """A single topic's full record for the browse detail screen — the summary plus its verse
+    count (0 for a "See X" redirect). Pass-through of Concord's topic data."""
+
+    verse_count: int
+
+
+class TopicsPageOut(BaseModel):
+    """One page of the topics browse — `total` lets the client paginate ("Load more"). Mirrors
+    PlacesPageOut: the client tracks limit/offset itself, so they aren't echoed here."""
+
+    topics: list[TopicSummary]
+    total: int
+
+
 class Place(BaseModel):
     """A place named in Scripture (from Concord). The honesty model is carried through
     verbatim: `latitude`/`longitude`/`confidence` are null for unknown/symbolic/multiple
