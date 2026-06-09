@@ -319,6 +319,54 @@ class StrongsVerse(BaseModel):
     text: str | None
 
 
+class JourneySummary(BaseModel):
+    """A curated journey's summary (from Concord). `dating` is null when genuinely debated. Pure
+    pass-through of Concord's journey data."""
+
+    id: str
+    name: str
+    scripture: str  # human-readable span, e.g. "Acts 13–14"
+    dating: str | None
+    stop_count: int
+
+
+class JourneysPageOut(BaseModel):
+    """One page of the journeys list — `total` lets the client paginate ("Load more"). Mirrors
+    PlacesPageOut: the client tracks limit/offset itself, so they aren't echoed here."""
+
+    journeys: list[JourneySummary]
+    total: int
+
+
+class JourneyStop(BaseModel):
+    """One ordered stop of a journey (from Concord). Coordinates/confidence/status are null when
+    the place has no confident location (honesty model) — such a stop is listed but not mapped.
+    `reference` is the optional scripture citation for this leg."""
+
+    ordinal: int
+    place_id: str
+    name: str | None
+    friendly_id: str | None
+    latitude: float | None
+    longitude: float | None
+    confidence: str | None
+    status: str | None
+    reference: str | None
+
+
+class JourneyDetail(BaseModel):
+    """A single journey's full record (from Concord): metadata + `source` + the one-reconstruction
+    `note` (the honesty caveat — surfaced, not hidden) + the ordered stops."""
+
+    id: str
+    name: str
+    scripture: str
+    dating: str | None
+    source: str
+    note: str
+    stops: list[JourneyStop]
+
+
 class Place(BaseModel):
     """A place named in Scripture (from Concord). The honesty model is carried through
     verbatim: `latitude`/`longitude`/`confidence` are null for unknown/symbolic/multiple
