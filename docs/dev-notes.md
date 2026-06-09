@@ -4,6 +4,58 @@ A running log of per-slice decisions, gotchas, and how each slice was verified. 
 
 ---
 
+## Slice 1a (v1.6 Word study) — verse-words + strongs detail + concordance proxy (backend)
+
+- **Date:** 2026-06-09
+- **Branch:** `slice/word-study-1a-backend`
+
+### Why
+The backend data layer for original-language word study: a verse's Hebrew/Greek tokens, a
+Strong's lexicon entry, and the concordance (every verse a Strong's number occurs in). Three
+proxy routes passing Concord's tagged text / lexicon / concordance through verbatim (songbird
+owns none). Pure songbird — no infra gate (v1.2.0 pin landed in epic Slice 0). The reader panel
+is Slice 1b; the lexicon search (Slice 2) is deferred. Spec: `docs/v1.6/WORD-STUDY-SPEC.md`
+(committed in this PR — the first word-study slice carries the feature spec).
+
+### Shape — the topics proxy, with one shape exception
+Mirrors `api/topics.py` / `get_topic` / `get_topic_verses`. Routes:
+`GET /api/v1/verse-words/{book}/{chapter}/{verse}`, `GET /api/v1/strongs/{id}`,
+`GET /api/v1/strongs/{id}/verses`. Bad ref/id → `404 NOT_FOUND`; other HTTP → `502`.
+
+### The shape distinctions (the slice's real risk)
+- **`/verse-words` returns a wrapper `{reference, text_id, tokens}`, NOT a bare list** — the
+  frontend needs `text_id` to pick text direction (RTL for Hebrew). (Topics returned bare lists;
+  word-study can't.)
+- **`/strongs/{id}/verses` IS a bare `list[StrongsVerse]`** — the concordance is LTR English, no
+  `text_id`; don't over-correct and wrap it.
+- **Empty token list = normal 200, NOT a 404.** A valid ref with no tagged original (e.g.
+  deuterocanon) passes through as `tokens: []` (still carrying `text_id`); `get_verse_words` does
+  not raise on empty. `get_verse_words` sends **no `text` param** — Concord auto-selects
+  Hebrew/Greek by testament.
+
+### What shipped (backend only)
+- `concord/client.py`: `get_verse_words` / `get_strongs` / `get_strongs_verses`.
+- `concord/schemas.py`: `WordTokenOut` (strongs_id/morph_code/lemma/transliteration/gloss all
+  nullable), `VerseWordsResponse`, `StrongsDetail`, `StrongsVerse`, `StrongsVersesResponse`.
+- `api/strongs.py` (new): the three routes, mounted in `main.py`. `api/schemas.py`: API-layer
+  `WordTokenOut`, `VerseWordsOut`, `StrongsDetail`, `StrongsVerse` — **both mirrors kept**.
+  `StrongsVerse` is defined separately from the topics `TopicVerse` (mirrors Concord's distinct
+  model), not reused.
+
+### Tests
+- `strongs_test.py`: verse-words passthrough returns tokens **and `text_id`** (tagged + untagged-
+  null tokens); empty-original → `200 tokens:[]` (not 404); bad ref → 404; unreachable → 502.
+  strongs detail passthrough; unknown → 404; unreachable → 502. concordance passthrough (with/without
+  `translation`); unknown → 404; unreachable → 502. `FakeConcordClient` gains the three methods.
+- Contract: added `/v1/verses/{}/words`, `/v1/strongs/{}`, `/v1/strongs/{}/verses` (fixture already
+  carries all three; version assert unchanged).
+
+### Verified
+- `make check` — ruff/format/pyright + pytest: **232 passed, 4 deselected**.
+- `make check-frontend` — unchanged (no frontend edits): 196 passed, build clean.
+
+---
+
 ## Slice 2b (v1.6 Topical Bible) — Topics browse surface (frontend)
 
 - **Date:** 2026-06-08
