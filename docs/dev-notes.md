@@ -4,6 +4,40 @@ A running log of per-slice decisions, gotchas, and how each slice was verified. 
 
 ---
 
+## Docs Slice 5 — README trimmed to a landing page + spec index fixed (docs epic complete)
+
+- **Date:** 2026-06-09
+- **Branch:** `slice/docs-5-readme`
+
+### Why
+With the user's guide complete (Slices 2–4, PRs #109–#111), the README duplicated feature how-to in
+"## Using songbird," carried eight "## See it" embeds, and listed design specs only through v1.5 —
+silently omitting the whole v1.6 epic. This final docs slice makes the README a front-door landing
+page (frame + install + link out) and fixes the spec index. README + dev-notes only — `make check` /
+`make check-frontend` unaffected.
+
+### What changed in README.md
+- **Removed "## Using songbird"** (the bulleted feature how-to; it lives expanded + illustrated in
+  the guide). Added a one-line **User's Guide pointer** right after the "Start reading 🎉" install
+  step.
+- **Trimmed "## See it" from 8 embeds to 4** — `reader`, `word-study`, `journey-detail`,
+  `map-desktop` (read → study → explore → map; the two v1.6 flagships signal the feature set has
+  grown past v1.5). The other six PNGs are **retained in `docs/screenshots/`** for the guide — only
+  the README embeds were dropped.
+- **Replaced the stale per-version spec list** (`v1`→`v1.5`, which stopped at v1.5) in "## How it
+  works" with an **audience split**: users → the User's Guide; developers → `docs/v1/SPEC.md` + the
+  per-feature specs under `docs/`. Can't go stale again. Kept the Concord-relationship sentence and
+  the tutorial links.
+
+### Verified
+`grep "## Using songbird"` → gone; `grep -E "v1\.[1-5]/.*SPEC"` → gone; "## See it" has exactly 4
+embeds, all existing files; the guide link (×2), `docs/v1/SPEC.md`, and `docs/` links all resolve.
+Read-back-as-the-reader on the changed prose (pointer reads naturally after launch; "How it works"
+still flows). `make check` (241 passed, 4 deselected) + `make check-frontend` (221 passed, build
+clean) — unaffected (README + dev-notes only). **Docs epic complete: README + the five-part guide.**
+
+---
+
 ## Docs Slice 4 — user guide: Exploring + Comparing + Your data (content complete)
 
 - **Date:** 2026-06-09
