@@ -14,6 +14,7 @@ import {
   type KeywordResult,
   type SemanticResult,
   type JourneyDetail,
+  type JourneysPage,
   type SectionHeading,
   type SermonNote,
   type StrongsDetail,
@@ -43,6 +44,7 @@ import {
   semanticResultsSchema,
   strongsDetailSchema,
   journeyDetailSchema,
+  journeysPageSchema,
   strongsVersesSchema,
   topicDetailSchema,
   topicSummariesSchema,
@@ -183,6 +185,16 @@ export async function fetchStrongsVerses(
 export async function fetchJourney(journeyId: string): Promise<JourneyDetail> {
   const data = await apiRequest<unknown>("GET", `/journeys/${encodeURIComponent(journeyId)}`);
   return journeyDetailSchema.parse(data);
+}
+
+/** One page of the curated journeys list (`{ journeys, total }`) — no filters, just pagination. */
+export async function fetchJourneys(limit?: number, offset?: number): Promise<JourneysPage> {
+  const params = new URLSearchParams();
+  if (limit !== undefined) params.set("limit", String(limit));
+  if (offset !== undefined) params.set("offset", String(offset));
+  const qs = params.toString();
+  const data = await apiRequest<unknown>("GET", `/journeys${qs ? `?${qs}` : ""}`);
+  return journeysPageSchema.parse(data);
 }
 
 /** Translator's notes for a whole chapter in one translation — from Concord (songbird stores

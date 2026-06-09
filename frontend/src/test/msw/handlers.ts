@@ -120,6 +120,9 @@ export const defaultHandlers = [
   http.get("/api/v1/verse-words/:book/:chapter/:verse", () =>
     HttpResponse.json({ reference: "JHN 3:16", text_id: "SBLGNT", tokens: [] }),
   ),
+  // Journeys list default (Slice 1c) — the JourneysView list; browse-specific tests override
+  // per-case. (No /journeys/{id} detail default: JourneyDetailView is test-only and sets its own.)
+  http.get("/api/v1/journeys", () => HttpResponse.json({ journeys: [], total: 0 })),
   // Notes default to empty — most translations (and the public image) ship none, so the reader
   // shows no markers; notes-specific tests override per-case via server.use().
   http.get("/api/v1/notes/:translation/:book/:chapter", () => HttpResponse.json([])),

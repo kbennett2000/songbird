@@ -21,6 +21,7 @@ const LINKS = [
   { to: "/search", label: "Search" },
   { to: "/topics", label: "Topics" },
   { to: "/places", label: "Places" },
+  { to: "/journeys", label: "Journeys" },
 ] as const;
 
 /**

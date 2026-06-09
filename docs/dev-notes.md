@@ -4,6 +4,39 @@ A running log of per-slice decisions, gotchas, and how each slice was verified. 
 
 ---
 
+## Slice 1c (v1.6 Journeys) — the Journeys list surface (frontend)
+
+- **Date:** 2026-06-09
+- **Branch:** `slice/journeys-1c-list`
+
+### Why
+The Journeys top-nav surface — a plain paginated list of journeys, each opening the 1b detail at
+`/journeys/:id`. The simplest list surface in the epic: `/journeys` takes **no `q`/filter** (only
+`limit`/`offset`), so — unlike `TopicsView`/`PlacesView` — there's **no search box and no filter
+control**, just pagination. Frontend only; the `PlaceDetailView` hook is Slice 2. Spec:
+`docs/v1.6/JOURNEYS-SPEC.md` §4 Slice 1c.
+
+### What shipped
+- `schemas.ts`: **added `journeySummarySchema`** (`{id, name, scripture, dating, stop_count}`) —
+  1b had deferred it (it added only the stop/detail schemas), so this slice introduces it, not
+  reuses it. Plus `journeysPageSchema` (`{journeys, total}` — no limit/offset in the body, matching
+  1a). `lib/reader.ts`: `fetchJourneys(limit?, offset?)`.
+- `routes/JourneysView.tsx` (new): `useInfiniteQuery` + "Load more" off `total` (mirrors
+  `TopicsView`), **minus the search/filter** — rows show name, scripture, dating (when present),
+  stop_count, each linking to `/journeys/:id`. Errors surface. `TopNav` gains a Journeys entry near
+  Places; `App.tsx` registers `/journeys` → `JourneysView` (beside the existing `/journeys/:id`).
+  MSW: a `/journeys` list default.
+
+### Tests
+- `JourneysView.test.tsx`: lists journeys (name/scripture/dating/stop_count); "Load more" pages off
+  `total` and appends; rows link to `/journeys/{id}` (href asserted); the error state surfaces.
+
+### Verified
+- `make check-frontend` — eslint, tsc, vitest **218 passed (36 files)**, build clean.
+- `make check` — unchanged (no backend edits): 241 passed, 4 deselected.
+
+---
+
 ## Slice 1b (v1.6 Journeys) — the route map + journey detail (frontend)
 
 - **Date:** 2026-06-09
