@@ -4,7 +4,7 @@ import { Link, useParams } from "react-router-dom";
 import { PlaceLocation, StatusBadge } from "@/components/PlaceHonesty";
 import { TopNav } from "@/components/TopNav";
 import { ApiError } from "@/lib/api";
-import { fetchPlace, fetchPlaceVerses } from "@/lib/reader";
+import { fetchPlace, fetchPlaceJourneys, fetchPlaceVerses } from "@/lib/reader";
 
 export function PlaceDetailView(): JSX.Element {
   const { id = "" } = useParams<{ id: string }>();
@@ -17,6 +17,11 @@ export function PlaceDetailView(): JSX.Element {
   const versesQuery = useQuery({
     queryKey: ["place-verses", id],
     queryFn: () => fetchPlaceVerses(id),
+    enabled: placeQuery.isSuccess,
+  });
+  const journeysQuery = useQuery({
+    queryKey: ["place-journeys", id],
+    queryFn: () => fetchPlaceJourneys(id),
     enabled: placeQuery.isSuccess,
   });
 
@@ -33,9 +38,13 @@ export function PlaceDetailView(): JSX.Element {
         </Link>
         {placeQuery.isPending && <p className="text-gray-500 dark:text-gray-400">Loading place…</p>}
 
-        {notFound && <p className="text-gray-500 dark:text-gray-400">That place doesn&rsquo;t exist.</p>}
+        {notFound && (
+          <p className="text-gray-500 dark:text-gray-400">That place doesn&rsquo;t exist.</p>
+        )}
         {placeQuery.isError && !notFound && (
-          <p className="text-red-600 dark:text-red-400">Couldn&rsquo;t load this place (is Concord reachable?).</p>
+          <p className="text-red-600 dark:text-red-400">
+            Couldn&rsquo;t load this place (is Concord reachable?).
+          </p>
         )}
 
         {place && (
@@ -56,9 +65,13 @@ export function PlaceDetailView(): JSX.Element {
 
             <h2 className="mb-2 mt-6 text-lg font-semibold">
               Verses{" "}
-              <span className="text-sm font-normal text-gray-400 dark:text-gray-500">({place.verse_count})</span>
+              <span className="text-sm font-normal text-gray-400 dark:text-gray-500">
+                ({place.verse_count})
+              </span>
             </h2>
-            {versesQuery.isPending && <p className="text-sm text-gray-500 dark:text-gray-400">Loading verses…</p>}
+            {versesQuery.isPending && (
+              <p className="text-sm text-gray-500 dark:text-gray-400">Loading verses…</p>
+            )}
             {versesQuery.isError && (
               <p className="text-sm text-red-600 dark:text-red-400">Couldn&rsquo;t load verses.</p>
             )}
@@ -79,6 +92,41 @@ export function PlaceDetailView(): JSX.Element {
                     >
                       Open in reader
                     </Link>
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            <h2 className="mb-2 mt-6 text-lg font-semibold">Journeys through here</h2>
+            {journeysQuery.isPending && (
+              <p className="text-sm text-gray-500 dark:text-gray-400">Loading journeys…</p>
+            )}
+            {journeysQuery.isError && (
+              <p className="text-sm text-red-600 dark:text-red-400">
+                Couldn&rsquo;t load journeys.
+              </p>
+            )}
+            {journeysQuery.data && journeysQuery.data.length === 0 && (
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                No journeys pass through here.
+              </p>
+            )}
+            {journeysQuery.data && journeysQuery.data.length > 0 && (
+              <ul className="flex flex-col gap-2">
+                {journeysQuery.data.map((j) => (
+                  <li
+                    key={j.id}
+                    className="rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-3"
+                  >
+                    <Link
+                      to={`/journeys/${j.id}`}
+                      className="font-medium text-blue-700 dark:text-blue-400 hover:underline"
+                    >
+                      {j.name}
+                    </Link>
+                    <span className="ml-2 text-xs text-gray-400 dark:text-gray-500">
+                      {j.scripture}
+                    </span>
                   </li>
                 ))}
               </ul>

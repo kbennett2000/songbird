@@ -71,7 +71,13 @@ describe("PlaceDetailView", () => {
     server.use(
       http.get("/api/v1/places/:placeId", () =>
         HttpResponse.json(
-          detail({ name: "Land of Nod", latitude: null, longitude: null, confidence: null, status: "unknown" }),
+          detail({
+            name: "Land of Nod",
+            latitude: null,
+            longitude: null,
+            confidence: null,
+            status: "unknown",
+          }),
         ),
       ),
       http.get("/api/v1/places/:placeId/verses", () => HttpResponse.json([])),
@@ -89,5 +95,49 @@ describe("PlaceDetailView", () => {
     );
     renderDetail("zzz");
     expect(await screen.findByText(/doesn.t exist/)).toBeInTheDocument();
+  });
+
+  it("lists the journeys that pass through the place, each linking to its detail", async () => {
+    server.use(
+      http.get("/api/v1/places/:placeId", () => HttpResponse.json(detail())),
+      http.get("/api/v1/places/:placeId/journeys", () =>
+        HttpResponse.json([
+          {
+            id: "paul-1",
+            name: "Paul's First Journey",
+            scripture: "Acts 13–14",
+            dating: null,
+            stop_count: 5,
+          },
+        ]),
+      ),
+    );
+    renderDetail();
+
+    expect(
+      await screen.findByRole("heading", { name: "Journeys through here" }),
+    ).toBeInTheDocument();
+    const link = screen.getByRole("link", { name: "Paul's First Journey" });
+    expect(link).toHaveAttribute("href", "/journeys/paul-1");
+  });
+
+  it("shows a clean 'none' line (not an error) when no journey passes through (the common case)", async () => {
+    server.use(
+      http.get("/api/v1/places/:placeId", () => HttpResponse.json(detail())),
+      http.get("/api/v1/places/:placeId/journeys", () => HttpResponse.json([])),
+    );
+    renderDetail();
+    expect(await screen.findByText(/No journeys pass through here/)).toBeInTheDocument();
+  });
+
+  it("surfaces an inline error when the place-journeys query fails", async () => {
+    server.use(
+      http.get("/api/v1/places/:placeId", () => HttpResponse.json(detail())),
+      http.get("/api/v1/places/:placeId/journeys", () =>
+        HttpResponse.json({ detail: { code: "CONCORD_UNREACHABLE" } }, { status: 502 }),
+      ),
+    );
+    renderDetail();
+    expect(await screen.findByText(/Couldn.t load journeys/)).toBeInTheDocument();
   });
 });
