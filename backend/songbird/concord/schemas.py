@@ -113,6 +113,28 @@ class TopicVersesResponse(BaseModel):
     verses: list[TopicVerse]
 
 
+class TopicsResponse(BaseModel):
+    """A page of the topics browse: the echoed filter/pagination state, total count, and
+    summaries. `total` drives pagination."""
+
+    q: str | None = None
+    section: str | None = None
+    limit: int
+    offset: int
+    total: int
+    topics: list[TopicSummary]
+
+
+class TopicDetail(BaseModel):
+    """A single topic's full detail plus its verse count (0 for a "See X" redirect)."""
+
+    id: str
+    name: str
+    section: str
+    see_also: str | None = None
+    verse_count: int
+
+
 class Place(BaseModel):
     """A place named in Scripture, with Concord's honesty model: coordinates + confidence are
     null for unknown/symbolic/multiple places — surfaced, not hidden."""

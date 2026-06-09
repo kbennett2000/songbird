@@ -4,6 +4,52 @@ A running log of per-slice decisions, gotchas, and how each slice was verified. 
 
 ---
 
+## Slice 2a (v1.6 Topical Bible) — topics browse data layer (backend)
+
+- **Date:** 2026-06-08
+- **Branch:** `slice/topics-2a-backend`
+
+### Why
+The data layer for the **Topics browse surface** (Slice 2) — a gazetteer of the curated topical
+index (search + section filter + pagination → topic → verses). Two proxy routes on the existing
+topics router; songbird owns no topic data. Frontend only — no, the browse UI (TopNav entry +
+`TopicsView`) is Slice 2b. Spec: `docs/v1.6/TOPICS-SPEC.md` §4 Slice 2 (backend), §7 Slice 2a.
+
+### Shape — the gazetteer browse (places), not the reverse-lookup sidecar
+Mirrors `geography.py`'s `browse_places` / `list_places` / `get_place`: `GET /api/v1/topics`
+(list, `TopicsPageOut`) and `GET /api/v1/topics/{topic_id}` (detail, `TopicDetail`). **Errors
+SURFACE** (404 bad filter / 502 unreachable) because browse is a screen's primary content, not a
+best-effort sidecar.
+
+### Two corrections worth recording
+- **`TopicsPageOut` is `{topics, total}`** — mirrors `PlacesPageOut` exactly (no `limit`/`offset`
+  echoed), **not** the spec §4 parenthetical's looser `{total, limit, offset, topics}`. The
+  frontend tracks limit/offset itself and paginates off `total`. (Reality corrects the spec.)
+- **Route is bare `/topics`**, not `/topics/browse` — the `/browse` suffix was a places
+  route-collision workaround topics doesn't need. The three `/topics*` routes (`/topics`,
+  `/topics/{id}`, `/topics/{id}/verses`) differ in segment count, so none shadows another.
+
+### What shipped (backend only)
+- `concord/client.py`: `list_topics(q, section, limit, offset)` (mirrors `list_places`) and
+  `get_topic(topic_id)` (mirrors `get_place`); same 400/404 → NotFound, else → Unreachable mapping.
+- `concord/schemas.py`: `TopicsResponse` + `TopicDetail` (reuse the Slice 1a `TopicSummary`).
+- `api/topics.py`: extended (not a new file) with the two routes. `api/schemas.py`: `TopicsPageOut`
+  + an API-layer `TopicDetail(TopicSummary)` adding `verse_count` — **both schema mirrors kept**.
+
+### Tests
+- `topics_test.py` (extended): browse passthrough (q/section/limit/offset reach Concord via
+  `last_list_topics`; `{topics, total}` shape asserted), empty defaults, bad filter → 404,
+  unreachable → 502; detail passthrough (incl. `see_also` + `verse_count`), unknown → 404,
+  unreachable → 502. `FakeConcordClient` gains `list_topics` + `get_topic`.
+- Contract: added `("GET", "/v1/topics")` and `("GET", "/v1/topics/{}")` (fixture already carries
+  both; version assert unchanged).
+
+### Verified
+- `make check` — ruff/format/pyright + pytest: **220 passed, 4 deselected**.
+- `make check-frontend` — unchanged (no frontend edits), green.
+
+---
+
 ## Slice 1b (v1.6 Topical Bible) — verse-topics reader panel (frontend)
 
 - **Date:** 2026-06-08

@@ -31,6 +31,8 @@ from songbird.concord.schemas import (
     PlaceVersesResponse,
     RandomVerse,
     SemanticSearchResponse,
+    TopicDetail,
+    TopicsResponse,
     TopicVersesResponse,
     Translation,
     VersePlacesResponse,
@@ -58,6 +60,8 @@ class FakeConcordClient:
         cross_refs: CrossRefResponse | None = None,
         verse_topics: VerseTopicsResponse | None = None,
         topic_verses: TopicVersesResponse | None = None,
+        topics_page: TopicsResponse | None = None,
+        topic_detail: TopicDetail | None = None,
         places: VersePlacesResponse | None = None,
         place_verses: PlaceVersesResponse | None = None,
         notes: NotesResponse | None = None,
@@ -82,6 +86,8 @@ class FakeConcordClient:
         self._cross_refs = cross_refs
         self._verse_topics = verse_topics
         self._topic_verses = topic_verses
+        self._topics_page = topics_page
+        self._topic_detail = topic_detail
         self._places = places
         self._place_verses = place_verses
         self._notes = notes
@@ -96,6 +102,8 @@ class FakeConcordClient:
         self._error = error
         # Records the last `list_places` filter args so tests can assert filter/pagination passthrough.
         self.last_list_places: dict[str, object] = {}
+        # Records the last `list_topics` filter args so tests can assert filter/pagination passthrough.
+        self.last_list_topics: dict[str, object] = {}
         # Records the last `random_verse` translation arg so tests can assert passthrough.
         self.last_random_translation: str | None = None
         self.base_url = base_url
@@ -172,6 +180,33 @@ class FakeConcordClient:
                 verses=[],
             )
         )
+
+    async def list_topics(
+        self,
+        q: str | None = None,
+        section: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> TopicsResponse:
+        self.last_list_topics = {
+            "q": q,
+            "section": section,
+            "limit": limit,
+            "offset": offset,
+        }
+        if self._error is not None:
+            raise self._error
+        return (
+            self._topics_page
+            if self._topics_page is not None
+            else TopicsResponse(q=q, section=section, limit=limit, offset=offset, total=0, topics=[])
+        )
+
+    async def get_topic(self, topic_id: str) -> TopicDetail:
+        if self._error is not None:
+            raise self._error
+        assert self._topic_detail is not None
+        return self._topic_detail
 
     async def get_places(self, book: str, chapter: int) -> VersePlacesResponse:
         if self._error is not None:

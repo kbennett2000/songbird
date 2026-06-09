@@ -26,6 +26,8 @@ from songbird.concord.schemas import (
     PlaceVersesResponse,
     RandomVerse,
     SemanticSearchResponse,
+    TopicDetail,
+    TopicsResponse,
     TopicVersesResponse,
     Translation,
     TranslationsResponse,
@@ -255,6 +257,47 @@ class ConcordClient:
         except httpx.HTTPError as exc:
             raise ConcordUnreachableError(self._base_url, exc) from exc
         return TopicVersesResponse.model_validate(response.json())
+
+    async def list_topics(
+        self,
+        q: str | None = None,
+        section: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> TopicsResponse:
+        """One page of the topical index browse (`/v1/topics`) — filter by name (`q`) / section,
+        paginated. A 400/404 (e.g. unknown section filter) is a client error, not unreachability."""
+        params: dict[str, str] = {"limit": str(limit), "offset": str(offset)}
+        if q:
+            params["q"] = q
+        if section:
+            params["section"] = section
+        try:
+            response = await self._client.get("/v1/topics", params=params)
+            response.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code in (400, 404):
+                raise ConcordNotFoundError(
+                    f"Concord could not run that topics query: {exc.response.status_code}"
+                ) from exc
+            raise ConcordUnreachableError(self._base_url, exc) from exc
+        except httpx.HTTPError as exc:
+            raise ConcordUnreachableError(self._base_url, exc) from exc
+        return TopicsResponse.model_validate(response.json())
+
+    async def get_topic(self, topic_id: str) -> TopicDetail:
+        """A single topic's full detail (`/v1/topics/{id}`), including `see_also` + `verse_count`.
+        A 400/404 is a real not-found, not unreachability."""
+        try:
+            response = await self._client.get(f"/v1/topics/{quote(topic_id, safe='')}")
+            response.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code in (400, 404):
+                raise ConcordNotFoundError(f"Concord has no topic '{topic_id}'") from exc
+            raise ConcordUnreachableError(self._base_url, exc) from exc
+        except httpx.HTTPError as exc:
+            raise ConcordUnreachableError(self._base_url, exc) from exc
+        return TopicDetail.model_validate(response.json())
 
     async def get_places(self, book: str, chapter: int) -> VersePlacesResponse:
         """Places named in a chapter, from Concord (songbird owns no place data). Carries the
