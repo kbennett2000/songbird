@@ -13,6 +13,7 @@ import {
   type ScopeType,
   type KeywordResult,
   type SemanticResult,
+  type JourneyDetail,
   type SectionHeading,
   type SermonNote,
   type StrongsDetail,
@@ -41,6 +42,7 @@ import {
   sectionHeadingsSchema,
   semanticResultsSchema,
   strongsDetailSchema,
+  journeyDetailSchema,
   strongsVersesSchema,
   topicDetailSchema,
   topicSummariesSchema,
@@ -174,6 +176,13 @@ export async function fetchStrongsVerses(
     `/strongs/${encodeURIComponent(strongsId)}/verses${qs ? `?${qs}` : ""}`,
   );
   return strongsVersesSchema.parse(data);
+}
+
+/** A single journey's full detail (ordered stops, source, the one-reconstruction note) — from
+ * Concord (songbird owns no journey data). */
+export async function fetchJourney(journeyId: string): Promise<JourneyDetail> {
+  const data = await apiRequest<unknown>("GET", `/journeys/${encodeURIComponent(journeyId)}`);
+  return journeyDetailSchema.parse(data);
 }
 
 /** Translator's notes for a whole chapter in one translation — from Concord (songbird stores
