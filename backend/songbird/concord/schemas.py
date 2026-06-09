@@ -235,6 +235,30 @@ class NotesResponse(BaseModel):
     notes: list[TranslatorNote]
 
 
+class SectionHeading(BaseModel):
+    """One section heading — editorial passage title ("The Creation") that renders above the
+    verse it anchors. Concord-owned, per-translation; songbird stores none. `before_verse` is
+    the verse the heading sits above; `ordinal` orders headings within the chapter."""
+
+    book: str  # USFM code — canonical
+    chapter: int
+    before_verse: int
+    text: str
+    ordinal: int
+    reference: str  # human-readable, e.g. "Genesis 1:1"
+
+
+class HeadingsResponse(BaseModel):
+    """A chapter's section headings in one translation. A known translation with no headings
+    returns headings: [] (200), not an error — most translations ship none."""
+
+    translation: str
+    book: str  # USFM code — canonical
+    chapter: int
+    total: int
+    headings: list[SectionHeading]
+
+
 class NoteSearchHit(BaseModel):
     """One keyword match from Concord's `/v1/notes/search` over its translator's/study notes.
     Tolerant — only the fields songbird renders. The note arrives as a `snippet` with the matched

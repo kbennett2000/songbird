@@ -343,6 +343,20 @@ class TranslatorNote(BaseModel):
     cross_references: list[NoteCrossReference]
 
 
+class SectionHeading(BaseModel):
+    """One section heading (from Concord) — an editorial passage title that renders above the
+    verse it anchors. Per-translation, read-only; songbird stores none — a pass-through of
+    Concord's headings data. `before_verse` is the verse the heading sits above; `ordinal`
+    orders headings within the chapter (and disambiguates two before the same verse)."""
+
+    book: str  # USFM code — canonical (the heading's anchor)
+    chapter: int
+    before_verse: int  # the verse this heading renders immediately above
+    text: str
+    ordinal: int  # order within the chapter
+    reference: str  # human-readable, e.g. "Genesis 1:1"
+
+
 class StudyNoteResult(BaseModel):
     """One keyword match from Concord's translator's/study notes search ("Study notes" on the
     Search page — distinct from the user's own "Your notes"). Canonical coords → jump reuses

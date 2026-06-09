@@ -22,6 +22,7 @@ from songbird.concord.schemas import (
     Chapter,
     ConcordHealth,
     CrossRefResponse,
+    HeadingsResponse,
     KeywordSearchResponse,
     NoteSearchResponse,
     NotesResponse,
@@ -56,6 +57,7 @@ class FakeConcordClient:
         places: VersePlacesResponse | None = None,
         place_verses: PlaceVersesResponse | None = None,
         notes: NotesResponse | None = None,
+        headings: HeadingsResponse | None = None,
         semantic: SemanticSearchResponse | None = None,
         keyword: KeywordSearchResponse | None = None,
         note_search: NoteSearchResponse | None = None,
@@ -77,6 +79,7 @@ class FakeConcordClient:
         self._places = places
         self._place_verses = place_verses
         self._notes = notes
+        self._headings = headings
         self._semantic = semantic
         self._keyword = keyword
         self._note_search = note_search
@@ -190,6 +193,17 @@ class FakeConcordClient:
             if self._notes is not None
             else NotesResponse(
                 translation=translation, book=book, chapter=chapter, verse=None, total=0, notes=[]
+            )
+        )
+
+    async def get_headings(self, translation: str, book: str, chapter: int) -> HeadingsResponse:
+        if self._error is not None:
+            raise self._error
+        return (
+            self._headings
+            if self._headings is not None
+            else HeadingsResponse(
+                translation=translation, book=book, chapter=chapter, total=0, headings=[]
             )
         )
 
