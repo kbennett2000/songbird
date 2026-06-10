@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
 import { MemoryRouter } from "react-router-dom";
@@ -528,6 +528,53 @@ describe("ReaderView", () => {
     // The single-note popover header ("Sermon"), not the list header ("Sermons · n").
     expect(await screen.findByText("Devoted to the Apostles' Teaching")).toBeInTheDocument();
     expect(screen.queryByText(/Sermons ·/)).not.toBeInTheDocument();
+  });
+
+  it("counts multiple annotations on a verse and opens a chosen one for editing (#114)", async () => {
+    const annotations = [
+      annotation({ id: 1, note_markdown: "first note" }),
+      annotation({ id: 2, note_markdown: "second note" }),
+    ];
+    server.use(
+      http.get("/api/v1/read/:translation/:book/:chapter", ({ params }) =>
+        HttpResponse.json(readResponse(annotations, String(params.translation))),
+      ),
+    );
+    const user = userEvent.setup();
+    renderReader();
+
+    // Counted ● (not the single-note label), and the count is visible.
+    const marker = await screen.findByRole("button", { name: "2 notes on verse 16" });
+    expect(marker).toHaveTextContent("2");
+    expect(screen.queryByRole("button", { name: "View note on verse 16" })).not.toBeInTheDocument();
+
+    // Tapping lists every note — both reachable, none hidden behind [0].
+    await user.click(marker);
+    expect(await screen.findByText("Notes · 2")).toBeInTheDocument();
+    expect(screen.getByText("first note")).toBeInTheDocument();
+    expect(screen.getByText("second note")).toBeInTheDocument();
+
+    // "Open" on the second row hands THAT note to the editor (pre-filled with its Markdown).
+    // Both notes share a created_at, so locate the row by its text rather than by order.
+    const secondRow = screen.getByText("second note").closest("li")!;
+    await user.click(within(secondRow).getByRole("button", { name: "Open →" }));
+    expect(await screen.findByTestId("initial-markdown")).toHaveTextContent("second note");
+  });
+
+  it("opens the editor directly (no popover) for a verse with exactly one note", async () => {
+    server.use(
+      http.get("/api/v1/read/:translation/:book/:chapter", ({ params }) =>
+        HttpResponse.json(readResponse([annotation({ note_markdown: "lone note" })], String(params.translation))),
+      ),
+    );
+    const user = userEvent.setup();
+    renderReader();
+
+    const marker = await screen.findByRole("button", { name: "View note on verse 16" });
+    await user.click(marker);
+    // Straight to the editor, no list popover.
+    expect(await screen.findByTestId("initial-markdown")).toHaveTextContent("lone note");
+    expect(screen.queryByText(/Notes · /)).not.toBeInTheDocument();
   });
 
   it("keeps three overlays distinct on one verse even with multiple sermons (counted ▶)", async () => {

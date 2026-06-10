@@ -3,6 +3,7 @@ import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
 import { AnnotationPopover } from "@/components/AnnotationPopover";
+import { AnnotationsPopover } from "@/components/AnnotationsPopover";
 import { TopNav } from "@/components/TopNav";
 import { useAuth } from "@/hooks/useAuth";
 import { nextChapter, prevChapter } from "@/lib/navigation";
@@ -35,9 +36,12 @@ export function CompareView(): JSX.Element {
   const [columns, setColumns] = useState<string[]>(() => [
     searchParams.get("translation") ?? user?.last_translation ?? DEFAULT_TRANSLATION,
   ]);
-  const [openNote, setOpenNote] = useState<{ annotation: ReadAnnotation; anchor: HTMLElement } | null>(
-    null,
-  );
+  // Every annotation behind the tapped marker (all share its in/out-of-scope class). One → the
+  // single AnnotationPopover; several → the stacked AnnotationsPopover, so none is hidden (#114).
+  const [openNote, setOpenNote] = useState<{
+    annotations: ReadAnnotation[];
+    anchor: HTMLElement;
+  } | null>(null);
 
   const booksQuery = useQuery({ queryKey: ["books"], queryFn: fetchBooks });
   const translationsQuery = useQuery({ queryKey: ["translations"], queryFn: fetchTranslations });
@@ -271,12 +275,21 @@ export function CompareView(): JSX.Element {
                                 type="button"
                                 className="ml-2 align-middle text-amber-600 hover:text-amber-800 dark:hover:text-amber-400"
                                 onClick={(e) =>
-                                  setOpenNote({ annotation: inScope[0]!, anchor: e.currentTarget })
+                                  setOpenNote({ annotations: inScope, anchor: e.currentTarget })
                                 }
-                                aria-label={`View note on ${code} ${n}`}
-                                title="View note"
+                                aria-label={
+                                  inScope.length === 1
+                                    ? `View note on ${code} ${n}`
+                                    : `${inScope.length} notes on ${code} ${n}`
+                                }
+                                title={inScope.length === 1 ? "View note" : "View notes"}
                               >
                                 ●
+                                {inScope.length > 1 && (
+                                  <span className="ml-0.5 rounded-full bg-amber-100 px-1 text-[0.7em] font-semibold text-amber-700">
+                                    {inScope.length}
+                                  </span>
+                                )}
                               </button>
                             )}
                             {outScope.length > 0 && (
@@ -284,12 +297,21 @@ export function CompareView(): JSX.Element {
                                 type="button"
                                 className="ml-2 align-middle text-gray-400 dark:text-gray-500 hover:text-gray-600"
                                 onClick={(e) =>
-                                  setOpenNote({ annotation: outScope[0]!, anchor: e.currentTarget })
+                                  setOpenNote({ annotations: outScope, anchor: e.currentTarget })
                                 }
-                                aria-label={`View out-of-scope note on ${code} ${n}`}
-                                title={`Written for ${outScope[0]!.scope_translations.join(", ")}`}
+                                aria-label={
+                                  outScope.length === 1
+                                    ? `View out-of-scope note on ${code} ${n}`
+                                    : `${outScope.length} out-of-scope notes on ${code} ${n}`
+                                }
+                                title={`Written for ${[...new Set(outScope.flatMap((a) => a.scope_translations))].join(", ")}`}
                               >
                                 ○
+                                {outScope.length > 1 && (
+                                  <span className="ml-0.5 rounded-full bg-gray-100 px-1 text-[0.7em] font-semibold text-gray-600">
+                                    {outScope.length}
+                                  </span>
+                                )}
                               </button>
                             )}
                           </>
@@ -306,13 +328,20 @@ export function CompareView(): JSX.Element {
         )}
       </main>
 
-      {openNote && (
-        <AnnotationPopover
-          annotation={openNote.annotation}
-          anchor={openNote.anchor}
-          onClose={() => setOpenNote(null)}
-        />
-      )}
+      {openNote &&
+        (openNote.annotations.length === 1 ? (
+          <AnnotationPopover
+            annotation={openNote.annotations[0]!}
+            anchor={openNote.anchor}
+            onClose={() => setOpenNote(null)}
+          />
+        ) : (
+          <AnnotationsPopover
+            annotations={openNote.annotations}
+            anchor={openNote.anchor}
+            onClose={() => setOpenNote(null)}
+          />
+        ))}
     </div>
   );
 }

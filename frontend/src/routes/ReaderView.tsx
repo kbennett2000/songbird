@@ -12,6 +12,7 @@ import {
 import { useSearchParams } from "react-router-dom";
 
 import { CrossReferences } from "@/components/CrossReferences";
+import { AnnotationsPopover } from "@/components/AnnotationsPopover";
 import { Geography } from "@/components/Geography";
 import { Modal } from "@/components/Modal";
 import { NoteEditor } from "@/components/NoteEditor";
@@ -133,6 +134,13 @@ export function ReaderView(): JSX.Element {
   // canonical, all-translations). One note → single popover; several → a stacked list.
   const [openSermon, setOpenSermon] = useState<{
     notes: SermonNote[];
+    anchor: HTMLElement;
+    verse: ReadVerse;
+  } | null>(null);
+  // The annotations behind a tapped marker, when there are several (single → editor directly).
+  // The list shares one in/out-of-scope class; a row's "Open" hands it to openExisting (#114).
+  const [openAnnotations, setOpenAnnotations] = useState<{
+    annotations: ReadAnnotation[];
     anchor: HTMLElement;
     verse: ReadVerse;
   } | null>(null);
@@ -279,6 +287,7 @@ export function ReaderView(): JSX.Element {
     setMap(false);
     setOpenNote(null);
     setOpenSermon(null);
+    setOpenAnnotations(null);
   };
 
   // Self-heal a stale *stored* position once Concord's book list is known: if the initial book is
@@ -452,6 +461,7 @@ export function ReaderView(): JSX.Element {
     setWords(null);
     setGeo(false);
     setMap(false);
+    setOpenAnnotations(null);
     setEditing({
       verse,
       kind: "annotation",
@@ -744,22 +754,56 @@ export function ReaderView(): JSX.Element {
                       <button
                         type="button"
                         className="ml-2 align-middle text-amber-600 hover:text-amber-800 dark:hover:text-amber-400"
-                        onClick={() => openExisting(v, inScope[0]!)}
-                        aria-label={`View note on verse ${v.verse}`}
-                        title="View note"
+                        onClick={(e) =>
+                          inScope.length === 1
+                            ? openExisting(v, inScope[0]!)
+                            : setOpenAnnotations({
+                                annotations: inScope,
+                                anchor: e.currentTarget,
+                                verse: v,
+                              })
+                        }
+                        aria-label={
+                          inScope.length === 1
+                            ? `View note on verse ${v.verse}`
+                            : `${inScope.length} notes on verse ${v.verse}`
+                        }
+                        title={inScope.length === 1 ? "View note" : "View notes"}
                       >
                         ●
+                        {inScope.length > 1 && (
+                          <span className="ml-0.5 rounded-full bg-amber-100 px-1 text-[0.7em] font-semibold text-amber-700">
+                            {inScope.length}
+                          </span>
+                        )}
                       </button>
                     )}
                     {outScope.length > 0 && (
                       <button
                         type="button"
                         className="ml-2 align-middle text-gray-400 dark:text-gray-500 hover:text-gray-600"
-                        onClick={() => openExisting(v, outScope[0]!)}
-                        aria-label={`View out-of-scope note on verse ${v.verse}`}
-                        title={`Written for ${outScope[0]!.scope_translations.join(", ")}`}
+                        onClick={(e) =>
+                          outScope.length === 1
+                            ? openExisting(v, outScope[0]!)
+                            : setOpenAnnotations({
+                                annotations: outScope,
+                                anchor: e.currentTarget,
+                                verse: v,
+                              })
+                        }
+                        aria-label={
+                          outScope.length === 1
+                            ? `View out-of-scope note on verse ${v.verse}`
+                            : `${outScope.length} out-of-scope notes on verse ${v.verse}`
+                        }
+                        title={`Written for ${[...new Set(outScope.flatMap((a) => a.scope_translations))].join(", ")}`}
                       >
                         ○
+                        {outScope.length > 1 && (
+                          <span className="ml-0.5 rounded-full bg-gray-100 px-1 text-[0.7em] font-semibold text-gray-600">
+                            {outScope.length}
+                          </span>
+                        )}
                       </button>
                     )}
                     {v.sermon_notes.length > 0 && (
@@ -1000,6 +1044,15 @@ export function ReaderView(): JSX.Element {
             }}
           />
         ))}
+
+      {openAnnotations && (
+        <AnnotationsPopover
+          annotations={openAnnotations.annotations}
+          anchor={openAnnotations.anchor}
+          onClose={() => setOpenAnnotations(null)}
+          onOpen={(annotation) => openExisting(openAnnotations.verse, annotation)}
+        />
+      )}
     </div>
   );
 }

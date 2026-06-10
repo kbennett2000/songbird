@@ -15,6 +15,15 @@ This project follows [Keep a Changelog](https://keepachangelog.com/) and
 > feature's design notes for 1.2–1.5); songbird was built in a tight burst, so treat them as the
 > order things landed rather than precise release days.
 
+## [Unreleased]
+
+### Fixed
+- **All notes on a verse now show, not just one.** When a verse carried more than one note, the
+  reader and the side-by-side compare view showed a single marker and opened only the first note —
+  the others were invisible and unreachable. The marker now carries a small count, and tapping it
+  lists every note so you can open any of them. A verse with a single note is unchanged.
+  ([#114](https://github.com/kbennett2000/songbird/issues/114))
+
 ## [1.6.0] — 2026-06-09
 
 The big fan-out — four study features at once, plus a proper guide.
