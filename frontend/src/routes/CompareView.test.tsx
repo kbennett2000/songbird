@@ -131,6 +131,39 @@ describe("CompareView", () => {
     expect(link).toHaveAttribute("href", "/read?book=JHN&chapter=3&verse=16");
   });
 
+  it("shows a count badge and lists ALL notes when a verse has several (#114)", async () => {
+    useRead(() => [
+      {
+        verse: 16,
+        annotations: [
+          ann({ id: 1, note_markdown: "first note" }),
+          ann({ id: 2, note_markdown: "second note" }),
+        ],
+      },
+    ]);
+    const user = userEvent.setup();
+    renderCompare();
+
+    // The marker announces the count rather than masquerading as a single note.
+    const marker = await screen.findByRole("button", { name: "2 notes on KJV 16" });
+    await user.click(marker);
+
+    // Both notes appear in the stacked popover — neither hidden behind [0].
+    expect(await screen.findByText("Notes · 2")).toBeInTheDocument();
+    expect(screen.getByText("first note")).toBeInTheDocument();
+    expect(screen.getByText("second note")).toBeInTheDocument();
+  });
+
+  it("uses the single AnnotationPopover (no count) for a verse with one note", async () => {
+    useRead(() => [{ verse: 16, annotations: [ann({ note_markdown: "lone note" })] }]);
+    const user = userEvent.setup();
+    renderCompare();
+
+    await user.click(await screen.findByRole("button", { name: "View note on KJV 16" }));
+    expect(await screen.findByText("lone note")).toBeInTheDocument();
+    expect(screen.queryByText(/Notes · /)).not.toBeInTheDocument();
+  });
+
   it("switches a column's translation and refetches just that column", async () => {
     useTranslations("KJV", "WEB", "ASV");
     useRead(() => [{ verse: 16 }]);
