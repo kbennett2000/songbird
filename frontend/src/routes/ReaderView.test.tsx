@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
 import { MemoryRouter } from "react-router-dom";
@@ -554,10 +554,9 @@ describe("ReaderView", () => {
     expect(screen.getByText("first note")).toBeInTheDocument();
     expect(screen.getByText("second note")).toBeInTheDocument();
 
-    // "Open" on the second row hands THAT note to the editor (pre-filled with its Markdown).
-    // Both notes share a created_at, so locate the row by its text rather than by order.
-    const secondRow = screen.getByText("second note").closest("li")!;
-    await user.click(within(secondRow).getByRole("button", { name: "Open →" }));
+    // Tapping a card hands THAT note to the editor (pre-filled with its Markdown). The whole
+    // card is the button; its accessible name carries the note's preview.
+    await user.click(screen.getByRole("button", { name: "Open note: second note" }));
     expect(await screen.findByTestId("initial-markdown")).toHaveTextContent("second note");
   });
 
