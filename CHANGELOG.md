@@ -23,6 +23,10 @@ This project follows [Keep a Changelog](https://keepachangelog.com/) and
   the others were invisible and unreachable. The marker now carries a small count, and tapping it
   lists every note so you can open any of them. A verse with a single note is unchanged.
   ([#114](https://github.com/kbennett2000/songbird/issues/114))
+- **The multiple-notes list is calmer and easier to read.** That list used to show each note's full
+  text as one long, run-together scroll. It's now a tidy stack of cards — one clear preview line per
+  note, with its tags, and obvious gaps between them (in dark mode too). Tap a note to open it in
+  full. ([#116](https://github.com/kbennett2000/songbird/issues/116))
 
 ## [1.6.0] — 2026-06-09
 

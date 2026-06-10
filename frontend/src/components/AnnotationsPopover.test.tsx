@@ -76,22 +76,37 @@ describe("AnnotationsPopover", () => {
     expect(screen.getByText("grace")).toBeInTheDocument();
   });
 
-  it("calls onOpen with the clicked annotation (reader case)", async () => {
+  it("calls onOpen with the clicked card's annotation (reader case)", async () => {
     const onOpen = vi.fn();
     renderPopover([ann(1), ann(2)], { onOpen });
-    const openButtons = screen.getAllByRole("button", { name: "Open →" });
-    await userEvent.click(openButtons[1]!);
-    // Newest-first: row 0 is Note 1 (newer created_at default tie → stable), so assert by call arg id.
+    // The whole card is the button; its accessible name carries the note's preview.
+    await userEvent.click(screen.getByRole("button", { name: "Open note: Note 2" }));
     expect(onOpen).toHaveBeenCalledTimes(1);
-    expect(onOpen.mock.calls[0]![0]).toMatchObject({ id: expect.any(Number) });
+    expect(onOpen.mock.calls[0]![0]).toMatchObject({ id: 2 });
   });
 
-  it("falls back to reader deep-links when onOpen is absent (compare case)", () => {
+  it("makes each card a reader deep-link when onOpen is absent (compare case)", () => {
     renderPopover([ann(1), ann(2)]);
-    expect(screen.queryByRole("button", { name: "Open →" })).not.toBeInTheDocument();
-    const links = screen.getAllByRole("link", { name: /Open in reader/ });
+    expect(screen.queryByRole("button", { name: /Open note/ })).not.toBeInTheDocument();
+    const links = screen.getAllByRole("link", { name: /Open note in reader/ });
     expect(links).toHaveLength(2);
     expect(links[0]).toHaveAttribute("href", "/read?book=JOS&chapter=1&verse=1");
+  });
+
+  it("shows a stripped, truncated preview — never a wall of raw Markdown (#116)", () => {
+    const long = `# Big Heading\n\n- bullet\n\n${"x".repeat(200)}`;
+    renderPopover([ann(1, { note_markdown: long })]);
+    const preview = screen.getByText(/^Big Heading/);
+    expect(preview.textContent).not.toContain("#");
+    expect(preview.textContent).not.toContain("- bullet"); // the "-" Markdown noise is stripped
+    expect(preview.textContent!.endsWith("…")).toBe(true);
+    expect(preview.textContent!.length).toBeLessThanOrEqual(121); // notePreview caps at 120 + "…"
+    expect(screen.queryByText(long)).not.toBeInTheDocument(); // the raw note is NOT dumped verbatim
+  });
+
+  it("labels an empty note rather than rendering a blank card", () => {
+    renderPopover([ann(1, { note_markdown: "   " })], { onOpen: vi.fn() });
+    expect(screen.getByRole("button", { name: "Open note: (empty note)" })).toBeInTheDocument();
   });
 
   it("closes on Escape (shared Popover shell)", async () => {
