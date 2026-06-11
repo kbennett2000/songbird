@@ -43,6 +43,9 @@ vi.mock("maplibre-gl", () => ({
       querySourceFeatures() {
         return [];
       }
+      getZoom() {
+        return 0;
+      }
       isSourceLoaded() {
         return true;
       }

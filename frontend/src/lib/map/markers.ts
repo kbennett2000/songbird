@@ -54,3 +54,36 @@ export function buildPlaceLabel(name: string): HTMLSpanElement {
   el.textContent = name;
   return el;
 }
+
+/** Up to this many member names are spelled out beside a stuck cluster; the rest collapse to "+N more". */
+const STUCK_NAMES_SHOWN = 4;
+
+/**
+ * The member names of a cluster that can never resolve by zooming (its dots overlap no matter
+ * how far the user zooms in) — shown stacked beside the cluster *in place of* its count, once
+ * zoomed in (issue #118). So a reader can finally read both names without a click. Styled like
+ * `buildPlaceLabel` (these are place-name *data*, with the same readable dark + halo treatment),
+ * one name per line. Names beyond `STUCK_NAMES_SHOWN` collapse to a muted "+N more" line — the
+ * cluster click → ClusterCard remains the full list. Non-interactive so a tap falls through to
+ * the GL circle underneath.
+ */
+export function buildClusterNamesLabel(names: string[], total: number): HTMLDivElement {
+  const el = document.createElement("div");
+  el.dataset.testid = "map-cluster-names";
+  el.className =
+    "pointer-events-none flex flex-col gap-0.5 text-[11px] font-medium leading-tight text-stone-900/85 " +
+    "[text-shadow:0_0_2px_rgba(255,255,255,0.9),0_0_2px_rgba(255,255,255,0.9)]";
+  for (const name of names.slice(0, STUCK_NAMES_SHOWN)) {
+    const line = document.createElement("span");
+    line.className = "whitespace-nowrap";
+    line.textContent = name;
+    el.appendChild(line);
+  }
+  if (total > STUCK_NAMES_SHOWN) {
+    const more = document.createElement("span");
+    more.className = "whitespace-nowrap font-normal text-stone-900/60";
+    more.textContent = `+${total - STUCK_NAMES_SHOWN} more`;
+    el.appendChild(more);
+  }
+  return el;
+}

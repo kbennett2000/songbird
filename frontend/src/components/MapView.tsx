@@ -10,9 +10,15 @@ import {
   MAX_BOUNDS,
   MAX_ZOOM,
   MIN_ZOOM,
+  STUCK_LABEL_MIN_ZOOM,
 } from "@/lib/map/config";
 import { MAP_LABELS } from "@/lib/map/labels";
-import { buildClusterBadge, buildLabelElement, buildPlaceLabel } from "@/lib/map/markers";
+import {
+  buildClusterBadge,
+  buildClusterNamesLabel,
+  buildLabelElement,
+  buildPlaceLabel,
+} from "@/lib/map/markers";
 import { boundsForPlaces } from "@/lib/map/bounds";
 import { partitionPlaces, placesToGeoJSON } from "@/lib/map/places";
 import { buildStyle, MATCH_NONE } from "@/lib/map/style";
@@ -167,6 +173,13 @@ export function MapView({ book, chapter, onJump }: MapViewProps): JSX.Element {
   // Place-name labels beside each unclustered pin (issue #86), keyed by place id. Kept in sync
   // with the GL points the same way the cluster badges are — added/removed as clustering changes.
   const placeLabelMarkers = useRef<Record<string, maplibregl.Marker>>({});
+  // Stacked member-name labels for clusters that can never split by zooming (issue #118), keyed by
+  // cluster_id. Mutually exclusive with the count badge for the same cluster: when a stuck cluster
+  // reveals its names, its badge is removed so the names stand in for the count.
+  const clusterNameMarkers = useRef<Record<string, maplibregl.Marker>>({});
+  // Bumped on every sync so an in-flight async stuck-check (which resolves after `moveend`) can
+  // tell its cluster_ids are stale — supercluster reassigns cluster_ids across zoom levels.
+  const syncGen = useRef(0);
   const [mapReady, setMapReady] = useState(false);
   // Set when the relief basemap fails to load (e.g. its bundled tiles aren't served with HTTP
   // Range). Without this the failure is silent — a blank map with no signal. Non-blocking: the
@@ -198,25 +211,70 @@ export function MapView({ book, chapter, onJump }: MapViewProps): JSX.Element {
     const map = mapRef.current;
     if (!map || !map.isSourceLoaded("places")) return;
 
-    // Cluster-count badges.
+    const gen = ++syncGen.current;
+    const src = map.getSource("places") as GeoJSONSource;
+    // Reveal stuck-cluster member names only once the user has zoomed in to inspect, and only when
+    // labels are on (issue #118). Below the threshold or with labels off, clusters show counts.
+    const namesAllowed = map.getZoom() >= STUCK_LABEL_MIN_ZOOM && showLabelsRef.current;
+
+    // When names aren't allowed, drop every name marker first so the badge pass below restores the
+    // count for any cluster that was showing names (zoomed back out, or labels just turned off).
+    if (!namesAllowed) {
+      for (const id of Object.keys(clusterNameMarkers.current)) {
+        clusterNameMarkers.current[id]?.remove();
+        delete clusterNameMarkers.current[id];
+      }
+    }
+
+    // Cluster-count badges — one per cluster that isn't currently showing its names instead.
     const clusters = map.querySourceFeatures("places", { filter: ["has", "point_count"] });
     const clusterIds = new Set<string>();
     for (const f of clusters) {
       const props = f.properties as { cluster_id: number; point_count: number };
       const id = String(props.cluster_id);
-      if (clusterIds.has(id)) continue;
+      if (clusterIds.has(id) || f.geometry.type !== "Point") continue;
       clusterIds.add(id);
-      if (!badgeMarkers.current[id] && f.geometry.type === "Point") {
-        const el = buildClusterBadge(props.point_count);
-        badgeMarkers.current[id] = new maplibregl.Marker({ element: el })
-          .setLngLat(f.geometry.coordinates as [number, number])
+      const coords = f.geometry.coordinates as [number, number];
+      if (!badgeMarkers.current[id] && !clusterNameMarkers.current[id]) {
+        badgeMarkers.current[id] = new maplibregl.Marker({ element: buildClusterBadge(props.point_count) })
+          .setLngLat(coords)
           .addTo(map);
+      }
+      // A cluster that won't split even at MAX_ZOOM (its dots never separate) swaps its count for
+      // the stacked member names. getClusterExpansionZoom / getClusterLeaves are async, so apply
+      // only if this sync generation is still current when they resolve.
+      if (namesAllowed && !clusterNameMarkers.current[id]) {
+        void src
+          .getClusterExpansionZoom(props.cluster_id)
+          .then((expZoom) => {
+            if (gen !== syncGen.current || expZoom <= MAX_ZOOM) return;
+            return src.getClusterLeaves(props.cluster_id, 100, 0).then((leaves) => {
+              if (gen !== syncGen.current || !showLabelsRef.current) return;
+              const names = leaves.map((l) => (l.properties as { name: string }).name);
+              badgeMarkers.current[id]?.remove();
+              delete badgeMarkers.current[id];
+              clusterNameMarkers.current[id] = new maplibregl.Marker({
+                element: buildClusterNamesLabel(names, leaves.length),
+                anchor: "left",
+                offset: [20, 0],
+              })
+                .setLngLat(coords)
+                .addTo(map);
+            });
+          })
+          .catch(() => {});
       }
     }
     for (const id of Object.keys(badgeMarkers.current)) {
       if (!clusterIds.has(id)) {
         badgeMarkers.current[id]?.remove();
         delete badgeMarkers.current[id];
+      }
+    }
+    for (const id of Object.keys(clusterNameMarkers.current)) {
+      if (!clusterIds.has(id)) {
+        clusterNameMarkers.current[id]?.remove();
+        delete clusterNameMarkers.current[id];
       }
     }
 
@@ -345,6 +403,7 @@ export function MapView({ book, chapter, onJump }: MapViewProps): JSX.Element {
       labelMarkers.current = [];
       badgeMarkers.current = {};
       placeLabelMarkers.current = {};
+      clusterNameMarkers.current = {};
       setMapReady(false);
     };
   }, [handlePointClick, handleClusterClick, syncMapMarkers]);
@@ -375,7 +434,10 @@ export function MapView({ book, chapter, onJump }: MapViewProps): JSX.Element {
     const display = showLabels ? "" : "none";
     for (const m of labelMarkers.current) m.getElement().style.display = display;
     for (const m of Object.values(placeLabelMarkers.current)) m.getElement().style.display = display;
-  }, [showLabels, mapReady]);
+    // Stuck-cluster names are removed (not just hidden) when labels go off, and the count badge
+    // takes their place — so re-run the sync rather than toggling display (issue #118).
+    syncMapMarkers();
+  }, [showLabels, mapReady, syncMapMarkers]);
 
   // Clear selection when the chapter changes (no stale card from the previous chapter).
   useEffect(() => {

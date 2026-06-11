@@ -34,6 +34,15 @@ export const RELIEF_MAXZOOM = 8;
  * can still go deeper (the crisp vector coastlines/rivers reward it; the relief just softens).
  */
 export const FIT_MAX_ZOOM = 9;
+/**
+ * The "zoomed in far enough" threshold at which a cluster that can never split (its expansion
+ * zoom exceeds `MAX_ZOOM`, so the user's zoom cap can never pull its dots apart) stops showing a
+ * count and reveals its member names instead (issue #118). Set near the top of the reachable
+ * range — high enough that names appear only once the user has deliberately zoomed in to inspect,
+ * yet comfortably below the cap of 10 (and just above the per-chapter auto-fit cap FIT_MAX_ZOOM)
+ * so the default framing stays uncluttered.
+ */
+export const STUCK_LABEL_MIN_ZOOM = 8.5;
 
 /** Same-origin paths to the bundled, backend-served offline assets (see scripts/tilegen). */
 export const RELIEF_PMTILES_PATH = "/tiles/relief.pmtiles";

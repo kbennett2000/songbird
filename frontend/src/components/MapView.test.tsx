@@ -15,8 +15,10 @@ const markers: FakeMarker[] = [];
 class FakeSource {
   setData = vi.fn();
   leaves: { properties: { id: string; name: string } }[] = [];
+  // The zoom at which a cluster splits; > MAX_ZOOM (10) means it can never resolve (issue #118).
+  expansionZoom = 6;
   getClusterLeaves = vi.fn(() => Promise.resolve(this.leaves));
-  getClusterExpansionZoom = vi.fn(() => Promise.resolve(6));
+  getClusterExpansionZoom = vi.fn(() => Promise.resolve(this.expansionZoom));
 }
 
 // A MapLibre HTML marker — records itself so tests can read the place-name labels / cluster badges
@@ -49,6 +51,8 @@ class FakeMap {
   // querySourceFeatures returns these, picked by filter: clusters vs unclustered points.
   clusterFeatures: unknown[] = [];
   pointFeatures: unknown[] = [];
+  zoom = 6;
+  getZoom = (): number => this.zoom;
   fitBounds = vi.fn();
   setFilter = vi.fn();
   addControl = vi.fn();
@@ -141,6 +145,19 @@ async function loadMap(): Promise<FakeMap> {
     map.emit("load", "");
   });
   return map;
+}
+
+/** The DOM element of the first live marker with this test id (cluster badge / names / pin label). */
+function markerByTestId(testid: string): HTMLElement | undefined {
+  return markers.map((m) => m.getElement()).find((el) => el.dataset.testid === testid);
+}
+
+/** A cluster feature as MapLibre's querySourceFeatures returns it (one cluster, `count` members). */
+function clusterFeature(count: number, id = 1) {
+  return {
+    geometry: { type: "Point", coordinates: [35.3, 31.85] },
+    properties: { cluster_id: id, point_count: count },
+  };
 }
 
 beforeEach(() => {
@@ -267,5 +284,102 @@ describe("MapView (MapLibre)", () => {
     ]);
     expect(screen.queryByTestId("place-card")).not.toBeInTheDocument();
     expect(map.easeTo).toHaveBeenCalled();
+  });
+
+  it("reveals a never-resolving cluster's member names once zoomed in, replacing the count (#118)", async () => {
+    mockPlaces([JERUSALEM, BETHANY]);
+    renderMap();
+    const map = await loadMap();
+    map.zoom = 9; // past STUCK_LABEL_MIN_ZOOM
+    map.source.expansionZoom = 15; // > MAX_ZOOM → these dots never separate
+    map.source.leaves = [
+      { properties: { id: "jeru", name: "Jerusalem" } },
+      { properties: { id: "beth", name: "Bethany" } },
+    ];
+    map.clusterFeatures = [clusterFeature(2)];
+
+    await act(async () => {
+      map.emit("moveend", "");
+    });
+
+    // The async stuck-check swaps the count badge for the stacked member names.
+    const names = await waitFor(() => {
+      const el = markerByTestId("map-cluster-names");
+      expect(el).toBeDefined();
+      return el!;
+    });
+    expect([...names.children].map((c) => c.textContent)).toEqual(["Jerusalem", "Bethany"]);
+    // The count badge is gone — the names stand in for it.
+    expect(markerByTestId("map-cluster")).toBeUndefined();
+  });
+
+  it("keeps the count for a cluster that could still resolve by zooming (#118)", async () => {
+    mockPlaces([JERUSALEM, BETHANY]);
+    renderMap();
+    const map = await loadMap();
+    map.zoom = 9;
+    map.source.expansionZoom = 6; // <= MAX_ZOOM → would still split if the user could zoom there
+    map.clusterFeatures = [clusterFeature(2)];
+
+    await act(async () => {
+      map.emit("moveend", "");
+    });
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(markerByTestId("map-cluster")?.textContent).toBe("2");
+    expect(markerByTestId("map-cluster-names")).toBeUndefined();
+  });
+
+  it("doesn't reveal cluster names until zoomed in past the threshold (#118)", async () => {
+    mockPlaces([JERUSALEM, BETHANY]);
+    renderMap();
+    const map = await loadMap();
+    map.zoom = 6; // below STUCK_LABEL_MIN_ZOOM
+    map.source.expansionZoom = 15;
+    map.source.leaves = [
+      { properties: { id: "jeru", name: "Jerusalem" } },
+      { properties: { id: "beth", name: "Bethany" } },
+    ];
+    map.clusterFeatures = [clusterFeature(2)];
+
+    await act(async () => {
+      map.emit("moveend", "");
+    });
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(markerByTestId("map-cluster")?.textContent).toBe("2");
+    expect(markerByTestId("map-cluster-names")).toBeUndefined();
+  });
+
+  it("hiding labels (Aa) reverts a revealed cluster back to its count (#118)", async () => {
+    mockPlaces([JERUSALEM, BETHANY]);
+    const user = userEvent.setup();
+    renderMap();
+    const map = await loadMap();
+    map.zoom = 9;
+    map.source.expansionZoom = 15;
+    map.source.leaves = [
+      { properties: { id: "jeru", name: "Jerusalem" } },
+      { properties: { id: "beth", name: "Bethany" } },
+    ];
+    map.clusterFeatures = [clusterFeature(2)];
+
+    await act(async () => {
+      map.emit("moveend", "");
+    });
+    await waitFor(() => expect(markerByTestId("map-cluster-names")).toBeDefined());
+
+    // Hide labels: the names disappear and the count badge takes their place again.
+    await user.click(screen.getByRole("button", { name: "Hide labels" }));
+    await waitFor(() => {
+      expect(markerByTestId("map-cluster-names")).toBeUndefined();
+      expect(markerByTestId("map-cluster")?.textContent).toBe("2");
+    });
   });
 });
