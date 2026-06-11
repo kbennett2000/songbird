@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 import { MAP_LABELS } from "@/lib/map/labels";
-import { buildClusterBadge, buildLabelElement, buildPlaceLabel } from "@/lib/map/markers";
+import {
+  buildClusterBadge,
+  buildClusterNamesLabel,
+  buildLabelElement,
+  buildPlaceLabel,
+} from "@/lib/map/markers";
 
 describe("map labels (curated)", () => {
   it("are all within the atlas extent (so they actually place)", () => {
@@ -39,5 +44,18 @@ describe("marker DOM builders", () => {
     expect(el.textContent).toBe("Jerusalem");
     expect(el.dataset.testid).toBe("map-place-label");
     expect(el.className).toContain("pointer-events-none");
+  });
+
+  it("a stuck-cluster names label stacks every member and doesn't intercept clicks (#118)", () => {
+    const el = buildClusterNamesLabel(["Jerusalem", "Bethany"], 2);
+    expect(el.dataset.testid).toBe("map-cluster-names");
+    expect(el.className).toContain("pointer-events-none");
+    expect([...el.children].map((c) => c.textContent)).toEqual(["Jerusalem", "Bethany"]);
+  });
+
+  it("a stuck-cluster names label collapses the overflow to '+N more' (#118)", () => {
+    const el = buildClusterNamesLabel(["A", "B", "C", "D", "E", "F"], 6);
+    // Four names spelled out, then a single "+2 more" line.
+    expect([...el.children].map((c) => c.textContent)).toEqual(["A", "B", "C", "D", "+2 more"]);
   });
 });
