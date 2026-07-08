@@ -12,8 +12,9 @@ from collections.abc import Callable
 
 import httpx
 import pytest
-from fastapi import FastAPI
-from songbird.api.deps import get_concord_client, get_db
+from fastapi import Depends, FastAPI
+from songbird.api.deps import get_concord_client, get_current_user, get_db
+from songbird.db.models import User
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from tests.conftest import FakeConcordClient
 from tests.helpers import ANNOTATION_BODY, build_chapter
@@ -108,8 +109,14 @@ async def test_bridge_live_against_concord(
         async with db_sessionmaker() as session:
             yield session
 
+    async def _current_user_override(db: AsyncSession = Depends(get_db)) -> User:
+        user = await db.get(User, 1)
+        assert user is not None
+        return user
+
     app.dependency_overrides[get_concord_client] = lambda: real
     app.dependency_overrides[get_db] = _db_override
+    app.dependency_overrides[get_current_user] = _current_user_override
     transport = httpx.ASGITransport(app=app)
     try:
         async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
