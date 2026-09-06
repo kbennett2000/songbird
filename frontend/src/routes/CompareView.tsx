@@ -270,7 +270,7 @@ export function CompareView(): JSX.Element {
                     return (
                       <div
                         key={`v-${n}-${i}`}
-                        className={`py-1 font-serif text-base leading-7 ${
+                        className={`relative py-1 font-serif text-base leading-7 ${
                           inScope.length > 0 ? `rounded ${VERSE_HIGHLIGHT} px-1` : ""
                         }`}
                       >

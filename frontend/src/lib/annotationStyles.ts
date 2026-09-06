@@ -7,16 +7,37 @@
  * popover eyebrows kept light-mode-only colours, and the highlight itself got a mechanical
  * amber-100 → amber-900 flip that nobody chose (#122).
  *
- * Dark mirrors light's *restraint*, not its lightness. The light wash sits at 1.07:1 against the
- * page, so the dark one is tuned to 1.16:1; amber-900 had landed at 1.96:1 — twice as loud as the
- * thing it was translating, and 7× the page's brightness.
+ * The first fix for #122 got this wrong twice over and is worth recording. It kept the amber and
+ * only lowered the contrast (amber-950/90, 1.16:1), on the theory that the fault was loudness
+ * rather than hue — and it was verified against a chapter with *two* annotated verses, where a
+ * warm tint reads as a neat accent band. In real use a chapter often has a dozen annotated verses
+ * in a row. Each verse is its own block, so they stack into one unbroken field, and at that size
+ * any warm fill is a stain on the cool page. Kris's verdict: "much much worse".
  *
- * These are colour only. The highlight's layout genuinely differs between views (a reader row is
- * already `rounded px-3`, a compare cell needs its own), so each call site keeps its own spacing.
+ * So dark stops tinting the page at all. The fill becomes a colourless lift and the amber moves to
+ * a rule in the gutter — identity at the edge, nothing spilled across the text. That degrades
+ * gracefully to the case that broke the first attempt: a run of twelve marked verses reads as one
+ * cleanly-edged block instead of a slab.
+ *
+ * These are colour only, with one exception noted on VERSE_HIGHLIGHT. Layout differs between views
+ * (a reader row is already `rounded px-3`, a compare cell needs its own), so call sites keep their
+ * own spacing.
  */
 
-/** The wash on a verse that carries an in-scope note. Dark: #401a07, 1.16:1 against the page. */
-export const VERSE_HIGHLIGHT = "bg-amber-100 dark:bg-amber-950/90";
+/**
+ * A verse that carries an in-scope note.
+ *
+ * Light is unchanged: the cream wash it has always had. Dark is a colourless lift (white/5,
+ * #1b2130, 1.10:1 — no hue to clash with the page) plus a 3px amber-500 rule down the left edge.
+ *
+ * The rule is a pseudo-element, not a `border-l`: a real border eats 3px of content box and
+ * shifts every glyph right. This needs a positioned ancestor — the reader's verse `<p>` already
+ * carries `relative`, and CompareView's cell has it added for this.
+ */
+export const VERSE_HIGHLIGHT =
+  "bg-amber-100 dark:bg-white/5 " +
+  "dark:before:absolute dark:before:inset-y-0 dark:before:left-0 dark:before:w-[3px] " +
+  "dark:before:bg-amber-500 dark:before:content-['']";
 
 /** The ● that opens the note. Dark amber-400 reads 9.2:1 on the wash, where amber-600 read 2.9. */
 export const NOTE_MARKER =
