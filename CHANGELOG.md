@@ -27,6 +27,13 @@ This project follows [Keep a Changelog](https://keepachangelog.com/) and
   text as one long, run-together scroll. It's now a tidy stack of cards — one clear preview line per
   note, with its tags, and obvious gaps between them (in dark mode too). Tap a note to open it in
   full. ([#116](https://github.com/kbennett2000/songbird/issues/116))
+- **Highlighted verses look right in dark mode.** A verse carrying a note was washed in a heavy
+  orange-brown that fought the dark blue page, and it buried the small dot you tap to open the note.
+  It's now a soft ember tint — as gentle against a dark page as the cream highlight is in daylight —
+  with a clear amber dot on top. The same pass fixed the things around it that had been left with
+  daylight colours: the note pop-ups, the count on a verse with several notes, highlighted words in
+  search results, and the note labels on your home page. Light mode is unchanged.
+  ([#122](https://github.com/kbennett2000/songbird/issues/122))
 
 ## [1.6.0] — 2026-06-09
 
