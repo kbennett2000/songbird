@@ -28,7 +28,7 @@ export function SidePanel({
         <div>
           <h2 className="text-lg font-semibold">{title}</h2>
           {subtitle && <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{subtitle}</p>}
-          {scopeLabel && <p className="mt-1 text-sm text-amber-700">⚠ {scopeLabel}</p>}
+          {scopeLabel && <p className="mt-1 text-sm text-amber-700 dark:text-amber-400">⚠ {scopeLabel}</p>}
         </div>
         <button
           type="button"

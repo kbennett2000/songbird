@@ -2,6 +2,7 @@ import { useMemo } from "react";
 
 import { Popover } from "@/components/Popover";
 import { SermonNoteFields } from "@/components/SermonNoteFields";
+import { SERMON_EYEBROW } from "@/lib/annotationStyles";
 import type { SermonNote } from "@/schemas";
 
 interface SermonNotesPopoverProps {
@@ -40,7 +41,7 @@ export function SermonNotesPopover({
   return (
     <Popover anchor={anchor} onClose={onClose} ariaLabel={`${notes.length} sermons on this verse`}>
       <div className="mb-1 flex items-start justify-between gap-2">
-        <span className="text-xs font-semibold uppercase tracking-wide text-emerald-700">
+        <span className={`text-xs font-semibold uppercase tracking-wide ${SERMON_EYEBROW}`}>
           Sermons · {notes.length}
         </span>
         <button

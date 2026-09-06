@@ -31,6 +31,15 @@ import { useAuth } from "@/hooks/useAuth";
 
 // Lazy-loaded: the map pulls in MapLibre (~300 KB gz), only needed when the map modal opens.
 const MapView = lazy(() => import("@/components/MapView").then((m) => ({ default: m.MapView })));
+import {
+  NOTE_COUNT_BADGE,
+  NOTE_MARKER,
+  OUT_OF_SCOPE_COUNT_BADGE,
+  OUT_OF_SCOPE_MARKER,
+  SERMON_COUNT_BADGE,
+  SERMON_MARKER,
+  VERSE_HIGHLIGHT,
+} from "@/lib/annotationStyles";
 import { ApiError } from "@/lib/api";
 import { saveReadingPosition } from "@/lib/auth";
 import { nextChapter, prevChapter } from "@/lib/navigation";
@@ -734,7 +743,7 @@ export function ReaderView(): JSX.Element {
                   <p
                     id={`v-${v.verse}`}
                     className={`group relative -mx-3 rounded px-3 py-0.5 ${
-                      inScope.length > 0 ? "bg-amber-100 dark:bg-amber-900" : ""
+                      inScope.length > 0 ? VERSE_HIGHLIGHT : ""
                     } ${highlightVerse === v.verse ? "ring-2 ring-blue-400" : ""}`}
                   >
                     <button
@@ -753,7 +762,7 @@ export function ReaderView(): JSX.Element {
                     {inScope.length > 0 && (
                       <button
                         type="button"
-                        className="ml-2 align-middle text-amber-600 hover:text-amber-800 dark:hover:text-amber-400"
+                        className={`ml-2 align-middle ${NOTE_MARKER}`}
                         onClick={(e) =>
                           inScope.length === 1
                             ? openExisting(v, inScope[0]!)
@@ -772,7 +781,9 @@ export function ReaderView(): JSX.Element {
                       >
                         ●
                         {inScope.length > 1 && (
-                          <span className="ml-0.5 rounded-full bg-amber-100 px-1 text-[0.7em] font-semibold text-amber-700">
+                          <span
+                            className={`ml-0.5 rounded-full px-1 text-[0.7em] font-semibold ${NOTE_COUNT_BADGE}`}
+                          >
                             {inScope.length}
                           </span>
                         )}
@@ -781,7 +792,7 @@ export function ReaderView(): JSX.Element {
                     {outScope.length > 0 && (
                       <button
                         type="button"
-                        className="ml-2 align-middle text-gray-400 dark:text-gray-500 hover:text-gray-600"
+                        className={`ml-2 align-middle ${OUT_OF_SCOPE_MARKER}`}
                         onClick={(e) =>
                           outScope.length === 1
                             ? openExisting(v, outScope[0]!)
@@ -800,7 +811,9 @@ export function ReaderView(): JSX.Element {
                       >
                         ○
                         {outScope.length > 1 && (
-                          <span className="ml-0.5 rounded-full bg-gray-100 px-1 text-[0.7em] font-semibold text-gray-600">
+                          <span
+                            className={`ml-0.5 rounded-full px-1 text-[0.7em] font-semibold ${OUT_OF_SCOPE_COUNT_BADGE}`}
+                          >
                             {outScope.length}
                           </span>
                         )}
@@ -809,7 +822,7 @@ export function ReaderView(): JSX.Element {
                     {v.sermon_notes.length > 0 && (
                       <button
                         type="button"
-                        className="ml-2 align-middle text-emerald-600 hover:text-emerald-800"
+                        className={`ml-2 align-middle ${SERMON_MARKER}`}
                         onClick={(e) =>
                           setOpenSermon({
                             notes: v.sermon_notes,
@@ -826,7 +839,9 @@ export function ReaderView(): JSX.Element {
                       >
                         ▶
                         {v.sermon_notes.length > 1 && (
-                          <span className="ml-0.5 rounded-full bg-emerald-100 px-1 text-[0.7em] font-semibold text-emerald-700">
+                          <span
+                            className={`ml-0.5 rounded-full px-1 text-[0.7em] font-semibold ${SERMON_COUNT_BADGE}`}
+                          >
                             {v.sermon_notes.length}
                           </span>
                         )}

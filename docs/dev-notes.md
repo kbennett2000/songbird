@@ -4,6 +4,80 @@ A running log of per-slice decisions, gotchas, and how each slice was verified. 
 
 ---
 
+## #122 — dark-mode annotation highlight
+
+- **Date:** 2026-09-06
+- **Branch:** `slice/122-dark-highlight`
+
+### Why
+
+The annotated-verse wash was `bg-amber-100 dark:bg-amber-900` — and nobody chose the dark half.
+The #60 sweep (below) was "a scripted single-pass regex"; it flipped the light tint to its
+mechanical opposite on the amber scale. Measured against the real surfaces:
+
+| | fill | vs page | brightness vs page |
+|---|---|---|---|
+| Light | `#fef3c7` on `#fafaf9` | **1.07:1** | 0.94× (a shade *darker* than the page) |
+| Dark, before | `#78350f` on `#111827` | **1.96:1** | **7.2×** |
+
+So the bug was not the hue, it was the **loudness**: dark asserted itself about twice as hard
+against its page as light did against its own, which is why it read as a slab rather than a tint.
+Picking a prettier brown at the same amplitude would not have fixed it.
+
+### What landed
+
+- **`frontend/src/lib/annotationStyles.ts`** — the accent in one home. Reader and Compare held
+  byte-identical hand copies of the highlight, the ● and the count badge; the popovers held their
+  own eyebrow colours. That duplication is what let the #60 sweep leave them inconsistent.
+  Colour only — the highlight's layout genuinely differs per view (a reader row is already
+  `rounded px-3`, a compare cell needs its own), so call sites keep their spacing.
+- **The wash:** `dark:bg-amber-950/90` → `#401a07`, **1.16:1**, matching light's restraint. Chosen
+  over a neutral tint to keep the warm "amber = your note" identity, and it is already the repo's
+  idiom (`MapView.tsx`, `JourneyMap.tsx` basemap banners).
+- **The markers, which the quieter wash promotes to the primary cue:** ● gets a dark base at last
+  (`dark:text-amber-400`, 9.2:1 on the wash — it was amber-600 at 2.9:1, with only its *hover*
+  state given a dark variant). Count badge, out-of-scope ○ badge, sermon ▶ and its badge likewise.
+- **Adjacent gaps the same sweep missed** (no `dark:` at all): the search-match `<mark>`, the
+  Welcome NOTE/SERMON pills, the SidePanel scope warning, the Compare "rotate to landscape" hint.
+- **Popover eyebrows** now follow `NotePopover`'s violet treatment, the one done right:
+  `text-amber-700 dark:text-amber-400` (8.8:1 on the card, was 2.9:1).
+
+### Gotchas / things to know
+
+- **Tailwind's preflight does not reset `<mark>`.** It keeps the UA `color: marktext` (black), so
+  the search highlight's `dark:text-yellow-100` is **required**, not decoration — darkening only
+  its background would have put black text on dark olive. Light keeps the UA black, unchanged.
+- **Moving classes into a constants module is safe here**: `tailwind.config.ts` scans
+  `./src/**/*.{ts,tsx}` as raw text, so complete class tokens in a `.ts` literal are found. Verified
+  in the built CSS rather than assumed — `bg-amber-950/90` emits `background-color:#451a03e6`.
+- **Search stays deliberately louder than annotation** (1.84:1 vs 1.16:1). Different jobs: a search
+  hit points at what you just asked for, an annotation wash is passive. The olive also separates it
+  from the ember — in light mode `yellow-200` and `amber-100` are one step apart and easy to confuse.
+- **Still open (light mode, deliberately not touched):** the multi-note count badge is `bg-amber-100`
+  sitting on the `bg-amber-100` wash — **1.00:1**, so the pill background does nothing and only its
+  text colour separates it. Shipped in #114, unrelated to dark mode. `bg-amber-200` would fix it;
+  left out because #122 is a dark-mode issue and light mode is what Kris likes.
+- **Prettier is not gated** (absent from the Makefile and CI) and six of the touched files were
+  already non-compliant on `main`. Left alone — `--write` would bury the diff in reformatting.
+
+### How it was verified
+
+- Backend: `ruff check`, `ruff format --check`, `pyright` strict (**0 errors**), `pytest`
+  (241 passed, 4 concord-deselected). No backend files changed. *Note: `pyright` needs the venv on
+  `PATH`/`VIRTUAL_ENV`; without it, it cannot resolve `fastapi` and reports ~1459 phantom errors.*
+- Frontend: `eslint`, `tsc --noEmit`, `vitest` (**251 passed**, 38 files), `vite build`.
+- **The rule test** (`annotationStyles.test.ts`) asserts every light utility in the accent set has a
+  `dark:` counterpart at the same variant — the invariant the #60 regex broke, rather than a colour
+  snapshot. Proved non-vacuous against the two real pre-#122 strings: it rejects the badge with no
+  dark variant and the ● whose dark variant covered only `hover:`.
+- Built-CSS check: every new dark rule is emitted (`bg-amber-950/90`, `bg-amber-400/20`,
+  `bg-yellow-400/25`, the amber/emerald 400/300/100/200 text rules), and `bg-amber-900` no longer
+  appears in the bundle at all.
+- Live: `docker compose up --build` on :8077 — dark-mode pass over Reader, Compare, the popovers,
+  Search and Welcome, then a light-mode pass to confirm no daylight regression.
+
+---
+
 ## Release prep v1.6.0 — version reconciliation + CHANGELOG (Stop 1 of a two-stop release)
 
 - **Date:** 2026-06-09

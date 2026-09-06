@@ -566,7 +566,9 @@ describe("ReaderView", () => {
   it("opens the editor directly (no popover) for a verse with exactly one note", async () => {
     server.use(
       http.get("/api/v1/read/:translation/:book/:chapter", ({ params }) =>
-        HttpResponse.json(readResponse([annotation({ note_markdown: "lone note" })], String(params.translation))),
+        HttpResponse.json(
+          readResponse([annotation({ note_markdown: "lone note" })], String(params.translation)),
+        ),
       ),
     );
     const user = userEvent.setup();
@@ -616,6 +618,21 @@ describe("ReaderView", () => {
     ).toBeInTheDocument(); // amber ●
     expect(screen.getByRole("button", { name: "Translator's note 1" })).toBeInTheDocument(); // violet superscript
     expect(screen.getByRole("button", { name: "2 sermons on verse 16" })).toBeInTheDocument(); // emerald counted ▶
+  });
+
+  it("washes an annotated verse as gently in dark mode as in light (#122)", async () => {
+    server.use(
+      http.get("/api/v1/read/:translation/:book/:chapter", ({ params }) =>
+        HttpResponse.json(readResponse([annotation()], String(params.translation))),
+      ),
+    );
+    renderReader();
+    const marker = await screen.findByRole("button", { name: "View note on verse 16" });
+
+    // Pinned, because #122 was a mechanical amber-100 → amber-900 rewrite: the dark wash came out
+    // at 1.96:1 against the page where the light one sits at 1.07:1. amber-950/90 is 1.16:1.
+    expect(marker.closest("p")).toHaveClass("bg-amber-100", "dark:bg-amber-950/90");
+    expect(marker.closest("p")?.className).not.toContain("amber-900");
   });
 
   it("keeps the counted ▶ across a translation switch", async () => {

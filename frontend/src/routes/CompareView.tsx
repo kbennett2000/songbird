@@ -6,6 +6,13 @@ import { AnnotationPopover } from "@/components/AnnotationPopover";
 import { AnnotationsPopover } from "@/components/AnnotationsPopover";
 import { TopNav } from "@/components/TopNav";
 import { useAuth } from "@/hooks/useAuth";
+import {
+  NOTE_COUNT_BADGE,
+  NOTE_MARKER,
+  OUT_OF_SCOPE_COUNT_BADGE,
+  OUT_OF_SCOPE_MARKER,
+  VERSE_HIGHLIGHT,
+} from "@/lib/annotationStyles";
 import { nextChapter, prevChapter } from "@/lib/navigation";
 import { fetchBooks, fetchChapter, fetchTranslations } from "@/lib/reader";
 import type { ReadAnnotation, ReadChapter } from "@/schemas";
@@ -194,7 +201,7 @@ export function CompareView(): JSX.Element {
       </TopNav>
 
       <main className="mx-auto max-w-6xl p-4 sm:p-6">
-        <div className="mb-4 rounded border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 sm:hidden">
+        <div className="mb-4 rounded border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 sm:hidden dark:border-amber-700 dark:bg-amber-950/60 dark:text-amber-200">
           Rotate your device to landscape to compare translations side by side.
         </div>
 
@@ -264,7 +271,7 @@ export function CompareView(): JSX.Element {
                       <div
                         key={`v-${n}-${i}`}
                         className={`py-1 font-serif text-base leading-7 ${
-                          inScope.length > 0 ? "rounded bg-amber-100 dark:bg-amber-900 px-1" : ""
+                          inScope.length > 0 ? `rounded ${VERSE_HIGHLIGHT} px-1` : ""
                         }`}
                       >
                         {v ? (
@@ -273,7 +280,7 @@ export function CompareView(): JSX.Element {
                             {inScope.length > 0 && (
                               <button
                                 type="button"
-                                className="ml-2 align-middle text-amber-600 hover:text-amber-800 dark:hover:text-amber-400"
+                                className={`ml-2 align-middle ${NOTE_MARKER}`}
                                 onClick={(e) =>
                                   setOpenNote({ annotations: inScope, anchor: e.currentTarget })
                                 }
@@ -286,7 +293,9 @@ export function CompareView(): JSX.Element {
                               >
                                 ●
                                 {inScope.length > 1 && (
-                                  <span className="ml-0.5 rounded-full bg-amber-100 px-1 text-[0.7em] font-semibold text-amber-700">
+                                  <span
+                                    className={`ml-0.5 rounded-full px-1 text-[0.7em] font-semibold ${NOTE_COUNT_BADGE}`}
+                                  >
                                     {inScope.length}
                                   </span>
                                 )}
@@ -295,7 +304,7 @@ export function CompareView(): JSX.Element {
                             {outScope.length > 0 && (
                               <button
                                 type="button"
-                                className="ml-2 align-middle text-gray-400 dark:text-gray-500 hover:text-gray-600"
+                                className={`ml-2 align-middle ${OUT_OF_SCOPE_MARKER}`}
                                 onClick={(e) =>
                                   setOpenNote({ annotations: outScope, anchor: e.currentTarget })
                                 }
@@ -308,7 +317,9 @@ export function CompareView(): JSX.Element {
                               >
                                 ○
                                 {outScope.length > 1 && (
-                                  <span className="ml-0.5 rounded-full bg-gray-100 px-1 text-[0.7em] font-semibold text-gray-600">
+                                  <span
+                                    className={`ml-0.5 rounded-full px-1 text-[0.7em] font-semibold ${OUT_OF_SCOPE_COUNT_BADGE}`}
+                                  >
                                     {outScope.length}
                                   </span>
                                 )}

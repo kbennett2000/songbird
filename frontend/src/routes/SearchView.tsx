@@ -22,7 +22,10 @@ type Mode = "semantic" | "keyword";
 function highlighted(snippet: string): JSX.Element[] {
   return markSegments(snippet).map((s) =>
     s.mark ? (
-      <mark key={s.key} className="rounded bg-yellow-200">
+      <mark
+        key={s.key}
+        className="rounded bg-yellow-200 dark:bg-yellow-400/25 dark:text-yellow-100"
+      >
         {s.text}
       </mark>
     ) : (

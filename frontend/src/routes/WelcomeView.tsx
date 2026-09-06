@@ -194,8 +194,8 @@ export function WelcomeView(): JSX.Element {
                   <span
                     className={`rounded px-2 py-0.5 text-xs font-semibold uppercase tracking-wide ${
                       r.kind === "sermon"
-                        ? "bg-emerald-100 text-emerald-700"
-                        : "bg-amber-100 text-amber-800"
+                        ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-200"
+                        : "bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-200"
                     }`}
                   >
                     {r.kind === "sermon" ? "Sermon" : "Note"}

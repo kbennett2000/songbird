@@ -1,5 +1,6 @@
 import { Popover } from "@/components/Popover";
 import { SermonNoteFields } from "@/components/SermonNoteFields";
+import { SERMON_EYEBROW } from "@/lib/annotationStyles";
 import type { SermonNote } from "@/schemas";
 
 interface SermonNotePopoverProps {
@@ -26,7 +27,7 @@ export function SermonNotePopover({
   return (
     <Popover anchor={anchor} onClose={onClose} ariaLabel={`Sermon — ${note.title}`}>
       <div className="mb-1 flex items-start justify-between gap-2">
-        <span className="text-xs font-semibold uppercase tracking-wide text-emerald-700">
+        <span className={`text-xs font-semibold uppercase tracking-wide ${SERMON_EYEBROW}`}>
           Sermon
         </span>
         <button

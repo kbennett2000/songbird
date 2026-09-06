@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 
 import { Popover } from "@/components/Popover";
+import { NOTE_EYEBROW } from "@/lib/annotationStyles";
 import { readerLink } from "@/lib/notes";
 import type { ReadAnnotation } from "@/schemas";
 
@@ -29,7 +30,7 @@ export function AnnotationPopover({
   return (
     <Popover anchor={anchor} onClose={onClose} ariaLabel={`Note on ${annotation.book_usfm} ${annotation.start_chapter}:${annotation.start_verse}`}>
       <div className="mb-1 flex items-center justify-between gap-2">
-        <span className="text-xs font-semibold uppercase tracking-wide text-amber-700">Note</span>
+        <span className={`text-xs font-semibold uppercase tracking-wide ${NOTE_EYEBROW}`}>Note</span>
         <button
           type="button"
           className="rounded p-1 text-gray-400 dark:text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-700 dark:hover:text-gray-200"
