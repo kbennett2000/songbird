@@ -9,13 +9,21 @@ import * as styles from "@/lib/annotationStyles";
  * every light utility in the accent set must have a dark counterpart at the same variant.
  */
 
-/** `hover:text-amber-800` → variant `hover:`, property `text`. `bg-amber-100` → ``, `bg`. */
+/**
+ * `hover:text-amber-800` → variant `hover:`, property `text`. `bg-amber-100` → ``, `bg`.
+ *
+ * `border-` is recognised as well as `bg-`/`text-`. The first version of this helper knew only the
+ * latter two, which left the guard blind to exactly the treatment #122 ended up shipping — a
+ * border- or rule-based highlight would have satisfied the invariant vacuously, by having no
+ * recognised light utility to check.
+ */
+const PROPERTIES = ["bg", "text", "border"] as const;
+
 function parse(token: string): { variant: string; property: string } | null {
-  const dark = token.startsWith("dark:");
-  const rest = dark ? token.slice("dark:".length) : token;
+  const rest = token.startsWith("dark:") ? token.slice("dark:".length) : token;
   const parts = rest.split(":");
   const bare = parts.pop() ?? "";
-  const property = bare.startsWith("bg-") ? "bg" : bare.startsWith("text-") ? "text" : "";
+  const property = PROPERTIES.find((p) => bare.startsWith(`${p}-`));
   if (!property) return null;
   return { variant: parts.join(":"), property };
 }
@@ -59,10 +67,32 @@ describe("annotation accent styles (#122)", () => {
     }
   });
 
-  it("keeps the dark verse wash as restrained as the light one", () => {
-    // Light sits at 1.07:1 against the page. amber-900 landed at 1.96:1 — the bug in #122.
-    // amber-950/90 computes to #401a07, 1.16:1. Pinned so a future sweep can't silently flip it.
-    expect(styles.VERSE_HIGHLIGHT).toContain("dark:bg-amber-950/90");
-    expect(styles.VERSE_HIGHLIGHT).not.toContain("amber-900");
+  it("puts no hue in the dark verse fill (#122)", () => {
+    // The whole lesson of #122: a run of a dozen annotated verses stacks into one field, and any
+    // warm fill at that size is a stain on the cool page. Both attempts that tinted it were
+    // rejected — amber-900 at 1.96:1, then amber-950/90 at 1.16:1. The dark fill is now colourless
+    // and the amber lives in a rule at the edge. Pinned so nobody re-tints it by reflex.
+    expect(styles.VERSE_HIGHLIGHT).toContain("dark:bg-white/5");
+    for (const rejected of ["amber-900", "amber-950"]) {
+      expect(styles.VERSE_HIGHLIGHT).not.toContain(rejected);
+    }
+  });
+
+  it("hangs the dark rule off a pseudo-element, never a border (#122)", () => {
+    // A real `border-l` eats content box and shifts every glyph right; the pseudo-element sits in
+    // the padding the row already bleeds into, so the text column does not move.
+    expect(styles.VERSE_HIGHLIGHT).toContain("dark:before:absolute");
+    expect(styles.VERSE_HIGHLIGHT).toContain("dark:before:bg-amber-500");
+    expect(styles.VERSE_HIGHLIGHT).not.toMatch(/(^|\s)(dark:)?border-l/);
+  });
+
+  it("recognises border utilities, so a rule-based accent can't pass vacuously", () => {
+    // Regression guard on parse() itself: it once knew only bg-/text-, which would have skipped
+    // the very treatment #122 shipped.
+    expect(parse("border-amber-400")).toEqual({ variant: "", property: "border" });
+    expect(parse("dark:hover:border-amber-300")).toEqual({
+      variant: "hover",
+      property: "border",
+    });
   });
 });
