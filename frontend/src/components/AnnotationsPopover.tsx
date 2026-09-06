@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { Link } from "react-router-dom";
 
 import { Popover } from "@/components/Popover";
+import { NOTE_EYEBROW } from "@/lib/annotationStyles";
 import { notePreview, readerLink } from "@/lib/notes";
 import type { ReadAnnotation } from "@/schemas";
 
@@ -82,7 +83,7 @@ export function AnnotationsPopover({
   return (
     <Popover anchor={anchor} onClose={onClose} ariaLabel={`${annotations.length} notes on this verse`}>
       <div className="mb-2 flex items-start justify-between gap-2">
-        <span className="text-xs font-semibold uppercase tracking-wide text-amber-700">
+        <span className={`text-xs font-semibold uppercase tracking-wide ${NOTE_EYEBROW}`}>
           Notes · {annotations.length}
         </span>
         <button
