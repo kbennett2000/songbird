@@ -4,6 +4,97 @@ A running log of per-slice decisions, gotchas, and how each slice was verified. 
 
 ---
 
+## #122 follow-up — the dark highlight, done properly
+
+- **Date:** 2026-09-06
+- **Branch:** `slice/122b-dark-highlight`
+
+### Why there is a second entry
+
+The first attempt (below) shipped and made it worse. Kris: *"A shit colored brown stain highlight???
+THIS MUCH MUCH WORSE!!!!"* Two mistakes, and the second caused the first.
+
+**1. It optimised the wrong axis.** The entry below argues, in writing, that the fault was *loudness
+rather than hue* — light at 1.07:1 against the page, dark at 1.96:1 — and so kept the amber family
+and merely darkened it. The complaint was the colour both times: "a very yellowish-orange", then
+"brown stain". `amber-950` is `#451a03`, 88% saturation, pure brown; on a cool navy page that is a
+stain at *any* amplitude.
+
+**2. It was verified against a case that does not occur.** The verification used a chapter with
+**two** annotated verses, where a warm tint reads as a tidy accent band. Real chapters here often
+carry a dozen annotated verses in a row. Each verse is its own `<p>` with `py-0.5`, and Tailwind's
+preflight zeroes `p { margin: 0 }`, so consecutive marked verses stack with **zero gap** into one
+unbroken field. **A tint that works as an accent becomes a stain when it is the majority state of
+the page.** That case was never rendered, so the problem was never seen.
+
+The general lesson, which is the useful part: *verify the state the feature is actually in most of
+the time, not the state that is easiest to construct.*
+
+### How it was decided
+
+Not by reasoning about hex codes again. Five candidate treatments were rendered against the real
+failing case — Philippians 2, notes **and** sermons on eleven consecutive verses, at phone width,
+against live Concord — using Playwright with per-candidate CSS injected via `addStyleTag` (no
+rebuild per candidate). Kris picked from screenshots.
+
+### What landed — option D
+
+`VERSE_HIGHLIGHT` in dark mode is now a **colourless lift plus an amber rule at the edge**:
+
+```
+bg-amber-100 dark:bg-white/5
+dark:before:absolute dark:before:inset-y-0 dark:before:left-0 dark:before:w-[3px]
+dark:before:bg-amber-500 dark:before:content-['']
+```
+
+The fill has no hue left to clash with the page (`white/5` → `#1b2130`, 1.10:1); the amber identity
+moves to a 3px rule in the gutter. A run of twelve marked verses reads as one cleanly-edged block
+instead of a slab. Light mode keeps the cream wash it has always had.
+
+### Gotchas / things to know
+
+- **The rule is a pseudo-element, not a `border-l`.** A real left border eats 3px of content box and
+  shifts every glyph right. `relative` was already on the reader's verse `<p>` with no consumer, so
+  `before:absolute … left-0` sits in the 12px the row already bleeds via `-mx-3`. Verified from the
+  browser: `padding-left` stays `12px` in **both** themes.
+- **CompareView needed `relative` added** — its cell had no positioning context, so the rule would
+  have escaped to the nearest positioned ancestor.
+- **Do not use a `ring` for a treatment here.** Every Tailwind ring utility writes the same
+  `--tw-ring-shadow`, so it would silently fight the deep-link `ring-2 ring-blue-400` — one wins by
+  stylesheet order, not class order. Borders and pseudo-elements compose; rings do not.
+- **`gray-800` was rejected as the panel colour** even though it is the app's card surface: it is
+  also `TopNav`'s colour, so marked rows would read as header-coloured cards floating in the text.
+- **Tailwind emits `:before`, not `::before`** — worth knowing when grepping built CSS to confirm a
+  pseudo-element rule shipped.
+- **The rule test from #123 had a hole exactly where this landed.** Its `parse()` recognised only
+  `bg-` and `text-`, so a border- or rule-based accent would have satisfied the "every light utility
+  has a dark counterpart" invariant *vacuously*. `parse()` now covers `border-` too, with a
+  regression test on the helper itself.
+
+### How it was verified
+
+- **The eleven-verse case at phone width is the primary check** — the thing the first attempt
+  skipped. Rendered in both themes against live Concord.
+- Computed styles read back from the browser rather than inferred from class strings: dark fill
+  `rgba(255,255,255,0.05)`, rule `absolute` / `3px` / `rgb(245,158,11)` / `left:0`; light fill
+  `rgb(254,243,199)` with the pseudo-element resolving to `content: none`, i.e. no rule at all.
+- **Light mode unchanged, proved mechanically:** across the shipped diff (excluding tests) **no
+  light-mode colour token is added or removed** — the only change is
+  `dark:bg-amber-950/90` → `dark:bg-white/5` + `dark:before:bg-amber-500`.
+- Built-CSS check: all six `dark:before:*` rules emitted; neither `amber-900` nor `amber-950`
+  appears in the highlight any more (the remaining hits are the basemap banners, the journey callout
+  and the Welcome pills, all unrelated).
+- Backend `ruff` / `ruff format --check` / `pyright` strict (0 errors) / `pytest`; frontend `eslint`
+  / `tsc --noEmit` / `vitest` (253 passed) / `vite build`.
+
+### Still open
+
+The three hover-reveal buttons `⇄ ※ ℵ` in the reader are `text-gray-300` with no `dark:` variant —
+another one the #60 sweep missed, near-invisible on the dark page. Not bundled here; it is not what
+#122 is about.
+
+---
+
 ## #122 — dark-mode annotation highlight
 
 - **Date:** 2026-09-06
