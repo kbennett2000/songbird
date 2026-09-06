@@ -620,7 +620,7 @@ describe("ReaderView", () => {
     expect(screen.getByRole("button", { name: "2 sermons on verse 16" })).toBeInTheDocument(); // emerald counted ▶
   });
 
-  it("washes an annotated verse as gently in dark mode as in light (#122)", async () => {
+  it("marks an annotated verse without tinting the dark page (#122)", async () => {
     server.use(
       http.get("/api/v1/read/:translation/:book/:chapter", ({ params }) =>
         HttpResponse.json(readResponse([annotation()], String(params.translation))),
@@ -628,11 +628,18 @@ describe("ReaderView", () => {
     );
     renderReader();
     const marker = await screen.findByRole("button", { name: "View note on verse 16" });
+    const verse = marker.closest("p");
 
-    // Pinned, because #122 was a mechanical amber-100 → amber-900 rewrite: the dark wash came out
-    // at 1.96:1 against the page where the light one sits at 1.07:1. amber-950/90 is 1.16:1.
-    expect(marker.closest("p")).toHaveClass("bg-amber-100", "dark:bg-amber-950/90");
-    expect(marker.closest("p")?.className).not.toContain("amber-900");
+    // Light keeps its cream wash; dark gets a colourless lift plus an amber rule at the edge.
+    // Two tinted dark fills were rejected before this (amber-900, then amber-950/90) — a run of a
+    // dozen annotated verses stacks into one field, and any warm fill that size reads as a stain.
+    expect(verse).toHaveClass("bg-amber-100", "dark:bg-white/5", "dark:before:bg-amber-500");
+    for (const rejected of ["amber-900", "amber-950"]) {
+      expect(verse?.className).not.toContain(rejected);
+    }
+    // The rule needs a positioned ancestor, and it must not be a border (which would shift text).
+    expect(verse).toHaveClass("relative");
+    expect(verse?.className).not.toMatch(/(^|\s)(dark:)?border-l/);
   });
 
   it("keeps the counted ▶ across a translation switch", async () => {
