@@ -18,6 +18,18 @@ This project follows [Keep a Changelog](https://keepachangelog.com/) and
 ## [Unreleased]
 
 ### Added
+- **songbird can follow your church's YouTube channel and write the sermon notes for you.** Add a
+  channel or playlist once, on the new **Sermon sources** page, and songbird reads through it: for
+  each sermon it looks for the passage in the video's own words — a "Scripture:" line in the
+  description, the passage in the title, or the opening line — and makes an ordinary sermon note for
+  each one it finds. The notes are dated the day the sermon actually went up (a Sunday service
+  streamed in the morning and posted after midnight is still filed under the Sunday), tagged the way
+  you tagged the source, and they show up in the reader and in Browse exactly like the notes you
+  write yourself, on every translation. songbird asks Concord what each reference means rather than
+  guessing, so anything it can't be sure of it leaves alone. Sermons whose passage was never written
+  down anywhere wait in a **Needs a passage** list, with any references songbird did spot shown
+  beside them — the one-tap way to place those is coming next. A sermon you'd already noted by hand
+  is left as it is. This needs the same free YouTube key as the re-dating button below.
 - **Your sermon notes can take their dates from YouTube.** A sermon note you made by hand carries
   whatever date you typed — usually the day you wrote the note, not the day the sermon was preached.
   On the Browse notes page there's now a **Re-date YouTube sermons** button: songbird looks up every
