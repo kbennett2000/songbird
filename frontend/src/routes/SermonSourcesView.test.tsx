@@ -44,10 +44,49 @@ const TEACHING = source({
   tags: [],
 });
 
+function ledgerVideo(overrides: Record<string, unknown> = {}) {
+  return {
+    id: 1,
+    source_id: 1,
+    source_title: "Cornerstone Chapel",
+    video_id: "dQw4w9WgXcQ",
+    title: "An in-depth study of 2 Chronicles 29",
+    published_at: "2026-09-06T14:55:12Z",
+    duration_seconds: 5040,
+    is_live: false,
+    status: "pending",
+    skip_reason: null,
+    placed_by: null,
+    suggestions: [],
+    seen_at: "2026-09-07T00:00:00Z",
+    decided_at: null,
+    ...overrides,
+  };
+}
+
+const PENDING_VIDEO = ledgerVideo();
+const SKIPPED_VIDEO = ledgerVideo({
+  id: 2,
+  video_id: "abcdefghijk",
+  title: "A two-minute welcome",
+  published_at: "2026-08-30T14:55:12Z",
+  duration_seconds: 120,
+  status: "skipped",
+  skip_reason: "too_short",
+});
+
 /** The sources list alone. A source's title also appears as an option in the ledger's source
  * filter below, so an unscoped query for it now matches twice — this says which one is meant. */
 function sourceList() {
   return within(screen.getByRole("region", { name: "Sources" }));
+}
+
+/** The ledger's list alone. Its state words also appear as options in the state filter above it,
+ * so an unscoped query matches twice — `ul` is the list of rows and nothing else. */
+function ledgerRows() {
+  return within(
+    within(screen.getByRole("region", { name: "What songbird found" })).getByRole("list"),
+  );
 }
 
 /** The status endpoint gates the whole page, so every test has to answer it. */
@@ -457,5 +496,239 @@ describe("SermonSourcesView", () => {
 
     expect(await screen.findByText(/set YOUTUBE_API_KEY/)).toBeInTheDocument();
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  // ---- Checking, counts and the ledger (v1.7 slice 4a) --------------------------------------
+
+  it("queues a check and says nothing, because the indicator says it instead", async () => {
+    let queued = false;
+    server.use(
+      statusHandler(),
+      sourcesHandler(CORNERSTONE),
+      http.post("/api/v1/sermon-sources/check", () => {
+        queued = true;
+        return HttpResponse.json({ queued: 1 }, { status: 202 });
+      }),
+    );
+    const user = userEvent.setup();
+    renderPage(appClient());
+
+    await user.click(await screen.findByRole("button", { name: "Check all now" }));
+
+    await waitFor(() => expect(queued).toBe(true));
+    // No banner for a queued check: the "Checking…" line is the page's one live region for scan
+    // state, and two things saying it at once is worse than one.
+    expect(screen.queryByText(/Nothing to check/)).not.toBeInTheDocument();
+  });
+
+  it("says so plainly when every source is paused", async () => {
+    server.use(
+      statusHandler(),
+      sourcesHandler(source({ enabled: false })),
+      http.post("/api/v1/sermon-sources/check", () =>
+        HttpResponse.json({ queued: 0 }, { status: 202 }),
+      ),
+    );
+    const user = userEvent.setup();
+    renderPage(appClient());
+
+    await user.click(await screen.findByRole("button", { name: "Check all now" }));
+
+    // Nothing failed — the request was accepted and there was nothing in it.
+    expect(await screen.findByText("Nothing to check — every source is paused.")).toBeInTheDocument();
+  });
+
+  it("checks one source on its own", async () => {
+    const asked: string[] = [];
+    server.use(
+      statusHandler(),
+      sourcesHandler(CORNERSTONE),
+      http.post("/api/v1/sermon-sources/1/check", () => {
+        asked.push("1");
+        return HttpResponse.json({ queued: 1 }, { status: 202 });
+      }),
+    );
+    const user = userEvent.setup();
+    renderPage(appClient());
+
+    await user.click(await screen.findByRole("button", { name: "Check now" }));
+
+    await waitFor(() => expect(asked).toEqual(["1"]));
+  });
+
+  it("offers no Check now on a paused source", async () => {
+    // The runner only ever picks up enabled sources, so the button would have nothing to do —
+    // absent rather than disabled, because a disabled control still invites a press.
+    server.use(statusHandler(), sourcesHandler(source({ enabled: false })));
+    renderPage();
+
+    await screen.findByRole("region", { name: "Sources" });
+    expect(screen.queryByRole("button", { name: "Check now" })).not.toBeInTheDocument();
+    // …and the whole-list button is still there, because it is about the list, not this row.
+    expect(screen.getByRole("button", { name: "Check all now" })).toBeInTheDocument();
+  });
+
+  it("shows a check is running, and disables the buttons that would start another", async () => {
+    server.use(statusHandler(true, 10, true), sourcesHandler(CORNERSTONE));
+    renderPage();
+
+    expect(await screen.findByRole("status")).toHaveTextContent("Checking your sources…");
+    expect(screen.getByRole("button", { name: "Check all now" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Check now" })).toBeDisabled();
+  });
+
+  it("says a source is waiting its turn once one has been asked for", async () => {
+    server.use(
+      statusHandler(),
+      sourcesHandler(source({ check_requested_at: "2026-09-07T12:00:00Z" })),
+    );
+    renderPage();
+
+    expect(await screen.findByText(/waiting to be checked/)).toBeInTheDocument();
+    // Already queued, so pressing again would do nothing.
+    expect(screen.getByRole("button", { name: "Check now" })).toBeDisabled();
+  });
+
+  it("reads the last check as a date, and its failure as a sentence", async () => {
+    server.use(
+      statusHandler(),
+      sourcesHandler(
+        source({
+          last_checked_at: "2026-09-06T14:55:12Z",
+          last_check_status: "Couldn't reach YouTube. songbird will try again at the next check.",
+        }),
+      ),
+    );
+    renderPage();
+
+    // A real date, not the raw timestamp the placeholder used to print.
+    expect(await screen.findByText(/checked Sep 6, 2026/)).toBeInTheDocument();
+    expect(screen.getByText(/Last check: Couldn't reach YouTube/)).toBeInTheDocument();
+  });
+
+  it("shows what a source has found, and stays quiet about the zeros", async () => {
+    server.use(
+      statusHandler(),
+      sourcesHandler(
+        source({
+          counts: { pending: 3, needs_passage: 0, placed: 0, skipped: 12, already_noted: 1 },
+        }),
+      ),
+    );
+    renderPage();
+
+    await screen.findByRole("region", { name: "Sources" });
+    const list = sourceList();
+    expect(list.getByText("3")).toBeInTheDocument();
+    expect(list.getByText("waiting")).toBeInTheDocument();
+    expect(list.getByText("skipped")).toBeInTheDocument();
+    expect(list.getByText("already noted")).toBeInTheDocument();
+    // A source that has never placed anything doesn't display noughts to say so.
+    expect(list.queryByText("placed")).not.toBeInTheDocument();
+    expect(list.queryByText("needs a passage")).not.toBeInTheDocument();
+  });
+
+  it("lists what songbird found, in the reader's words", async () => {
+    server.use(
+      statusHandler(),
+      sourcesHandler(CORNERSTONE),
+      http.get("/api/v1/sermon-sources/videos", () =>
+        HttpResponse.json({ videos: [PENDING_VIDEO, SKIPPED_VIDEO], total: 2 }),
+      ),
+    );
+    renderPage();
+
+    expect(await screen.findByText("An in-depth study of 2 Chronicles 29")).toBeInTheDocument();
+    expect(screen.getByText("Sep 6, 2026")).toBeInTheDocument();
+    expect(screen.getByText("Aug 30, 2026")).toBeInTheDocument();
+    expect(screen.getByText("1 hr 24 min")).toBeInTheDocument();
+    expect(ledgerRows().getByText("Waiting")).toBeInTheDocument();
+    expect(ledgerRows().getByText("Skipped")).toBeInTheDocument();
+    // The reason reads as a phrase, not as a field name.
+    expect(screen.getByText("shorter than this source's minimum")).toBeInTheDocument();
+    expect(screen.getByText("2 of 2")).toBeInTheDocument();
+  });
+
+  it("says a video of unknown length is unknown, not zero", async () => {
+    // Spec §6: an unknown duration was never filtered on length at all, so "0 min" would claim
+    // the opposite of what songbird actually decided.
+    server.use(
+      statusHandler(),
+      sourcesHandler(CORNERSTONE),
+      http.get("/api/v1/sermon-sources/videos", () =>
+        HttpResponse.json({
+          videos: [{ ...PENDING_VIDEO, duration_seconds: null }],
+          total: 1,
+        }),
+      ),
+    );
+    renderPage();
+
+    expect(await screen.findByText("length unknown")).toBeInTheDocument();
+  });
+
+  it("filters the ledger by state", async () => {
+    const asked: (string | null)[] = [];
+    server.use(
+      statusHandler(),
+      sourcesHandler(CORNERSTONE),
+      http.get("/api/v1/sermon-sources/videos", ({ request }) => {
+        const status = new URL(request.url).searchParams.get("status");
+        asked.push(status);
+        return HttpResponse.json({
+          videos: status === "skipped" ? [SKIPPED_VIDEO] : [PENDING_VIDEO, SKIPPED_VIDEO],
+          total: status === "skipped" ? 1 : 2,
+        });
+      }),
+    );
+    const user = userEvent.setup();
+    renderPage(appClient());
+
+    await screen.findByText("An in-depth study of 2 Chronicles 29");
+    await user.selectOptions(screen.getByLabelText("Filter by state"), "skipped");
+
+    expect(await screen.findByText("1 of 1")).toBeInTheDocument();
+    expect(asked).toEqual([null, "skipped"]);
+  });
+
+  it("pages the ledger rather than asking for everything", async () => {
+    server.use(
+      statusHandler(),
+      sourcesHandler(CORNERSTONE),
+      http.get("/api/v1/sermon-sources/videos", ({ request }) => {
+        const offset = Number(new URL(request.url).searchParams.get("offset"));
+        return HttpResponse.json({
+          videos: [{ ...PENDING_VIDEO, id: offset + 1, title: `Sermon at ${offset}` }],
+          total: 2,
+        });
+      }),
+    );
+    const user = userEvent.setup();
+    renderPage(appClient());
+
+    expect(await screen.findByText("1 of 2")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Load more" }));
+
+    expect(await screen.findByText("Sermon at 1")).toBeInTheDocument();
+    expect(screen.getByText("2 of 2")).toBeInTheDocument();
+    // Everything is loaded, so there is nothing left to press.
+    expect(screen.queryByRole("button", { name: "Load more" })).not.toBeInTheDocument();
+  });
+
+  it("invites a first check when there is nothing found yet", async () => {
+    server.use(statusHandler(), sourcesHandler(CORNERSTONE));
+    renderPage();
+
+    expect(
+      await screen.findByText(/Nothing yet. Press Check all now and songbird will go and look./),
+    ).toBeInTheDocument();
+  });
+
+  it("does not show the ledger before there is a source to fill it", async () => {
+    server.use(statusHandler(), sourcesHandler());
+    renderPage();
+
+    expect(await screen.findByText(/No sources yet/)).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "What songbird found" })).not.toBeInTheDocument();
   });
 });
