@@ -17,6 +17,7 @@ __all__ = [
     "get_current_user_optional",
     "get_db",
     "get_youtube_client",
+    "get_youtube_client_optional",
 ]
 
 
@@ -29,21 +30,34 @@ def get_concord_client(request: Request) -> ConcordClient:
     return client
 
 
-def get_youtube_client(request: Request) -> YouTubeClient:
-    """Return the process-wide YouTube client built in the app lifespan, or 409 if there is none.
+def get_youtube_client_optional(request: Request) -> YouTubeClient | None:
+    """The process-wide YouTube client built in the app lifespan, or None if no key was set.
 
-    No key configured means the feature is simply switched off (spec §2), which is a normal
-    state and not a server fault — hence 409 rather than 500 or 503. Read via `getattr` because
-    the fast test suite never runs the lifespan, so the attribute may not exist at all.
+    Read via `getattr` because the fast test suite never runs the lifespan, so the attribute may
+    not exist at all. This is the seam the whole feature hangs off: the Sources page's status
+    endpoint has to ANSWER when there is no key (that answer is the setup message), so it cannot
+    use the demanding version below.
     """
     client: YouTubeClient | None = getattr(request.app.state, "youtube", None)
-    if client is None:
+    return client
+
+
+def get_youtube_client(
+    youtube: YouTubeClient | None = Depends(get_youtube_client_optional),
+) -> YouTubeClient:
+    """The YouTube client, or 409 if there is none.
+
+    No key configured means the feature is simply switched off (spec §2), which is a normal
+    state and not a server fault — hence 409 rather than 500 or 503. Every route that actually
+    talks to YouTube depends on this one, so none of them needs its own check.
+    """
+    if youtube is None:
         raise_http(
             409,
             ErrorCode.YOUTUBE_NOT_CONFIGURED,
             "No YouTube API key is configured, so sermon sources are switched off.",
         )
-    return client
+    return youtube
 
 
 async def _resolve_user(request: Request, db: AsyncSession) -> User | None:

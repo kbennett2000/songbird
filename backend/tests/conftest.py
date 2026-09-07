@@ -20,7 +20,7 @@ from songbird.api.deps import (
     get_concord_client,
     get_current_user,
     get_db,
-    get_youtube_client,
+    get_youtube_client_optional,
 )
 from songbird.concord.schemas import (
     Book,
@@ -460,16 +460,18 @@ def make_concord() -> type[FakeConcordClient]:
 
 @pytest.fixture
 def with_youtube(app: FastAPI) -> Callable[[FakeYouTubeClient], None]:
-    """Install a fake YouTube client for routes that depend on `get_youtube_client`.
+    """Install a fake YouTube client for routes that depend on the YouTube client.
 
     Standalone rather than a second argument to `client_for`, so the ~20 test files that annotate
-    that fixture as `Callable[[FakeConcordClient], httpx.AsyncClient]` need no change. It has no
-    consumer until the re-date endpoint lands; it is here so the fake and its wiring arrive with
-    the client they fake.
+    that fixture as `Callable[[FakeConcordClient], httpx.AsyncClient]` need no change.
+
+    It overrides the OPTIONAL dependency — the single seam — and `get_youtube_client` resolves
+    through it, so both the routes that demand a client and the status endpoint that merely asks
+    whether there is one see the same fake. Not installing it is how a test says "no key".
     """
 
     def _install(youtube: FakeYouTubeClient) -> None:
-        app.dependency_overrides[get_youtube_client] = lambda: youtube
+        app.dependency_overrides[get_youtube_client_optional] = lambda: youtube
 
     return _install
 
