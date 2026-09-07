@@ -24,8 +24,10 @@ interface SermonSourceFormProps {
   onCancel: () => void;
 }
 
+// No background or text colour of its own: index.css gives every input a dark surface in dark
+// mode, and overriding it here made this the one form in the app whose fields didn't match.
 const fieldClass =
-  "mt-1 w-full rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 px-2 py-1 text-sm outline-none focus:border-blue-500";
+  "mt-1 w-full rounded border border-gray-300 dark:border-gray-600 px-2 py-1 text-sm outline-none focus:border-blue-500";
 
 /**
  * Add or edit a sermon source: the channel/playlist link, tags from the shared vocabulary, and

@@ -338,7 +338,10 @@ describe("SermonSourcesView", () => {
     // The counts line, as a sentence.
     expect(dialog).toHaveTextContent("3 sermon notes link to YouTube");
     expect(dialog).toHaveTextContent("1 date would change");
-    expect(dialog).toHaveTextContent("1 note isn’t on YouTube");
+    // "links somewhere else", not "isn't on YouTube": the section below is headed "Couldn't be
+    // found on YouTube" and means a different group entirely. Seeing both in a browser is what
+    // showed the two phrasings collide.
+    expect(dialog).toHaveTextContent("1 note links somewhere else");
     // The changing row shows both dates and which timestamp decided the new one.
     expect(dialog).toHaveTextContent("Jan 5, 2026");
     expect(dialog).toHaveTextContent("Feb 2, 2026");

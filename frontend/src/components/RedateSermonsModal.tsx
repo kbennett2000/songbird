@@ -24,13 +24,26 @@ function plural(n: number, one: string, many: string): string {
 function ItemRow({ item }: { item: RedateItem }): JSX.Element {
   return (
     <li
+      // An unchanged row is played down by its border and background, and by a dimmer title —
+      // NOT by `opacity-60`, which was here first and blended every layer at once. That took the
+      // small grey metadata (the reference and the date, i.e. the actual content of an unchanged
+      // row) down to 2.3:1 in light mode, well under the 4.5:1 a reader needs. Same class of
+      // mistake as #122: a whole-element effect applied to text that had no contrast to spare.
       className={`rounded border p-3 ${
         item.changed
           ? "border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800"
-          : "border-gray-100 dark:border-gray-800 bg-transparent opacity-60"
+          : "border-gray-100 dark:border-gray-800 bg-transparent"
       }`}
     >
-      <p className="font-semibold text-gray-900 dark:text-gray-100">{item.title}</p>
+      <p
+        className={`font-semibold ${
+          item.changed
+            ? "text-gray-900 dark:text-gray-100"
+            : "text-gray-500 dark:text-gray-400"
+        }`}
+      >
+        {item.title}
+      </p>
       <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">{item.reference}</p>
       <p className="mt-1 text-sm">
         {item.changed ? (
@@ -92,7 +105,7 @@ export function RedateSermonsModal({
         {plural(preview.total_youtube_notes, "sermon note links", "sermon notes link")} to YouTube ·{" "}
         <span className="font-semibold">{plural(changing, "date", "dates")}</span> would change
         {preview.skipped_non_youtube > 0
-          ? ` · ${plural(preview.skipped_non_youtube, "note isn’t", "notes aren’t")} on YouTube`
+          ? ` · ${plural(preview.skipped_non_youtube, "note links", "notes link")} somewhere else`
           : ""}
       </p>
 
