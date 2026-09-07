@@ -33,8 +33,10 @@ services:
     build: .
     restart: unless-stopped
     ports:
-      # Open songbird in your browser at http://localhost:8077
-      - "8077:8077"
+      # The port songbird is reachable on, in Docker and outside it — set PORT in .env to change
+      # it, then open http://localhost:<PORT>. Only the outside changes: the container keeps
+      # listening on 8077.
+      - "${PORT:-8077}:8077"
     environment:
       # How songbird finds Concord on the private network. You don't change this.
       CONCORD_BASE_URL: "http://concord:8000"
