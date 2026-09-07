@@ -24,6 +24,7 @@ from songbird.api.deps import (
     get_scan_runner_optional,
     get_youtube_client_optional,
 )
+from songbird.concord.client import ConcordNotFoundError
 from songbird.concord.schemas import (
     Book,
     Chapter,
@@ -72,6 +73,7 @@ class FakeConcordClient:
         translations: list[Translation] | None = None,
         chapter: Chapter | None = None,
         resolved: Chapter | None = None,
+        resolved_by_ref: dict[str, Chapter | Exception] | None = None,
         books: list[Book] | None = None,
         cross_refs: CrossRefResponse | None = None,
         verse_topics: VerseTopicsResponse | None = None,
@@ -104,6 +106,16 @@ class FakeConcordClient:
         # What `resolve_reference` returns (a human ref → its canonical verse span). Falls back
         # to `chapter` when not set, so tests that don't care about the span need no extra wiring.
         self._resolved = resolved
+        # Per-reference answers, for the passage rules (spec §7). A route resolves ONE reference
+        # per request and `resolved` above is enough for it; a check resolves every candidate it
+        # found in a video's text, and the whole design is that Concord accepts some and rejects
+        # others. An Exception value is raised, so a fake can 404 one string and answer another.
+        # A reference absent from the dict falls through to the single-answer behaviour above —
+        # which is what keeps every test written before this existed working untouched.
+        self._resolved_by_ref = resolved_by_ref
+        # Every reference `resolve_reference` was asked for, in order. Lets a test prove what
+        # normalization reached Concord, and that the run's cache stopped it being asked twice.
+        self.resolve_calls: list[str] = []
         self._books = books or []
         self._cross_refs = cross_refs
         self._verse_topics = verse_topics
@@ -164,8 +176,18 @@ class FakeConcordClient:
         return self._chapter
 
     async def resolve_reference(self, ref: str) -> Chapter:
+        self.resolve_calls.append(ref)
         if self._error is not None:
             raise self._error
+        if self._resolved_by_ref is not None:
+            answer = self._resolved_by_ref.get(ref)
+            if isinstance(answer, Exception):
+                raise answer
+            if answer is not None:
+                return answer
+            # Not in the dict: with a per-reference map in play, silence means "Concord does not
+            # know this one" — the normal outcome for most of what the finder offers.
+            raise ConcordNotFoundError(f"Concord could not resolve '{ref}'")
         resolved = self._resolved if self._resolved is not None else self._chapter
         assert resolved is not None
         return resolved

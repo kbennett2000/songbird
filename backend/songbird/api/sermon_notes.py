@@ -14,6 +14,7 @@ from songbird.concord.client import ConcordClient, ConcordNotFoundError, Concord
 from songbird.concord.schemas import ChapterVerse
 from songbird.core.errors import ErrorCode, raise_http
 from songbird.db.models import SermonNote, Tag, User
+from songbird.sermons.anchor import UnknownBookError, book_order_index, resolve_span
 
 router = APIRouter(prefix="/api/v1/sermon-notes", tags=["sermon-notes"])
 
@@ -24,31 +25,29 @@ async def _resolve_anchor(
     """Resolve a human `reference` to its canonical span via Concord (songbird never parses
     references itself — invariant 4). Returns the (first, last) verse of the range, so a ranged
     reference like "Joshua 6:1-16" covers every verse in it. Unparseable / unknown reference →
-    404; Concord unreachable → 502 (it's a hard dependency, invariant 3)."""
+    404; Concord unreachable → 502 (it's a hard dependency, invariant 3).
+
+    The resolving itself lives in `songbird.sermons.anchor`, shared with the catalogue scan so a
+    note made by a check is anchored by the same code as a note made by hand. This is the HTTP
+    half: the same three answers, from a module that knows nothing about requests."""
     try:
-        chapter = await concord.resolve_reference(reference)
+        span = await resolve_span(reference, concord)
     except ConcordNotFoundError as exc:
         raise_http(404, ErrorCode.NOT_FOUND, f"Couldn't find reference '{reference}': {exc}")
     except ConcordUnreachableError as exc:
         raise_http(502, ErrorCode.CONCORD_UNREACHABLE, str(exc))
-    if not chapter.verses:
-        raise_http(404, ErrorCode.NOT_FOUND, f"Couldn't find reference '{reference}'")
-    return chapter.verses[0], chapter.verses[-1]
+    return span.first, span.last
 
 
 async def _resolve_book_order_index(book_usfm: str, concord: ConcordClient) -> int:
     """Map a USFM book code → Concord's canonical_order. Raises 422 for an unknown code, 502 if
     Concord can't be reached (it's a hard dependency — its absence is an error, invariant 3)."""
-    code = book_usfm.strip().upper()
     try:
-        books = await concord.list_books()
+        return await book_order_index(book_usfm, concord)
+    except UnknownBookError:
+        raise_http(422, ErrorCode.INVALID_BOOK, f"unknown book '{book_usfm}'")
     except ConcordUnreachableError as exc:
         raise_http(502, ErrorCode.CONCORD_UNREACHABLE, str(exc))
-    by_usfm = {b.id.upper(): b.canonical_order for b in books}
-    order = by_usfm.get(code)
-    if order is None:
-        raise_http(422, ErrorCode.INVALID_BOOK, f"unknown book '{book_usfm}'")
-    return order
 
 
 async def _get_or_404(db: AsyncSession, sermon_note_id: int, author_id: int) -> SermonNote:

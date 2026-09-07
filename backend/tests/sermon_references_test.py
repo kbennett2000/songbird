@@ -114,6 +114,4 @@ def test_the_second_word_is_not_offered_when_it_would_be_wrong() -> None:
 def test_a_reference_is_found_wherever_it_sits_in_a_sentence() -> None:
     # Parentheses, a leading date, a trailing full stop — the real shapes from the four sources.
     assert find_candidates("The Faithfulness of God (1 Peter 1:6-7)") == ["1 Peter 1:6-7"]
-    assert find_candidates("7/22/2026 An in-depth study of 2 Chronicles 29.") == [
-        "2 Chronicles 29"
-    ]
+    assert find_candidates("7/22/2026 An in-depth study of 2 Chronicles 29.") == ["2 Chronicles 29"]
