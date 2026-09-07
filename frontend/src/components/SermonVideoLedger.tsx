@@ -30,8 +30,14 @@ const STATE_OPTIONS: [SermonVideoStatus, string][] = [
   ["pending", "Waiting"],
 ];
 
+// The field's OWN colour, not the label's. Every one of these sits inside a `text-gray-500`
+// label, and a select that inherited it measured 4.20:1 against the grey the browser paints
+// behind it — under the 4.5:1 a reader needs, on the controls this page is steered with. Same
+// class of mistake as #122: text inheriting a colour it had no contrast to spare for. No
+// `dark:bg-*` — index.css already gives every field its dark surface.
 const FIELD =
-  "mt-0.5 rounded border border-gray-300 dark:border-gray-600 px-2 py-1.5 text-sm";
+  "mt-0.5 rounded border border-gray-300 dark:border-gray-600 px-2 py-1.5 text-sm " +
+  "text-gray-900 dark:text-gray-100";
 
 /**
  * The review list (v1.7 sermon sources, spec §8) — what songbird found, and what to do about it.
