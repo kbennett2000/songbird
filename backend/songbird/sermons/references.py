@@ -9,6 +9,14 @@ refuses to resolve them (confirmed live: all three are a 404). That is the whole
 never decides what a book name means, and a finder tight enough to reject `Episode` would be a
 finder that had opinions about book names — the exact thing invariant 4 keeps out of songbird.
 
+**The one exception, and it is not a book-name opinion: a date.** Majestic View titles every service
+by the day it happened — `Livestream Sunday Worship Service - Mar. 15 2026 …` — and `Mar.` is an
+abbreviation Concord accepts for Mark. Left alone, the finder hands Concord `Mar 15`, Concord
+correctly says that is Mark 15, and a sermon on John gets a note on Mark. Five notes were made that
+way in the first live run before this guard existed. So the finder recognizes **what a date looks
+like** and declines to offer it — a judgement about the *shape of the surrounding text*, not about
+what `Mar` means. Concord still decides every string that does leave here.
+
 What it DOES do is normalize, so that two spellings of one reference are one string:
 
 * `–` and `—` become `-`, and the spaces around a dash go
@@ -48,11 +56,48 @@ _CANDIDATE: Final = re.compile(rf"\b{_BOOK}\s+(?P<span>{_SPAN})(?!\d)")
 _ROMAN: Final = {"I": "1", "II": "2", "III": "3"}
 _DASHES: Final = re.compile(r"\s*[-–—]\s*")
 
+# Month names as a church writes a service date: full, or the three-letter short form, with or
+# without the abbreviating period. Only one of these collides with a book abbreviation Concord
+# accepts — `Mar.` for Mark — but the guard is uniform, because a uniform rule is one rule to read
+# and the others were only ever costing a lookup that came back 404. `Sept` is deliberately absent:
+# the short form here is three letters, and nothing Concord knows answers to `Sept`, so the worst it
+# can do is spend a lookup — the safe direction.
+_MONTHS: Final = frozenset(
+    "january february march april may june july august september october november december "
+    "jan feb mar apr may jun jul aug sep oct nov dec".split()
+)
 
-def _normalize(numeral: str | None, book: str, span: str) -> str:
+# What sits after the number when it is a day rather than a chapter: `15 2026`, `15, 2026`,
+# `15th 2026`. The trailing `(?!\d)` keeps a longer run of digits from passing as a year.
+_YEAR_AFTER: Final = re.compile(r"(?:st|nd|rd|th)?\s*,?\s*\d{4}(?!\d)")
+
+
+def _is_date(word: str, span: str, text: str, end: int) -> bool:
+    """Is this a service date rather than a reference?
+
+    A month, and then either shape that says *day* instead of *chapter*: no verse part at all
+    (`Mar. 15`, `Sunday Service Mar. 15`), or a four-digit year right behind it (`Mar. 15 2026`).
+    `Mar. 15:16-20` satisfies neither and still goes to Concord as Mark — nobody writes a date that
+    way, and a church that really does mean Mark keeps its note.
+    """
+    if word.lower() not in _MONTHS:
+        return False
+    return ":" not in span or _YEAR_AFTER.match(text, end) is not None
+
+
+def _candidate(numeral: str | None, book: str, span: str, text: str, end: int) -> str | None:
+    """One normalized candidate string, or `None` for a date.
+
+    `len(words) == 1` is load-bearing. It confines the date guard to a **bare** month, so the
+    two-word reading of `Sunday Service Mar. 15` — `Service Mar 15` — is left exactly as it was:
+    Concord already refuses it, and it was never the string that made the wrong note. The one this
+    drops is the second-word fallback, `Mar 15`, which is.
+    """
     words = book.replace(".", "").split()
     if numeral is not None:
         words.insert(0, _ROMAN.get(numeral, numeral))
+    if len(words) == 1 and _is_date(words[0], span, text, end):
+        return None
     return f"{' '.join(words)} {_DASHES.sub('-', span)}"
 
 
@@ -76,8 +121,13 @@ def find_candidates(text: str) -> list[str]:
     found: list[str] = []
     for match in _CANDIDATE.finditer(text):
         numeral, book, span = match.group("numeral"), match.group("book"), match.group("span")
-        found.append(_normalize(numeral, book, span))
+        end = match.end()
+        whole = _candidate(numeral, book, span, text, end)
+        if whole is not None:
+            found.append(whole)
         words = book.split()
         if numeral is None and len(words) == 2:  # not "Song of Solomon", which splits into three
-            found.append(_normalize(None, words[1], span))
+            second = _candidate(None, words[1], span, text, end)
+            if second is not None:
+                found.append(second)
     return list(dict.fromkeys(found))

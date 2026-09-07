@@ -115,3 +115,47 @@ def test_a_reference_is_found_wherever_it_sits_in_a_sentence() -> None:
     # Parentheses, a leading date, a trailing full stop — the real shapes from the four sources.
     assert find_candidates("The Faithfulness of God (1 Peter 1:6-7)") == ["1 Peter 1:6-7"]
     assert find_candidates("7/22/2026 An in-depth study of 2 Chronicles 29.") == ["2 Chronicles 29"]
+
+
+# --- A service date is not a book of the Bible -------------------------------------------------
+
+# Every form a church writes a service date in, paired with the candidate that must NOT come out of
+# it. `Mar` is the one that mattered — Concord accepts it for Mark, so `Mar. 15 2026` made a note on
+# Mark 15 in the first live run. The rest are here because the guard is one uniform rule.
+_DATES = (
+    ("Livestream Sunday Worship Service  - Mar. 15 2026", "Mar 15"),
+    ("Livestream Sunday Worship Service  - Mar. 15, 2026", "Mar 15"),
+    ("Livestream Sunday Worship Service  - Mar. 15th 2026", "Mar 15"),
+    ("Sunday Service Mar. 15", "Mar 15"),  # no year at all, and still a date
+    ("Recorded March 15 2026", "March 15"),
+    ("Christmas Eve service, Dec. 7 2025", "Dec 7"),
+    ("SUNDAY SERVICE JAN 4 2026", "JAN 4"),
+    ("Outdoor service May 3", "May 3"),
+)
+
+
+def test_a_service_date_is_never_offered_as_a_reference() -> None:
+    for text, absent in _DATES:
+        assert absent not in find_candidates(text), text
+
+
+def test_the_two_titles_that_made_the_wrong_notes() -> None:
+    # Verbatim from Majestic View. The first states its passage after the date and must keep it; the
+    # second states none at all and must offer nothing, so the video goes to the review list.
+    assert find_candidates(
+        "Livestream Sunday Worship Service  - Mar. 15 2026 Victory in a chaotic world  Jn. 16:16-33"
+    ) == ["Jn 16:16-33"]
+    assert find_candidates("Livestream Sunday Worship Service  - Mar. 16 2025") == []
+
+
+def test_a_church_that_really_means_mark_keeps_its_note() -> None:
+    # The guard is about the shape of a date, not about what `Mar` means — Concord still decides.
+    assert find_candidates("Mark 15") == ["Mark 15"]
+    # A verse part and no year is nobody's way of writing a date, so this is still Mark.
+    assert find_candidates("Mar. 15:16-20") == ["Mar 15:16-20"]
+
+
+def test_the_date_guard_drops_one_candidate_and_leaves_the_other() -> None:
+    # `Mar 15` is the string that made the wrong note; `Service Mar 15` never could — Concord
+    # refuses it. Only the first is dropped, so the guard stays as small as the defect.
+    assert find_candidates("Sunday Service Mar. 15") == ["Service Mar 15"]
