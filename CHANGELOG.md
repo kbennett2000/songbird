@@ -17,6 +17,17 @@ This project follows [Keep a Changelog](https://keepachangelog.com/) and
 
 ## [Unreleased]
 
+### Added
+- **Your sermon notes can take their dates from YouTube.** A sermon note you made by hand carries
+  whatever date you typed — usually the day you wrote the note, not the day the sermon was preached.
+  On the Browse notes page there's now a **Re-date YouTube sermons** button: songbird looks up every
+  sermon note that links to a YouTube video and shows you exactly what it would change — the old
+  date, the new one, and whether it came from when the service was streamed or when the video was
+  posted. Nothing is written until you press **Apply**, and pressing it twice is safe. Sermons hosted
+  somewhere other than YouTube are left alone, and so are videos that have since been made private or
+  removed — those are listed so you know they were skipped rather than missed. This needs a free
+  YouTube API key; without one the button explains what to set, and the rest of songbird is unchanged.
+
 ### Fixed
 - **All notes on a verse now show, not just one.** When a verse carried more than one note, the
   reader and the side-by-side compare view showed a single marker and opened only the first note —
