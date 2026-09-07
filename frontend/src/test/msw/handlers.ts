@@ -45,6 +45,7 @@ export const defaultHandlers = [
         reachable: true,
         status: "ok",
         translation_count: 2,
+        translation_ids: ["KJV", "WEB"],
         error: null,
       },
     }),

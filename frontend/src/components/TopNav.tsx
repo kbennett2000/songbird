@@ -71,6 +71,20 @@ export function TopNav({
           })}
           <div className="ml-auto flex flex-wrap items-center gap-3 text-sm">
             {actions}
+            {/* Utility, not content — so it sits with the theme toggle and the account rather
+                than lengthening a content row that already wraps on a phone. It needs to be
+                reachable, though: this is the page that names which Concord is being read, and
+                a missing translation is only explicable from there. */}
+            <Link
+              to="/status"
+              className={`hover:underline ${
+                pathname === "/status"
+                  ? "font-semibold text-blue-800 dark:text-blue-300"
+                  : "text-blue-700 dark:text-blue-400"
+              }`}
+            >
+              Status
+            </Link>
             <button
               type="button"
               onClick={() => setTheme(isDark ? "light" : "dark")}

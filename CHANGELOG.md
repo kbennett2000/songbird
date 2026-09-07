@@ -41,6 +41,19 @@ This project follows [Keep a Changelog](https://keepachangelog.com/) and
   YouTube API key; without one the button explains what to set, and the rest of songbird is unchanged.
 
 ### Fixed
+- **songbird now reads the Concord you point it at.** If you set `CONCORD_BASE_URL` to your own
+  Scripture engine, songbird ignored it: the `docker compose` setup started an engine of its own and
+  quietly used that one instead. On a machine already running its own Concord that meant songbird
+  read the wrong one, and the only visible sign was translations going missing from the dropdown —
+  the engine that ships with songbird carries the public-domain translations only, since licensed
+  ones like the ESV and the NKJV can't be included in a public download. Your address is now the one
+  that wins, and when you give one, songbird doesn't start a second engine at all. If you don't have
+  a Concord of your own, start songbird with `docker compose --profile bundled-concord up` and you
+  get the included one exactly as before. **No notes or Bible data were ever lost by this** — the
+  other Concord was simply being read instead.
+- **You can see which Concord songbird is reading.** The **Status** page now has a link in the top
+  bar, and it names the exact address songbird is using and lists every translation available there.
+  If a translation you expect is missing, that page tells you why in one look.
 - **All notes on a verse now show, not just one.** When a verse carried more than one note, the
   reader and the side-by-side compare view showed a single marker and opened only the first note —
   the others were invisible and unreachable. The marker now carries a small count, and tapping it
