@@ -2,7 +2,7 @@
 
 Two things are being pinned, and they pull in opposite directions on purpose.
 
-The finder must be **loose**: `Episode 63`, `Sunday 9:00` and `Israel 24:03` have to come out of it
+The finder must be **loose**: `Episode 63`, `Sunday 9:30` and `Israel 24:13` have to come out of it
 as candidates, because Concord is what decides they are not references (live: all three 404). A
 finder tight enough to reject them would be a finder with opinions about book names, which is
 exactly what invariant 4 keeps out of songbird.
@@ -40,7 +40,9 @@ _SHAPES = (
 )
 
 # Reference-shaped enough to reach Concord, which is where they are thrown out.
-_JUNK_THAT_STILL_COUNTS = ("Episode 63", "Sunday 9:00", "Israel 24:03")
+# (The zero-padded `9:00` and `24:03` used to be here. They are now dropped by the numeric-date
+# rule below — a padded number is never a chapter — which is a small bonus, not the point of it.)
+_JUNK_THAT_STILL_COUNTS = ("Episode 63", "Sunday 9:30", "Israel 24:13")
 
 # Nothing here is shaped like a reference at all, so nothing should cost a lookup.
 _NOT_CANDIDATES = (
@@ -177,3 +179,59 @@ def test_a_year_behind_the_number_settles_it_even_with_a_verse_part() -> None:
         assert find_candidates(text) == [], text
     # And with no year behind it, the same string is Mark and goes to Concord.
     assert find_candidates("Mar. 15:16") == ["Mar 15:16"]
+
+
+# --- A date written in digits is not a book of the Bible ----------------------------------------
+
+
+def test_the_title_that_made_the_one_wrong_note_in_1082() -> None:
+    # Verbatim from Majestic View, and the reason this rule exists: `John 06-25` is a reference
+    # Concord reads as John 6-25, so a video about respect carried a note spanning sixteen chapters.
+    # It was the only wrong note the by-eye audit of the four live channels found.
+    assert find_candidates("MVC - Talking About Respect with Pastor John 06-25-2020") == []
+
+
+def test_every_way_a_numeric_date_is_written_is_dropped() -> None:
+    for text in ("John 06-25-2020", "John 6-25-2020", "John 6/25/2020", "John 6.25.2020"):
+        assert find_candidates(text) == [], text
+
+
+def test_a_padded_number_is_a_day_and_needs_no_year_to_prove_it() -> None:
+    # The padding clause on its own: nothing follows these, so the year clause cannot be what drops
+    # them. A chapter is never written `06`, and a verse is never written `:03`.
+    assert find_candidates("John 06-25") == []
+    assert find_candidates("Israel 24:03") == []
+
+
+def test_a_year_behind_the_span_is_a_date_even_when_nothing_is_padded() -> None:
+    # The year clause on its own: `6-25` is a perfectly ordinary span, so only what follows it says
+    # this is 25 June 2020.
+    assert find_candidates("John 6-25-2020") == []
+
+
+def test_a_slashed_date_is_dropped_though_the_year_is_not_directly_behind_it() -> None:
+    # `/` is not a span separator, so the candidate here is only `John 6` and `/25/2020` sits behind
+    # it — the day part of the tail is what closes this, and without it `John 6` goes to Concord.
+    assert find_candidates("John 6/25/2020") == []
+
+
+def test_a_longer_run_of_digits_is_not_a_year() -> None:
+    # Same guard the month rule carries, for the same reason: five digits are not a date.
+    assert find_candidates("John 6-20200") == ["John 6"]
+
+
+def test_a_real_reference_that_merely_looks_numeric_still_reaches_concord() -> None:
+    # The controls. None of these is padded and none has a year behind it, so the rule must not
+    # touch them — a chapter range in particular is the shape closest to a date.
+    for text in ("John 6-25", "John 6:25", "Genesis 1-11", "Psalm 119:105", "Psalm 100"):
+        assert find_candidates(text) == [text], text
+
+
+def test_the_cost_of_the_year_clause_is_a_miss_into_the_review_list() -> None:
+    """The one shape this rule gets wrong, pinned so it is a decision rather than a surprise.
+
+    Whitespace is allowed either side of the separator, as it is for the month rule's year, so a
+    series title that puts a year behind a chapter loses its candidate. The video goes to the review
+    list and gets placed in one tap — the direction spec §13 calls the safe one.
+    """
+    assert find_candidates("Genesis 1 - 2025 Vision Series") == []

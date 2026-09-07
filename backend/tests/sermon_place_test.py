@@ -70,7 +70,7 @@ def _run(chapter: int, start: int, end: int) -> list[tuple[int, int]]:
 
 
 # What our fake Concord knows. Everything else it is asked for is a 404 — which is exactly how the
-# real one behaves for `Episode 63`, `Sunday 9:00` and `Israel 24:03` (checked live).
+# real one behaves for `Episode 63`, `Sunday 9:30` and `Israel 24:13` (checked live).
 _KNOWN: dict[str, Chapter | Exception] = {
     "Acts 7:33-35": _answer("Acts 7:33-35", "ACT", _run(7, 33, 35)),
     "Exodus 3:5-10": _answer("Exodus 3:5-10", "EXO", _run(3, 5, 10)),
@@ -336,11 +336,13 @@ async def test_junk_reaches_concord_and_leaves_no_trace(
     db_sessionmaker: async_sessionmaker[AsyncSession],
 ) -> None:
     # The finder is loose on purpose and offers all three of these. Concord is what decides they
-    # are not references, and nothing about them survives that.
+    # are not references, and nothing about them survives that. (The times are deliberately
+    # unpadded: `9:00` and `24:03` never reach Concord at all now, because a zero-padded number is
+    # a date. Junk that reaches Concord is what this test is about, so it uses junk that does.)
     concord = _concord()
     await _seed(
         db_sessionmaker,
-        [("vid00000001", "Episode 63", "Sunday 9:00 — a service in Israel 24:03")],
+        [("vid00000001", "Episode 63", "Sunday 9:30 — a service in Israel 24:13")],
     )
 
     await _place(db_sessionmaker, concord)
@@ -350,7 +352,7 @@ async def test_junk_reaches_concord_and_leaves_no_trace(
     assert row.suggestions == []
     assert await _notes(db_sessionmaker) == []
     # They really were offered to Concord — this is the division of labour, not a regex opinion.
-    assert {"Episode 63", "Sunday 9:00", "Israel 24:03"} <= set(concord.resolve_calls)
+    assert {"Episode 63", "Sunday 9:30", "Israel 24:13"} <= set(concord.resolve_calls)
 
 
 async def test_a_reference_is_asked_about_once_per_run(
