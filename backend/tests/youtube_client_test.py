@@ -13,6 +13,7 @@ import pytest
 from songbird.youtube.client import (
     YouTubeAuthError,
     YouTubeClient,
+    YouTubeError,
     YouTubeNotFoundError,
     YouTubeQuotaError,
     YouTubeUnreachableError,
@@ -483,3 +484,193 @@ async def test_the_log_filter_installs_once_and_spares_other_hosts() -> None:
     for log_filter in logging.getLogger("httpx").filters:
         assert log_filter.filter(record)  # type: ignore[union-attr]
     assert record.getMessage() == 'HTTP Request: GET http://concord.test/v1/books "200 OK"'
+
+
+# ---- 6. Channels and playlists (v1.7 slice 3) ----------------------------------------------
+#
+# Registering a source resolves the pasted link through YouTube once, then stores the ids. These
+# cover the request shape, the flattening, and — above all — the two ways a lookup fails without
+# YouTube saying so in the status code.
+
+_HANDLE = "@cornerstonechpl"
+_CHANNEL_ID = "UCa1b2c3d4e5f6g7h8i9j0k1"
+_UPLOADS_ID = "UUa1b2c3d4e5f6g7h8i9j0k1"
+_PLAYLIST_ID = "PLw5K9iridI-CW2ABjjNWoHQAwomBqHV5t"
+
+
+def _channel_json(
+    channel_id: str = _CHANNEL_ID,
+    *,
+    title: str = "Cornerstone Chapel",
+    uploads: str | None = _UPLOADS_ID,
+) -> dict[str, object]:
+    """One `channels.list` item in YouTube's real shape — including the `likes: ""` sibling,
+    which is how Google writes a related playlist that isn't set."""
+    related: dict[str, str] = {"likes": ""}
+    if uploads is not None:
+        related["uploads"] = uploads
+    return {
+        "kind": "youtube#channel",
+        "id": channel_id,
+        "snippet": {
+            "title": title,
+            "description": "A church.",
+            "customUrl": _HANDLE,
+            "publishedAt": "2012-03-04T05:06:07Z",
+        },
+        "contentDetails": {"relatedPlaylists": related},
+    }
+
+
+def _playlist_json(
+    playlist_id: str = _PLAYLIST_ID, *, title: str = "Sunday Teaching"
+) -> dict[str, object]:
+    return {
+        "kind": "youtube#playlist",
+        "id": playlist_id,
+        "snippet": {"title": title, "channelTitle": "Cornerstone Chapel"},
+    }
+
+
+async def test_resolving_a_handle_sends_forhandle_and_both_parts() -> None:
+    seen: dict[str, str] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["path"] = request.url.path
+        for k in ("key", "part", "forHandle"):
+            seen[k] = request.url.params.get(k, "<absent>")
+        return httpx.Response(200, json=_ok(_channel_json()))
+
+    client = _client(handler)
+    channel = await client.resolve_channel_by_handle(_HANDLE)
+    await client.aclose()
+    assert seen == {
+        "path": "/youtube/v3/channels",
+        "key": _KEY,
+        "part": "snippet,contentDetails",
+        # Sent WITH the @ — the form the parser produces and the form Google documents.
+        "forHandle": _HANDLE,
+    }
+    assert channel.id == _CHANNEL_ID
+    assert channel.title == "Cornerstone Chapel"
+    assert channel.uploads_playlist_id == _UPLOADS_ID
+
+
+async def test_getting_a_channel_by_id_sends_id_not_forhandle() -> None:
+    seen: dict[str, str] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        for k in ("part", "id", "forHandle"):
+            seen[k] = request.url.params.get(k, "<absent>")
+        return httpx.Response(200, json=_ok(_channel_json()))
+
+    client = _client(handler)
+    channel = await client.get_channel(_CHANNEL_ID)
+    await client.aclose()
+    assert seen == {"part": "snippet,contentDetails", "id": _CHANNEL_ID, "forHandle": "<absent>"}
+    assert channel.id == _CHANNEL_ID
+
+
+async def test_getting_a_playlist_asks_only_for_the_snippet() -> None:
+    seen: dict[str, str] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["path"] = request.url.path
+        for k in ("part", "id"):
+            seen[k] = request.url.params.get(k, "<absent>")
+        return httpx.Response(200, json=_ok(_playlist_json()))
+
+    client = _client(handler)
+    playlist = await client.get_playlist(_PLAYLIST_ID)
+    await client.aclose()
+    assert seen == {"path": "/youtube/v3/playlists", "part": "snippet", "id": _PLAYLIST_ID}
+    assert playlist.id == _PLAYLIST_ID
+    assert playlist.title == "Sunday Teaching"
+
+
+async def test_an_unknown_handle_is_not_found_even_though_the_status_is_200() -> None:
+    # THE case that matters. Google answers an unknown handle with 200 and no items, so a client
+    # that only mapped status codes would report success and store a source that isn't there.
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"kind": "youtube#channelListResponse", "items": []})
+
+    client = _client(handler)
+    with pytest.raises(YouTubeNotFoundError) as caught:
+        await client.resolve_channel_by_handle("@nosuchchannelanywhere")
+    await client.aclose()
+    assert "@nosuchchannelanywhere" in str(caught.value)
+
+
+async def test_an_unknown_channel_id_and_playlist_id_are_also_not_found() -> None:
+    # Google omits `items` entirely rather than sending an empty list, so both shapes are covered.
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"kind": "youtube#channelListResponse"})
+
+    client = _client(handler)
+    with pytest.raises(YouTubeNotFoundError):
+        await client.get_channel(_CHANNEL_ID)
+    with pytest.raises(YouTubeNotFoundError):
+        await client.get_playlist(_PLAYLIST_ID)
+    await client.aclose()
+
+
+async def test_a_channel_with_no_uploads_playlist_is_an_error_not_a_not_found() -> None:
+    # The channel exists; there is simply no list to read. Registering it would create a source
+    # that could never be scanned, and calling that "not found" would send the owner hunting for
+    # a typo that isn't there.
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=_ok(_channel_json(uploads=None)))
+
+    client = _client(handler)
+    with pytest.raises(YouTubeError) as caught:
+        await client.resolve_channel_by_handle(_HANDLE)
+    await client.aclose()
+    assert not isinstance(caught.value, YouTubeNotFoundError)
+    assert "uploads playlist" in str(caught.value)
+
+
+async def test_an_empty_uploads_string_counts_as_no_uploads_playlist() -> None:
+    # Google writes an unset related playlist as "", not as absent — an empty id stored as though
+    # it were real would fail much later, inside a scan.
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=_ok(_channel_json(uploads="")))
+
+    client = _client(handler)
+    with pytest.raises(YouTubeError):
+        await client.resolve_channel_by_handle(_HANDLE)
+    await client.aclose()
+
+
+async def test_the_new_lookups_map_errors_the_same_way_videos_do() -> None:
+    # The error mapping lives in one place; these three go through it too rather than around it.
+    cases: tuple[tuple[int, str, type[YouTubeError]], ...] = (
+        (403, "quotaExceeded", YouTubeQuotaError),
+        (400, "badRequest", YouTubeAuthError),
+        (503, "backendError", YouTubeUnreachableError),
+    )
+    for status, reason, expected in cases:
+        def handler(
+            request: httpx.Request, _s: int = status, _r: str = reason
+        ) -> httpx.Response:
+            return httpx.Response(_s, json=_error_body(_r, _s))
+
+        client = _client(handler)
+        with pytest.raises(expected):
+            await client.resolve_channel_by_handle(_HANDLE)
+        with pytest.raises(expected):
+            await client.get_playlist(_PLAYLIST_ID)
+        await client.aclose()
+
+
+async def test_the_key_never_appears_in_a_channel_lookup_failure() -> None:
+    # The redaction lives in `_get`, which these share — but "shares it" is a claim worth an
+    # assertion, since a future method could easily call the transport directly.
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(400, json=_error_body("badRequest", 400))
+
+    client = _client(handler)
+    with pytest.raises(YouTubeError) as caught:
+        await client.get_channel(_CHANNEL_ID)
+    await client.aclose()
+    assert _KEY not in str(caught.value)
+    assert _KEY not in "".join(traceback.format_exception(caught.value))
