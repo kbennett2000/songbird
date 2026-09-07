@@ -58,12 +58,25 @@ function chosen(selected: string[], typed: string): string[] {
   return extra === "" || selected.includes(extra) ? selected : [...selected, extra];
 }
 
-/** The message a failed place shows. The server names the reference it could not find, and that
- * is more use than anything generic — so it is preferred whenever there is one. */
-function placeError(err: unknown): string {
-  if (err instanceof ApiError && err.code === "NOT_FOUND" && err.message) return err.message;
-  if (err instanceof ApiError && err.code === "VIDEO_STATE") return err.message;
-  return "Couldn't save that — check the spelling (e.g. Joshua 6:1-16), or is Concord reachable?";
+/**
+ * What a failed place says, in the app's voice.
+ *
+ * The server's own message names the reference twice and says "Concord could not resolve", which
+ * is true and useless — the live pass showed it reading "Couldn't find reference 'Jhon 3:16':
+ * Concord could not resolve 'Jhon 3:16'". So the reference is named only when there was more than
+ * one and the reader could not otherwise tell which failed, and then in the same words the sermon
+ * form uses.
+ */
+function placeError(err: unknown, references: string[]): string {
+  if (!(err instanceof ApiError)) return "Couldn't save that. Nothing was changed.";
+  if (err.code === "VIDEO_STATE") return err.message;
+  if (err.code === "NOT_FOUND") {
+    const failed = references.length > 1 && references.find((r) => err.message.includes(r));
+    return failed
+      ? `Couldn't find ${failed} — check the spelling (e.g. Joshua 6:1-16). Nothing was saved.`
+      : "Couldn't find that reference — check the spelling (e.g. Joshua 6:1-16).";
+  }
+  return "Couldn't save that (is Concord reachable?).";
 }
 
 export function SermonVideoRow({
@@ -90,9 +103,9 @@ export function SermonVideoRow({
     setNoteAnyway(false);
     onChanged(updated, video.status);
   };
-  const failed = (err: unknown) => setError(placeError(err));
-
   const references = chosen(selected, typed);
+  const failed = (err: unknown) => setError(placeError(err, references));
+
   const place = useMutation({
     mutationFn: () => placeVideo(video.id, references),
     onSuccess: settled,

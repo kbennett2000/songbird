@@ -103,6 +103,7 @@ describe("SermonVideoLedger", () => {
     await screen.findByText("Livestream Sunday Worship Service - Mar. 15 2026");
     await user.selectOptions(screen.getByLabelText("Filter by source"), "1");
     await user.selectOptions(screen.getByLabelText("Filter by state"), "needs_passage");
+    await user.click(screen.getByRole("button", { name: "More filters" }));
     await user.type(screen.getByLabelText("Published on or after"), "2024-01-01");
     await user.type(screen.getByLabelText("Published on or before"), "2024-12-31");
     // Typing does not refetch — only pressing Search does, or every keystroke would be a request.
@@ -232,7 +233,41 @@ describe("SermonVideoLedger", () => {
     expect(screen.getByRole("option", { name: "Not a sermon (1)" })).toBeInTheDocument();
   });
 
-  it("says which reference it could not find, in the server's own words", async () => {
+  it("says a single bad reference could not be found, without repeating it back", async () => {
+    // The server's own message reads "Couldn't find reference 'Jhon 3:16': Concord could not
+    // resolve 'Jhon 3:16'" — true, and useless. With one reference there is nothing to name.
+    server.use(
+      http.get("/api/v1/sermon-sources/videos", () => HttpResponse.json(page([video()]))),
+      http.post("/api/v1/sermon-sources/videos/1/place", () =>
+        HttpResponse.json(
+          {
+            detail: {
+              code: "NOT_FOUND",
+              message: "Couldn't find reference 'Jhon 3:16': Concord could not resolve 'Jhon 3:16'",
+            },
+          },
+          { status: 404 },
+        ),
+      ),
+    );
+    const user = userEvent.setup();
+    renderList();
+
+    await user.type(await screen.findByLabelText("Or type one"), "Jhon 3:16");
+    await user.click(screen.getByRole("button", { name: "Place" }));
+
+    expect(
+      await screen.findByText(/find that reference — check the spelling \(e\.g\. Joshua 6:1-16\)/),
+    ).toBeInTheDocument();
+    // Not the server's words: the reference is not repeated, and "Concord could not resolve" —
+    // which is what the server actually said — never reaches the reader.
+    expect(screen.queryByText(/Concord could not resolve/)).not.toBeInTheDocument();
+    // The row is untouched — nothing was placed, so nothing about it changed.
+    expect(screen.getByRole("button", { name: "Place" })).toBeInTheDocument();
+  });
+
+  it("names which of several references failed, and says nothing was saved", async () => {
+    // All-or-nothing: with three chosen, "that reference" would not tell you which to fix.
     server.use(
       http.get("/api/v1/sermon-sources/videos", () => HttpResponse.json(page([video()]))),
       http.post("/api/v1/sermon-sources/videos/1/place", () =>
@@ -245,12 +280,12 @@ describe("SermonVideoLedger", () => {
     const user = userEvent.setup();
     renderList();
 
-    await user.type(await screen.findByLabelText("Or type one"), "Jhon 3:16");
+    await user.click(await screen.findByRole("button", { name: "Psalms 23" }));
+    await user.type(screen.getByLabelText("Or type one"), "Jhon 3:16");
     await user.click(screen.getByRole("button", { name: "Place" }));
 
-    expect(await screen.findByText(/Jhon 3:16/)).toBeInTheDocument();
-    // The row is untouched — nothing was placed, so nothing about it changed.
-    expect(screen.getByRole("button", { name: "Place" })).toBeInTheDocument();
+    expect(await screen.findByText(/Couldn.t find Jhon 3:16/)).toBeInTheDocument();
+    expect(screen.getByText(/Nothing was saved/)).toBeInTheDocument();
   });
 
   it("restores a video you dismissed", async () => {
@@ -339,6 +374,12 @@ describe("SermonVideoLedger", () => {
     await screen.findByText("Livestream Sunday Worship Service - Mar. 15 2026");
     expect(screen.queryByRole("button", { name: /Dismiss all/ })).not.toBeInTheDocument();
 
+    // And a state on its own does not earn it either. Choosing "Needs a passage" is the first
+    // thing anybody does, and it must not put a one-confirm sweep of the whole queue on screen.
+    await user.selectOptions(screen.getByLabelText("Filter by state"), "needs_passage");
+    expect(screen.queryByRole("button", { name: /Dismiss all/ })).not.toBeInTheDocument();
+    await user.selectOptions(screen.getByLabelText("Filter by state"), "all");
+
     await user.selectOptions(screen.getByLabelText("Filter by source"), "1");
     // 312 + 4 — never the 60 placed rows, which have notes behind them.
     expect(await screen.findByRole("button", { name: "Dismiss all 316 matching" })).toBeInTheDocument();
@@ -363,13 +404,16 @@ describe("SermonVideoLedger", () => {
 
     await screen.findByText("Livestream Sunday Worship Service - Mar. 15 2026");
     await user.selectOptions(screen.getByLabelText("Filter by source"), "1");
+    await user.click(screen.getByRole("button", { name: /More filters/ }));
     await user.type(screen.getByLabelText("Published on or before"), "2024-12-31");
     await user.click(await screen.findByRole("button", { name: /Dismiss all/ }));
 
     // The number alone is not something anyone can check, so the confirm says the filter too.
     const dialog = within(screen.getByRole("dialog"));
     expect(
-      dialog.getByText("Mark 312 videos from Majestic View, up to 2024-12-31 as not a sermon?"),
+      dialog.getByRole("heading", {
+        name: "Mark 312 videos from Majestic View, up to Dec 31, 2024 as not a sermon?",
+      }),
     ).toBeInTheDocument();
     await user.click(dialog.getByRole("button", { name: "Dismiss 312" }));
 

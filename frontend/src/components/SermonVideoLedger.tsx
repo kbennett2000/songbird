@@ -2,6 +2,7 @@ import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-q
 import { type FormEvent, useState } from "react";
 
 import { DismissMatchingDialog } from "@/components/DismissMatchingDialog";
+import { formatEventDate } from "@/lib/notes";
 import { SermonVideoRow } from "@/components/SermonVideoRow";
 import { dismissibleCount, patchVideo } from "@/lib/ledgerCache";
 import {
@@ -59,6 +60,10 @@ export function SermonVideoLedger({ sources }: { sources: SermonSource[] }): JSX
   // key, so the list refetches when you press Enter rather than on every keystroke.
   const [draft, setDraft] = useState("");
   const [q, setQ] = useState("");
+  // The dates and the search start folded away. At phone width the six controls filled the
+  // whole screen and pushed every row below the fold — on the page most likely to be opened on
+  // a phone. Source and state are what narrow a list day to day; these two are for a sweep.
+  const [moreFilters, setMoreFilters] = useState(false);
   const [confirmingBulk, setConfirmingBulk] = useState(false);
   const [bulkMessage, setBulkMessage] = useState<string | null>(null);
 
@@ -101,6 +106,15 @@ export function SermonVideoLedger({ sources }: { sources: SermonSource[] }): JSX
   const total = list.data?.pages[0]?.total ?? 0;
   const counts = list.data?.pages[0]?.counts;
   const filtered = sourceId !== "all" || state !== "all" || after !== "" || before !== "" || q !== "";
+  // **A state on its own does not earn the bulk button.** Choosing "Needs a passage" is the first
+  // thing anybody does, and offering to sweep the whole queue from behind one confirm at that
+  // moment is the accident the empty-filter rule exists to prevent — the live pass found it
+  // offering "Dismiss all 349 matching" before a single row had been read. The sweep needs a real
+  // narrowing: a source, a date, or a search.
+  const narrowed = sourceId !== "all" || after !== "" || before !== "" || q !== "";
+  // How many of the folded-away filters are actually doing something. A list narrowed by a
+  // filter you cannot see is a list that looks wrong for no reason.
+  const hiddenFilters = [after, before, q].filter((v) => v !== "").length;
   const canDismiss = counts ? dismissibleCount(counts, state) : 0;
 
   const rowChanged = (updated: SermonSourceVideo, previous: SermonVideoStatus) => {
@@ -108,6 +122,10 @@ export function SermonVideoLedger({ sources }: { sources: SermonSource[] }): JSX
     queryClient.setQueryData(queryKey, (old: typeof list.data) =>
       patchVideo(old as never, updated, previous, state),
     );
+    // The source card above carries its own tallies from its own query. Left alone they go stale
+    // and the page shows two different numbers for the same thing — the live pass caught it saying
+    // "350 needs a passage" over a filter bar reading 349. One small refetch, and not the ledger's.
+    void queryClient.invalidateQueries({ queryKey: ["sermon-sources"] });
   };
 
   const submitSearch = (e: FormEvent) => {
@@ -162,52 +180,65 @@ export function SermonVideoLedger({ sources }: { sources: SermonSource[] }): JSX
           </select>
         </label>
 
-        <label className="flex flex-col text-xs text-gray-500 dark:text-gray-400">
-          From
-          <input
-            type="date"
-            value={after}
-            onChange={(e) => setAfter(e.target.value)}
-            aria-label="Published on or after"
-            className={FIELD}
-          />
-        </label>
+        <button
+          type="button"
+          onClick={() => setMoreFilters((was) => !was)}
+          aria-expanded={moreFilters}
+          className="rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700"
+        >
+          {moreFilters ? "Fewer filters" : hiddenFilters > 0 ? `More filters (${hiddenFilters})` : "More filters"}
+        </button>
+      </div>
 
-        <label className="flex flex-col text-xs text-gray-500 dark:text-gray-400">
-          To
-          <input
-            type="date"
-            value={before}
-            onChange={(e) => setBefore(e.target.value)}
-            aria-label="Published on or before"
-            className={FIELD}
-          />
-        </label>
-
-        <form onSubmit={submitSearch} className="flex items-end gap-2">
+      {moreFilters && (
+        <div className="mb-3 flex flex-wrap items-end gap-3">
           <label className="flex flex-col text-xs text-gray-500 dark:text-gray-400">
-            Title contains
+            From
             <input
-              type="search"
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              aria-label="Search titles"
-              placeholder="e.g. Christmas"
+              type="date"
+              value={after}
+              onChange={(e) => setAfter(e.target.value)}
+              aria-label="Published on or after"
               className={FIELD}
             />
           </label>
-          <button
-            type="submit"
-            className="rounded bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700"
-          >
-            Search
-          </button>
-        </form>
-      </div>
+
+          <label className="flex flex-col text-xs text-gray-500 dark:text-gray-400">
+            To
+            <input
+              type="date"
+              value={before}
+              onChange={(e) => setBefore(e.target.value)}
+              aria-label="Published on or before"
+              className={FIELD}
+            />
+          </label>
+
+          <form onSubmit={submitSearch} className="flex items-end gap-2">
+            <label className="flex flex-col text-xs text-gray-500 dark:text-gray-400">
+              Title contains
+              <input
+                type="search"
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                aria-label="Search titles"
+                placeholder="e.g. Christmas"
+                className={FIELD}
+              />
+            </label>
+            <button
+              type="submit"
+              className="rounded bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700"
+            >
+              Search
+            </button>
+          </form>
+        </div>
+      )}
 
       {/* Only offered when the filter really would take something, and labelled with that number
           rather than with the number of rows on screen — the sweep never touches a placed row. */}
-      {filtered && canDismiss > 0 && (
+      {narrowed && canDismiss > 0 && (
         <button
           type="button"
           onClick={() => setConfirmingBulk(true)}
@@ -279,13 +310,13 @@ function describeFilter(filters: SermonVideoFilters, sources: SermonSource[]): s
   const source = sources.find((s) => s.id === filters.sourceId);
   if (source) parts.push(`from ${source.title}`);
   if (filters.q) parts.push(`with “${filters.q}” in the title`);
-  if (filters.publishedAfter && filters.publishedBefore) {
-    parts.push(`between ${filters.publishedAfter} and ${filters.publishedBefore}`);
-  } else if (filters.publishedAfter) {
-    parts.push(`from ${filters.publishedAfter} onwards`);
-  } else if (filters.publishedBefore) {
-    parts.push(`up to ${filters.publishedBefore}`);
-  }
+  // Dated the way the rest of the app dates things. The live pass had this confirm reading
+  // "up to 2021-12-31" over a list of rows all saying "Dec 26, 2021".
+  const from = filters.publishedAfter && formatEventDate(filters.publishedAfter);
+  const to = filters.publishedBefore && formatEventDate(filters.publishedBefore);
+  if (from && to) parts.push(`between ${from} and ${to}`);
+  else if (from) parts.push(`from ${from} onwards`);
+  else if (to) parts.push(`up to ${to}`);
   return parts.join(", ");
 }
 
