@@ -2,10 +2,14 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type ChangeEvent, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 
+import { RedateSermonsModal } from "@/components/RedateSermonsModal";
 import { TopNav } from "@/components/TopNav";
+import { ApiError } from "@/lib/api";
 import { downloadExport, importNotes, readJsonFile } from "@/lib/importExport";
 import { type NoteAnchor, noteReference, notePreview, readerLink } from "@/lib/notes";
 import { browseAnnotations, browseSermonNotes, fetchBooks, fetchTags } from "@/lib/reader";
+import { applyRedate, previewRedate } from "@/lib/redate";
+import type { RedateResult } from "@/schemas";
 
 function TagChips({ tags }: { tags: string[] }): JSX.Element | null {
   if (tags.length === 0) return null;
@@ -26,6 +30,8 @@ export function BrowseView(): JSX.Element {
   const fileInputRef = useRef<HTMLInputElement>(null);
   // Inline result of the last export/import action (no toast library — matches the app's style).
   const [actionMsg, setActionMsg] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
+  // The re-date preview, once the server has produced one. Non-null IS the dialog being open.
+  const [redatePreview, setRedatePreview] = useState<RedateResult | null>(null);
 
   const tagsQuery = useQuery({ queryKey: ["tags"], queryFn: fetchTags });
   const booksQuery = useQuery({ queryKey: ["books"], queryFn: fetchBooks });
@@ -67,6 +73,51 @@ export function BrowseView(): JSX.Element {
       setActionMsg({ kind: "error", text: err instanceof Error ? err.message : "Import failed" }),
   });
 
+  // Re-dating YouTube sermons (v1.7): a dry run first, always. Both requests live here so the
+  // whole action's data flow is in one place and the dialog stays presentational.
+  const redateError = (err: unknown, fallback: string) => {
+    const code = err instanceof ApiError ? err.code : "";
+    setActionMsg({
+      kind: "error",
+      text:
+        code === "YOUTUBE_NOT_CONFIGURED"
+          ? "songbird needs a YouTube API key for this — set YOUTUBE_API_KEY in its configuration and restart."
+          : err instanceof Error
+            ? err.message
+            : fallback,
+    });
+  };
+
+  const previewMutation = useMutation({
+    mutationFn: previewRedate,
+    onSuccess: (preview) => setRedatePreview(preview),
+    onError: (err) => redateError(err, "Couldn't check your sermon notes against YouTube."),
+  });
+
+  const applyMutation = useMutation({
+    mutationFn: applyRedate,
+    onSuccess: async (result) => {
+      setRedatePreview(null);
+      // Both the Browse list and the Welcome page read ["browse-sermon"]; the reader's chapter
+      // overlay carries event_date too, so its cache is stale as well.
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["browse-sermon"] }),
+        queryClient.invalidateQueries({ queryKey: ["chapter"] }),
+      ]);
+      setActionMsg({
+        kind: "ok",
+        text:
+          result.applied === 0
+            ? "Nothing to change — every date already matches YouTube."
+            : `Re-dated ${result.applied} sermon note${result.applied === 1 ? "" : "s"}.`,
+      });
+    },
+    onError: (err) => {
+      setRedatePreview(null);
+      redateError(err, "Couldn't re-date your sermon notes.");
+    },
+  });
+
   const onExport = () => {
     setActionMsg(null);
     downloadExport().catch((err) =>
@@ -100,6 +151,17 @@ export function BrowseView(): JSX.Element {
               disabled={importMutation.isPending}
             >
               {importMutation.isPending ? "Importing…" : "Import"}
+            </button>
+            <button
+              type="button"
+              className="text-blue-700 dark:text-blue-400 hover:underline disabled:opacity-50"
+              onClick={() => {
+                setActionMsg(null);
+                previewMutation.mutate();
+              }}
+              disabled={previewMutation.isPending}
+            >
+              {previewMutation.isPending ? "Checking…" : "Re-date YouTube sermons"}
             </button>
             <input
               ref={fileInputRef}
@@ -201,6 +263,13 @@ export function BrowseView(): JSX.Element {
           </ul>
         </section>
       </main>
+
+      <RedateSermonsModal
+        preview={redatePreview}
+        applying={applyMutation.isPending}
+        onApply={() => applyMutation.mutate()}
+        onClose={() => setRedatePreview(null)}
+      />
     </div>
   );
 }
