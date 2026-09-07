@@ -43,6 +43,15 @@ This is a **v1.7 feature.** v1.2 shipped sermon notes as hand-made entries; this
 - **The key is a secret.** It lives in `.env` / the compose `environment`, is never logged, and is
   never sent to the browser. The container now needs outbound access to `www.googleapis.com`
   (update the Dockerfile comment that says Concord is the only outbound call, and `docs/SECURITY.md`).
+  *Keeping it unlogged takes three mechanisms, not one — slice 1 found this the hard way.* httpx
+  puts the full request URL into `HTTPStatusError`'s message, so a `raise ... from exc` (the
+  `ConcordClient` idiom) leaks the key through any rendered traceback: every raise in the YouTube
+  client is `from None` with a redacted message, and nothing keeps the httpx exception, its
+  request, or its response. And httpx logs `HTTP Request: GET <full url>` at **INFO on every
+  successful call**, which `logging.basicConfig(level=INFO)` in `create_app()` then prints — so
+  the client also installs a redacting `logging.Filter` on the `httpx` logger. Without that
+  filter a working deployment prints the key on every request; redacted exceptions do nothing
+  about it.
 - **YouTube failures never break the app.** Unlike Concord (a hard dependency — its absence is an
   error), YouTube being unreachable, rate-limited, or out of quota is recorded on the affected
   source (`last_check_status`) and shown on the Sources page. The reader, notes, and everything
@@ -126,6 +135,12 @@ silently hidden):
 1. `liveBroadcastContent` is `upcoming` or `live` → not ledgered at all; it is re-seen once finished.
 2. Duration < the source's minimum → `too_short`. This is also the Shorts rule: a Short cannot exceed
    3 minutes, so the 10-minute default excludes every one of them without a separate check.
+   **An unknown duration is not a short one.** The client parses a missing or unrecognised
+   `contentDetails.duration` to `None` rather than `0`, because filing such a video under
+   `too_short` would record a reason it has not earned — the opposite of this section's promise
+   that nothing is silently hidden. So the test is `duration is not None and duration < minimum`,
+   and a video of unknown length falls through to the passage rules and, failing those, into the
+   review list. (A genuine `PT0S`/`P0D` is `0` and is still too short.)
 3. Livestream (`liveStreamingDetails` present) and the source has `include_live` off →
    `live_excluded`.
 4. `video_id` already on one of the author's sermon notes → `already_noted` (no new note).
@@ -254,7 +269,11 @@ preview is the gate, mirroring the seed loader's dry-run.
 
 ## 14. Definition of done (feature)
 
-- One YouTube client, key never logged or served; feature cleanly off without a key.
+- One YouTube client, key never logged or served; feature cleanly off without a key. "Never
+  logged" is pinned by three tests: the key is absent from the full rendered traceback of every
+  failure path, absent from the logs of a *successful* call, and the redacting log filter installs
+  only once. (The middle one must set the level on the root logger — scoping it to `songbird`
+  would make it unable to fail, since the logger that leaks is `httpx`'s.)
 - Sources CRUD; adding a source scans its full catalog; scheduled + on-demand checks; one scan at a
   time; per-source failure recording; the app never errors because YouTube did.
 - Filters and rules as specified, with the real Celebration / Cornerstone / 2819 description shapes as
