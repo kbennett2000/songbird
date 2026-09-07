@@ -584,7 +584,7 @@ def with_youtube(app: FastAPI) -> Callable[[FakeYouTubeClient], None]:
 @pytest.fixture
 def with_scan_runner(
     app: FastAPI, db_sessionmaker: async_sessionmaker[AsyncSession]
-) -> Callable[[FakeYouTubeClient], ScanRunner]:
+) -> Callable[..., ScanRunner]:
     """Install a scan runner over the in-memory DB, and hand it back so the test can drive it.
 
     Tests `await runner.run()` rather than calling `request_scan()`: the loop is the behaviour,
@@ -594,10 +594,21 @@ def with_scan_runner(
     suite is in by default, since the app fixture never runs the lifespan. That is what keeps
     slice 3's tests honest: they POST a source, the request is recorded on the row, and nothing
     starts.
+
+    The Concord client defaults to one that recognises nothing, which is what a route test wants:
+    the videos get fetched and filtered, and every candidate the finder offers is refused, so rows
+    land in the review list without the test having to say anything about passages.
     """
 
-    def _install(youtube: FakeYouTubeClient) -> ScanRunner:
-        runner = ScanRunner(db_sessionmaker, youtube, default_min_minutes=10)  # type: ignore[arg-type]
+    def _install(
+        youtube: FakeYouTubeClient, concord: FakeConcordClient | None = None
+    ) -> ScanRunner:
+        runner = ScanRunner(
+            db_sessionmaker,
+            youtube,  # type: ignore[arg-type]
+            concord or FakeConcordClient(resolved_by_ref={}),  # type: ignore[arg-type]
+            default_min_minutes=10,
+        )
         app.dependency_overrides[get_scan_runner_optional] = lambda: runner
         return runner
 

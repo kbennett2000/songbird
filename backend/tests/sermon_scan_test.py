@@ -37,7 +37,7 @@ from songbird.youtube.client import (
 from songbird.youtube.schemas import PlaylistPage, Video
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
-from tests.conftest import FakeYouTubeClient
+from tests.conftest import FakeConcordClient, FakeYouTubeClient
 
 _UPLOADS = "UUa1b2c3d4e5f6g7h8i9j0k1"
 _CHANNEL_ID = "UCa1b2c3d4e5f6g7h8i9j0k1"
@@ -142,9 +142,24 @@ async def _source_row(
 
 
 def _runner(
-    sessionmaker: async_sessionmaker[AsyncSession], youtube: FakeYouTubeClient
+    sessionmaker: async_sessionmaker[AsyncSession],
+    youtube: FakeYouTubeClient,
+    concord: FakeConcordClient | None = None,
 ) -> ScanRunner:
-    return ScanRunner(sessionmaker, youtube, default_min_minutes=_DEFAULT_MIN)  # type: ignore[arg-type]
+    """A runner whose Concord recognises nothing, unless a test says otherwise.
+
+    This file is about FETCHING. Giving it a Concord that refuses every candidate means the
+    evaluation that now follows each walk is uniform and uninteresting — every video that survives
+    spec §6's filters lands in the review list — so these tests keep asserting what they were
+    written to assert. What the passage rules do with a Concord that answers is
+    `sermon_place_test.py`.
+    """
+    return ScanRunner(
+        sessionmaker,
+        youtube,  # type: ignore[arg-type]
+        concord or FakeConcordClient(resolved_by_ref={}),  # type: ignore[arg-type]
+        default_min_minutes=_DEFAULT_MIN,
+    )
 
 
 # ---- The filters, spec §6, as pure functions -------------------------------------------------
@@ -406,15 +421,18 @@ async def test_each_filter_lands_the_right_row(
     await _runner(db_sessionmaker, youtube).run()
 
     rows = {row.video_id: row for row in await _ledger(db_sessionmaker)}
-    assert (rows[keep].status, rows[keep].skip_reason) == ("pending", None)
+    # Fetched, filtered, and then read: this Concord recognises nothing, so the one video that
+    # survived §6's filters has no passage anyone could place and lands in the review list. What
+    # it takes to reach `placed` is `sermon_place_test.py`.
+    assert (rows[keep].status, rows[keep].skip_reason) == ("needs_passage", None)
     assert (rows[short].status, rows[short].skip_reason) == ("skipped", "too_short")
     assert (rows[stream].status, rows[stream].skip_reason) == ("skipped", "live_excluded")
     assert (rows[noted].status, rows[noted].skip_reason) == ("already_noted", None)
     # The one that gets no row at all — it has not happened yet, so there is nothing to decide.
     assert upcoming not in rows
-    # A decision made now is dated now; `pending` is still waiting on slice 4b.
-    assert rows[keep].decided_at is None
-    assert rows[short].decided_at is not None
+    # Every row that has stopped being `pending` is dated, and by the end of a check none of them
+    # is still pending: the walk writes the skips, and the reading that follows decides the rest.
+    assert all(row.decided_at is not None for row in rows.values())
 
 
 async def test_a_broadcast_is_picked_up_once_it_has_finished(
@@ -440,7 +458,9 @@ async def test_a_broadcast_is_picked_up_once_it_has_finished(
     await runner.run()
 
     rows = await _ledger(db_sessionmaker)
-    assert [(r.video_id, r.status, r.is_live) for r in rows] == [(video_id, "pending", True)]
+    assert [(r.video_id, r.status, r.is_live) for r in rows] == [
+        (video_id, "needs_passage", True)
+    ]
 
 
 async def test_another_users_note_does_not_make_this_video_look_handled(
@@ -474,7 +494,9 @@ async def test_another_users_note_does_not_make_this_video_look_handled(
     await _runner(db_sessionmaker, youtube).run()
 
     rows = await _ledger(db_sessionmaker, author_id=1)
-    assert [(r.video_id, r.status) for r in rows] == [(video_id, "pending")]
+    # Not `already_noted`: the other user's note is theirs. It gets read for a passage like any
+    # other unseen video.
+    assert [(r.video_id, r.status) for r in rows] == [(video_id, "needs_passage")]
 
 
 async def test_a_source_with_its_own_minimum_uses_it(
@@ -493,7 +515,7 @@ async def test_a_source_with_its_own_minimum_uses_it(
     await _runner(db_sessionmaker, youtube).run()
 
     rows = {row.video_id: row.status for row in await _ledger(db_sessionmaker)}
-    assert rows == {fifteen: "skipped", thirty: "pending"}
+    assert rows == {fifteen: "skipped", thirty: "needs_passage"}
 
 
 async def test_a_video_one_source_already_ledgered_is_not_ledgered_twice(

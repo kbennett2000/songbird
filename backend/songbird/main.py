@@ -68,6 +68,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         ScanRunner(
             async_session_factory,
             app.state.youtube,
+            # The same client every request uses. Concord is built above and closed last, and the
+            # scan is stopped first, so a scan can never be left holding a closed transport.
+            app.state.concord,
             default_min_minutes=settings.sermon_min_minutes,
         )
         if app.state.youtube is not None
