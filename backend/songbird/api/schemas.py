@@ -164,6 +164,50 @@ class SermonNoteOut(BaseModel):
         return [getattr(t, "name", t) for t in value]
 
 
+# --- Re-dating sermon notes from YouTube (v1.7 sermon sources, spec §11) ---
+
+
+class RedateItem(BaseModel):
+    """One sermon note the re-date could look up: what its date is now, what the §7 rule makes
+    it, and which of the two YouTube timestamps decided that. `changed` is the whole point of
+    the preview — it is what the Apply button counts and what a re-run reports as zero."""
+
+    id: int
+    title: str
+    reference: str
+    sermon_url: str
+    video_id: str
+    current_date: date | None
+    new_date: date
+    date_source: Literal["stream_start", "published"]
+    changed: bool
+
+
+class RedateNotFound(BaseModel):
+    """A note whose YouTube link is well-formed but which YouTube didn't return — private,
+    deleted, or never there. Its date is left exactly as it is; only the video id is stamped,
+    and that comes from the URL, not from YouTube."""
+
+    id: int
+    title: str
+    reference: str
+    sermon_url: str
+    video_id: str
+
+
+class RedateResult(BaseModel):
+    """The preview (`dry_run=true`, nothing written) and the outcome (`dry_run=false`) share one
+    shape, so the UI renders the same table either way. `applied` counts the dates that actually
+    changed — 0 on a dry run, and 0 again on a second apply."""
+
+    dry_run: bool
+    total_youtube_notes: int
+    items: list[RedateItem]
+    not_found: list[RedateNotFound]
+    skipped_non_youtube: int
+    applied: int
+
+
 # --- Import / Export (issue #41) ---
 
 
