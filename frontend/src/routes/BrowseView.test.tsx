@@ -214,4 +214,202 @@ describe("BrowseView", () => {
     await user.click(open[0]!);
     expect(await screen.findByText(/book=JHN&chapter=3&verse=16/)).toBeInTheDocument();
   });
+  // --- Re-dating YouTube sermons (v1.7 sermon sources, spec §11) ---------------------------
+
+  // Two notes: one whose date YouTube would move, one already correct. The muted row still has
+  // to be there — "we checked everything" is part of what the preview says.
+  const REDATE_PREVIEW = {
+    dry_run: true,
+    total_youtube_notes: 3,
+    items: [
+      {
+        id: 1,
+        title: "The Prodigal Son",
+        reference: "Luke 15:11-32",
+        sermon_url: "https://youtu.be/abc12345678",
+        video_id: "abc12345678",
+        current_date: "2026-01-05",
+        new_date: "2026-02-02",
+        date_source: "stream_start" as const,
+        changed: true,
+      },
+      {
+        id: 2,
+        title: "Already Right",
+        reference: "Acts 2:42",
+        sermon_url: "https://youtu.be/def12345678",
+        video_id: "def12345678",
+        current_date: "2025-05-11",
+        new_date: "2025-05-11",
+        date_source: "published" as const,
+        changed: false,
+      },
+    ],
+    not_found: [
+      {
+        id: 3,
+        title: "A Removed Video",
+        reference: "John 1:1",
+        sermon_url: "https://youtu.be/ghi12345678",
+        video_id: "ghi12345678",
+      },
+    ],
+    skipped_non_youtube: 1,
+    applied: 0,
+  };
+
+  async function openPreview(body: typeof REDATE_PREVIEW = REDATE_PREVIEW) {
+    server.use(
+      http.get("/api/v1/tags", () => HttpResponse.json(["grace"])),
+      browseHandler(),
+      sermonHandler(),
+      http.post("/api/v1/sermon-notes/redate", () => HttpResponse.json(body)),
+    );
+    const user = userEvent.setup();
+    renderBrowse();
+    await user.click(await screen.findByRole("button", { name: "Re-date YouTube sermons" }));
+    return user;
+  }
+
+  it("previews what would change, what wouldn't, and what YouTube couldn't find", async () => {
+    await openPreview();
+
+    const dialog = await screen.findByRole("dialog", { name: "Re-date YouTube sermons" });
+    // The counts line, as a sentence.
+    expect(dialog).toHaveTextContent("3 sermon notes link to YouTube");
+    expect(dialog).toHaveTextContent("1 date would change");
+    expect(dialog).toHaveTextContent("1 note isn’t on YouTube");
+    // The changing row shows both dates and which timestamp decided the new one.
+    expect(dialog).toHaveTextContent("Jan 5, 2026");
+    expect(dialog).toHaveTextContent("Feb 2, 2026");
+    expect(dialog).toHaveTextContent("stream started");
+    // The unchanged row is shown, not hidden.
+    expect(dialog).toHaveTextContent("Already Right");
+    expect(dialog).toHaveTextContent("already correct");
+    // And the ones YouTube couldn't find get their own list, with the reassurance.
+    expect(dialog).toHaveTextContent("A Removed Video");
+    expect(dialog).toHaveTextContent(/private or have been removed/);
+  });
+
+  it("disables Apply when nothing would change", async () => {
+    // Nothing is written on a dry run, so a preview with no changes must not offer to write.
+    await openPreview({
+      ...REDATE_PREVIEW,
+      items: REDATE_PREVIEW.items.filter((i) => !i.changed),
+      not_found: [],
+      total_youtube_notes: 1,
+      skipped_non_youtube: 0,
+    });
+
+    expect(await screen.findByRole("button", { name: "Apply" })).toBeDisabled();
+    expect(screen.getByText("Every date already matches YouTube.")).toBeInTheDocument();
+  });
+
+  it("applies the new dates and refreshes the sermon list", async () => {
+    let applied = false;
+    server.use(
+      http.get("/api/v1/tags", () => HttpResponse.json(["grace"])),
+      browseHandler(),
+      // The list refetches after the apply, so a stateful handler proves the invalidation ran.
+      http.get("/api/v1/sermon-notes", () =>
+        HttpResponse.json([
+          sermon({ title: applied ? "The Prodigal Son (re-dated)" : "The Prodigal Son" }),
+        ]),
+      ),
+      http.post("/api/v1/sermon-notes/redate", ({ request }) => {
+        const dryRun = new URL(request.url).searchParams.get("dry_run");
+        if (dryRun === "false") {
+          applied = true;
+          return HttpResponse.json({ ...REDATE_PREVIEW, dry_run: false, applied: 1 });
+        }
+        return HttpResponse.json(REDATE_PREVIEW);
+      }),
+    );
+    // This one renders with the APP's query defaults, not the bare test client. The bare client
+    // leaves refetchOnWindowFocus on, so userEvent's focus events refetch the list on their own
+    // and the assertion below would pass with the invalidation deleted — a test that can't fail.
+    // With focus-refetching off and a 30s staleTime, only the invalidation can refresh the list.
+    const client = new QueryClient({
+      defaultOptions: {
+        queries: { staleTime: 30_000, retry: false, refetchOnWindowFocus: false },
+      },
+    });
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter>
+          <BrowseView />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+    const user = userEvent.setup();
+
+    await user.click(await screen.findByRole("button", { name: "Re-date YouTube sermons" }));
+    await user.click(await screen.findByRole("button", { name: "Apply" }));
+
+    // One-line result, the dialog gone, and the (now different) list refetched.
+    expect(await screen.findByText("Re-dated 1 sermon note.")).toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(await screen.findByText("The Prodigal Son (re-dated)")).toBeInTheDocument();
+  });
+
+  it("marks the reader's chapter cache stale too", async () => {
+    // A re-date changes event_date, which the reader shows on its sermon markers. Nothing on
+    // this page can observe that, so the assertion is against the cache itself — otherwise the
+    // second invalidation would be untested and could be deleted without a test noticing.
+    server.use(
+      http.get("/api/v1/tags", () => HttpResponse.json([])),
+      http.get("/api/v1/annotations", () => HttpResponse.json([])),
+      http.get("/api/v1/sermon-notes", () => HttpResponse.json([])),
+      http.post("/api/v1/sermon-notes/redate", ({ request }) =>
+        HttpResponse.json({
+          ...REDATE_PREVIEW,
+          dry_run: new URL(request.url).searchParams.get("dry_run") !== "false",
+          applied: 1,
+        }),
+      ),
+    );
+    const client = new QueryClient({
+      defaultOptions: { queries: { staleTime: 30_000, retry: false, refetchOnWindowFocus: false } },
+    });
+    const chapterKey = ["chapter", "KJV", "JHN", 3];
+    client.setQueryData(chapterKey, { verses: [] });
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter>
+          <BrowseView />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+    const user = userEvent.setup();
+
+    expect(client.getQueryState(chapterKey)?.isInvalidated).toBe(false);
+    await user.click(await screen.findByRole("button", { name: "Re-date YouTube sermons" }));
+    await user.click(await screen.findByRole("button", { name: "Apply" }));
+
+    await waitFor(() =>
+      expect(client.getQueryState(chapterKey)?.isInvalidated).toBe(true),
+    );
+  });
+
+  it("explains what to set when there is no YouTube API key", async () => {
+    // No dead button and no silent failure: without a key the click says what's missing.
+    server.use(
+      http.get("/api/v1/tags", () => HttpResponse.json(["grace"])),
+      browseHandler(),
+      sermonHandler(),
+      http.post("/api/v1/sermon-notes/redate", () =>
+        HttpResponse.json(
+          { detail: { code: "YOUTUBE_NOT_CONFIGURED", message: "switched off" } },
+          { status: 409 },
+        ),
+      ),
+    );
+    const user = userEvent.setup();
+    renderBrowse();
+
+    await user.click(await screen.findByRole("button", { name: "Re-date YouTube sermons" }));
+
+    expect(await screen.findByText(/set YOUTUBE_API_KEY/)).toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
 });
