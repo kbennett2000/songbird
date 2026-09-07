@@ -38,6 +38,14 @@ services:
     environment:
       # How songbird finds Concord on the private network. You don't change this.
       CONCORD_BASE_URL: "http://concord:8000"
+      # Optional: a free key for YouTube's Data API. With one, songbird can look your sermon
+      # videos up on YouTube — starting with re-dating the sermon notes you already have, so
+      # each one carries the day the sermon was actually preached. Without a key that feature
+      # is simply switched off and nothing else changes.
+      # To use it, put the key in a file called .env next to this one, on a line reading
+      #     YOUTUBE_API_KEY=your-key-here
+      # (docker compose reads that file automatically). Treat it like a password.
+      YOUTUBE_API_KEY: "${YOUTUBE_API_KEY:-}"
     volumes:
       # Your notes live here, on your computer, so they survive restarts.
       - songbird-data:/data

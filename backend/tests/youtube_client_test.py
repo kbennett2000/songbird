@@ -320,6 +320,74 @@ async def test_404_is_not_found() -> None:
     await client.aclose()
 
 
+# The body Google actually returns for a rejected key, captured live on 2026-09-07 by calling
+# `videos.list` with a deliberately junk key. The useful token is in `details[]`; `errors[]` says
+# only "badRequest", and one `details[]` entry carries no reason at all.
+_REJECTED_KEY_BODY: dict[str, object] = {
+    "error": {
+        "code": 400,
+        "message": "API key not valid. Please pass a valid API key.",
+        "errors": [
+            {
+                "message": "API key not valid. Please pass a valid API key.",
+                "domain": "global",
+                "reason": "badRequest",
+            }
+        ],
+        "status": "INVALID_ARGUMENT",
+        "details": [
+            {
+                "@type": "type.googleapis.com/google.rpc.ErrorInfo",
+                "reason": "API_KEY_INVALID",
+                "domain": "googleapis.com",
+                "metadata": {"service": "youtube.googleapis.com"},
+            },
+            {
+                "@type": "type.googleapis.com/google.rpc.LocalizedMessage",
+                "locale": "en-US",
+                "message": "API key not valid. Please pass a valid API key.",
+            },
+        ],
+    }
+}
+
+
+async def test_the_specific_reason_from_details_reaches_the_message() -> None:
+    # `errors[].reason` alone would say "badRequest", which tells an admin nothing. The reason
+    # that names the fault lives in `details[]`, so both are read and both are reported.
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(400, json=_REJECTED_KEY_BODY)
+
+    client = _client(handler)
+    with pytest.raises(YouTubeAuthError) as caught:
+        await client.get_videos([_ID])
+    await client.aclose()
+    assert "API_KEY_INVALID" in str(caught.value)
+    assert "badRequest" in str(caught.value)
+    # And the scalar reports the SPECIFIC one — an admin shown "badRequest" learns nothing.
+    assert caught.value.reason == "API_KEY_INVALID"
+
+
+async def test_a_quota_reason_only_in_details_still_maps_to_quota() -> None:
+    # Today YouTube puts `quotaExceeded` in `errors[]`. If it ever moves to the modern
+    # `details[]` shape the mapping must not quietly become "the key is bad".
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            403,
+            json={
+                "error": {
+                    "errors": [{"reason": "forbidden"}],
+                    "details": [{"reason": "dailyLimitExceeded"}],
+                }
+            },
+        )
+
+    client = _client(handler)
+    with pytest.raises(YouTubeQuotaError):
+        await client.get_videos([_ID])
+    await client.aclose()
+
+
 async def test_an_unparseable_error_body_still_maps_by_status() -> None:
     # Reason-reading runs while handling an error and must never raise one of its own.
     def handler(request: httpx.Request) -> httpx.Response:

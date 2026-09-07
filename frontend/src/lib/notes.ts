@@ -26,6 +26,32 @@ export interface NoteAnchor {
   end_verse: number;
 }
 
+const MONTHS = [
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
+];
+
+/**
+ * Format an ISO `YYYY-MM-DD` without `new Date()` timezone shifting (parse the parts directly).
+ * A sermon's date is a calendar day, not an instant: passing it through `new Date()` would show
+ * the day before to anyone west of UTC.
+ */
+export function formatEventDate(iso: string): string {
+  const [y, m, d] = iso.split("-").map(Number);
+  if (!y || !m || !d) return iso;
+  return `${MONTHS[m - 1]} ${d}, ${y}`;
+}
+
 /** Strip the lightest Markdown noise for a one-line preview. */
 export function notePreview(markdown: string): string {
   const plain = markdown

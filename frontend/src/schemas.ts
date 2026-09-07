@@ -93,6 +93,40 @@ export const sermonNoteSchema = z.object({
 
 export const sermonNotesListSchema = z.array(sermonNoteSchema);
 
+// Re-dating sermon notes from YouTube (v1.7 sermon sources). The preview and the applied result
+// share one shape, so the same view renders either. `new_date` is an ISO YYYY-MM-DD like
+// `event_date`; `date_source` says which of YouTube's two timestamps decided it.
+export const redateItemSchema = z.object({
+  id: z.number(),
+  title: z.string(),
+  reference: z.string(),
+  sermon_url: z.string(),
+  video_id: z.string(),
+  current_date: z.string().nullable(),
+  new_date: z.string(),
+  date_source: z.enum(["stream_start", "published"]),
+  changed: z.boolean(),
+});
+
+// A note whose link is a well-formed YouTube one that YouTube didn't return — private or
+// deleted. Its date is left exactly as it is.
+export const redateNotFoundSchema = z.object({
+  id: z.number(),
+  title: z.string(),
+  reference: z.string(),
+  sermon_url: z.string(),
+  video_id: z.string(),
+});
+
+export const redateResultSchema = z.object({
+  dry_run: z.boolean(),
+  total_youtube_notes: z.number(),
+  items: z.array(redateItemSchema),
+  not_found: z.array(redateNotFoundSchema),
+  skipped_non_youtube: z.number(),
+  applied: z.number(),
+});
+
 export const readVerseSchema = z.object({
   book: z.string(),
   chapter: z.number(),
@@ -321,6 +355,9 @@ export type Book = z.infer<typeof bookSchema>;
 export type Annotation = z.infer<typeof annotationSchema>;
 export type ReadAnnotation = z.infer<typeof readAnnotationSchema>;
 export type SermonNote = z.infer<typeof sermonNoteSchema>;
+export type RedateItem = z.infer<typeof redateItemSchema>;
+export type RedateNotFound = z.infer<typeof redateNotFoundSchema>;
+export type RedateResult = z.infer<typeof redateResultSchema>;
 export type ReadVerse = z.infer<typeof readVerseSchema>;
 export type ReadChapter = z.infer<typeof readChapterSchema>;
 export type ResolvedReference = z.infer<typeof resolvedReferenceSchema>;

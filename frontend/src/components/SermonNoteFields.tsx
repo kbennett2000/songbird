@@ -1,26 +1,5 @@
+import { formatEventDate } from "@/lib/notes";
 import type { SermonNote } from "@/schemas";
-
-const MONTHS = [
-  "Jan",
-  "Feb",
-  "Mar",
-  "Apr",
-  "May",
-  "Jun",
-  "Jul",
-  "Aug",
-  "Sep",
-  "Oct",
-  "Nov",
-  "Dec",
-];
-
-/** Format an ISO `YYYY-MM-DD` without `new Date()` timezone shifting (parse the parts directly). */
-function formatDate(iso: string): string {
-  const [y, m, d] = iso.split("-").map(Number);
-  if (!y || !m || !d) return iso;
-  return `${MONTHS[m - 1]} ${d}, ${y}`;
-}
 
 interface SermonNoteFieldsProps {
   note: SermonNote;
@@ -33,7 +12,7 @@ interface SermonNoteFieldsProps {
  * The per-sermon body shared by the single-sermon popover and each row of the stacked
  * multi-sermon popover: title, reference + date, the sermon URL as a plain EXTERNAL link (new
  * tab; no embed, no fetch — songbird stays offline-capable), and tags. Single source of truth
- * for the safe-link attributes and the tz-safe date format. When `onEdit`/`onDelete` are passed,
+ * for the safe-link attributes; the tz-safe date format lives in lib/notes. When `onEdit`/`onDelete` are passed,
  * Edit/Delete actions are appended so a sermon can be managed from the reader.
  */
 export function SermonNoteFields({ note, onEdit, onDelete }: SermonNoteFieldsProps): JSX.Element {
@@ -43,7 +22,7 @@ export function SermonNoteFields({ note, onEdit, onDelete }: SermonNoteFieldsPro
 
       <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
         {note.reference}
-        {note.event_date ? ` · ${formatDate(note.event_date)}` : ""}
+        {note.event_date ? ` · ${formatEventDate(note.event_date)}` : ""}
       </p>
 
       <a

@@ -191,7 +191,10 @@ span; known limitation, listed in §13.
 
 **Date.** `event_date` = the calendar day (UTC) of `liveStreamingDetails.actualStartTime` when
 present — for a livestreamed service that is the service itself — else `snippet.publishedAt`, the
-day the video went up. This is the rule the product owner asked for (the date the sermon was added to
+day the video went up. The two genuinely disagree, and often: Majestic View's 6 September 2026
+service started at `2026-09-06T14:55:12Z` and was published at `2026-09-07T04:32:29Z`, so
+`publishedAt` would file a Sunday sermon under Monday. YouTube's own page labels it "Streamed live
+on Sep 6, 2026" — this rule makes songbird agree with what a reader sees on YouTube. This is the rule the product owner asked for (the date the sermon was added to
 the channel, not the date the note was made), and it is the same rule §11 applies to old notes.
 
 **Tags.** The source's tags, through the same `resolve_tags` normalization every other note uses.
@@ -237,13 +240,23 @@ Auth-gated and author-scoped, under `/api/v1/sermon-sources`:
 ## 11. Re-dating existing notes (the one-time cleanup)
 
 An in-app action rather than a script: the deploy is Docker, the image does not ship `scripts/`, and
-the action needs the same YouTube client the app already has. On the Sources page: **Re-date YouTube
-sermons** → the server collects the author's sermon notes with a YouTube link, looks the videos up in
-batches of 50, and returns a **preview table** — title · current date → new date · link — plus the
-notes it could not look up (private/removed; left untouched). Nothing is written until **Apply**.
-Apply sets `event_date` by the §7 date rule and stamps `youtube_video_id` on every note it touched,
-which is what lets a later catalog scan treat those videos as `already_noted`. Re-runnable; the
-preview is the gate, mirroring the seed loader's dry-run.
+the action needs the same YouTube client the app already has. **Re-date YouTube sermons** →
+the server collects the author's sermon notes with a YouTube link, looks the videos up in batches of
+50, and returns a **preview** — title · reference · current date → new date · which timestamp
+decided it · a Watch link — plus the notes it could not look up (private/removed; left untouched).
+Nothing is written until **Apply**. Apply sets `event_date` by the §7 date rule and stamps
+`youtube_video_id` on every YouTube-linked note it saw, including the ones YouTube could not return
+— that id comes from the URL, not from YouTube, and it is what lets a later catalog scan treat those
+videos as `already_noted`. Re-runnable; the preview is the gate, mirroring the seed loader's dry-run.
+
+**Where the button lives.** The Sources page is its home, but that page does not exist until slice 3,
+so slice 2 put it on the **Browse view's sermon controls**, next to Export/Import — where the other
+sermon-note actions already are. It moves to the Sources page when that page lands.
+
+**Not a table.** Written as "preview table", built as a list of cards: songbird has no `<table>`
+anywhere, every list in the app is a stack of bordered cards, and five columns do not fit a phone.
+Rows that would change show old → new; rows that already agree with YouTube stay visible but muted,
+so the pass reads as thorough without the unchanged rows competing for attention.
 
 ## 12. Cross-check against the product owner's real sources
 
@@ -290,8 +303,10 @@ Smallest reviewable, load-bearing unit; branch `slice/N-…`, PR per slice, Plan
 
 1. **Foundation** — settings (§3), the YouTube client with a fake for tests, the YouTube-URL → video
    id helper, `sermon_notes.youtube_video_id` (migration `0010`) stamped on create/update.
-2. **Re-date** (§11) — the endpoint (preview/apply) and its button + preview table. Ships the cleanup
-   first and proves the client against real data.
+2. **Re-date** (§11) — the endpoint (preview/apply) and its button + preview list. Ships the cleanup
+   first and proves the client against real data. **Also takes the `YOUTUBE_API_KEY` line in
+   `docker-compose.yml`**, pulled forward from slice 6 so the re-date is usable on a Docker deploy as
+   soon as it merges; the interval and minimum-minutes lines stay in slice 6 with the walkthrough.
 3. **Sources CRUD** (§4–5, no scanning) — tables + join (`0011`), API, the Sources page with add /
    list / edit / delete; adding a source resolves it through YouTube.
 4. **The scan** (§6–7) — the ledger (`0012`), filters, candidate finder, rules, boilerplate, note

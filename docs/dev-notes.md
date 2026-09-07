@@ -4,6 +4,127 @@ A running log of per-slice decisions, gotchas, and how each slice was verified. 
 
 ---
 
+## Sermon sources slice 2 — re-date (the first live YouTube calls)
+
+- **Date:** 2026-09-07
+- **Branch:** `slice/sermon-sources-2-redate`
+
+### Why
+
+Sermon notes made by hand carry whatever date was typed, which is usually the day the note was
+written. Spec §7 sets one rule for every sermon date — the UTC calendar day of the livestream's
+`actualStartTime` when there is one, else `publishedAt` — and §11 applies it backwards, once, to
+the notes that already exist. It also back-fills `youtube_video_id`, which is what lets slice 4's
+catalog scan recognise those videos as already noted.
+
+Slice 1 built the YouTube client but never called it. This slice is the first real call, so
+confirming the three assumptions slice 1 left open was part of the work.
+
+### What landed
+
+- **`POST /api/v1/sermon-notes/redate`** (`api/sermon_redate.py`, a sibling of `sermon_notes.py` —
+  the only sermon-note route that talks to YouTube). `dry_run` defaults to true and writes nothing;
+  applying collects every lookup first and writes in one commit.
+- **The Browse view's third action**, "Re-date YouTube sermons", with a preview dialog.
+- **`YOUTUBE_API_KEY` in `docker-compose.yml`**, pulled forward from slice 6.
+- **`YOUTUBE_KEY_REJECTED`** (502), the fourth YouTube error code.
+
+### What the live calls actually showed
+
+All three of slice 1's open assumptions are now confirmed, against the real API:
+
+- **(a) Unknown ids come back absent, with HTTP 200 — not a 404.** Asked `videos.list` for
+  `o7GX1JhBhkc` and the made-up `aaaaaaaaaaa`; one came back, status 200. The client's "ids YouTube
+  doesn't return are simply absent" contract holds.
+- **(b) The error body has the reason in two places, and they disagree.** A deliberate junk-key
+  call returns `errors: [{"reason": "badRequest"}]` and
+  `details: [{"@type": ".../ErrorInfo", "reason": "API_KEY_INVALID"}, {"@type": ".../LocalizedMessage", ...}]`.
+  The legacy `errors[]` token is useless; the specific one is in `details[]`. Note the second
+  `details[]` entry has **no `reason` key at all**, so the reader has to tolerate that.
+- **(c) Google accepts httpx's percent-encoded comma.** The logged request was
+  `id=aaaaaaaaaaa%2ChWYK_8JQ7-E%2Co7GX1JhBhkc%2CuzZFLT6B_Tk` and all four ids were understood. No
+  need to build the `id=` list literally.
+
+And one thing nobody asked about, which turned out to matter most:
+
+- **`actualStartTime` and `publishedAt` disagree constantly, and the difference crosses midnight.**
+  Majestic View's 6 September 2026 service started at `14:55:12Z` and was published at `04:32:29Z`
+  the **next day**. `publishedAt` would file a Sunday sermon under Monday. YouTube's own page says
+  "Streamed live on Sep 6, 2026", so the §7 rule is what makes songbird agree with what a reader
+  sees on YouTube. The same is true of Celebration's `o7GX1JhBhkc`, which the brief described as an
+  upload but which is a completed livestream (12:46Z start, 16:26Z publish).
+
+### Gotchas / things to know
+
+- **Two mutation tests were mutating the wrong code, and both looked green.** The frontend one
+  used `perl` without `/g` on `invalidateQueries({ queryKey: ["browse-sermon"] })` — of which there
+  are **two**, and the first belongs to the import mutation. The backend ordering test seeded two
+  notes in an order where `ORDER BY id DESC` reproduces the canonical sequence, so deleting the
+  ordering changed nothing. Both are fixed; the ordering test now uses four notes arranged so
+  id-ascending, id-descending and book-order-alone each give a different answer.
+- **A React Query test that refetches on its own can't fail.** `BrowseView.test.tsx`'s shared
+  harness builds a `QueryClient` with only `retry: false`, so `refetchOnWindowFocus` is left **on**
+  — and `userEvent`'s focus events refetch the list. The "apply refreshes the list" assertion held
+  with the invalidation deleted. That one test now renders with the app's real defaults
+  (`staleTime: 30_000`, `refetchOnWindowFocus: false`), so only the invalidation can refresh it.
+- **`git checkout --` during a mutation test destroys uncommitted work.** Cost the `_error_reasons`
+  change once. Commit the source first, *then* mutate — the same trap slice 1 hit from the other
+  direction.
+- **Seeded sermon notes arrive already stamped.** Slice 1's `@validates` fires on the constructor,
+  so a test fixture built with a YouTube URL already has `youtube_video_id` — which is not the row
+  this cleanup exists for. The test helper nulls the column directly (the validator watches
+  `sermon_url`, not the column) so the back-fill is genuinely under test.
+- **Writes are guarded by inequality, not left to the ORM.** `if note.event_date != new_date` before
+  assigning. That makes "a re-run is a no-op" true at the SQL level and keeps `updated_at` honest —
+  verified live: a second apply left every `updated_at` byte-identical.
+- **`Settings` reads the repo-root `.env` regardless of the process environment**
+  (`env_file=REPO_ROOT / ".env"`), so `env -u YOUTUBE_API_KEY` does **not** produce a keyless run on
+  a dev box that has one. The empty-string case (`YOUTUBE_API_KEY=""`, which is exactly what
+  `${YOUTUBE_API_KEY:-}` yields in compose) is the same code path and is what was tested.
+- **`.reason` reports the LAST reason, not the first.** See (b): reading legacy-then-modern means
+  the last one is the specific one. The first draft reported the first, and the message an admin
+  saw was "(YouTube said: badRequest)". Found by running the path through the real app, not a mock.
+
+### How it was verified
+
+- Backend: `ruff check`, `ruff format --check`, `pyright` strict (**0 errors**), `pytest`
+  (**300 passed**, up from 280). Frontend: `eslint`, `tsc --noEmit`, `vitest` (**258 passed**, up
+  from 253), `vite build`.
+- **Every guard mutation-checked.** Backend: inverting the date rule, flipping the `dry_run`
+  default, letting a dry run write, skipping the stamp on not-found notes, dropping author scoping,
+  counting unchanged rows as applied, three wrong orderings, and mis-mapping a rejected key all
+  turn tests red. Frontend: un-disabling Apply, hiding unchanged rows, dropping the not-found list,
+  losing the no-key message, and removing either invalidation all turn tests red.
+- **Live, against the real API and a scratch database** (Concord v1.2.0 in Docker, uvicorn on a
+  throwaway `DATA_DIR`, five sermon notes created for the purpose and deleted after). Stamps nulled
+  first so it was a genuine pre-v1.7 back-fill. Preview: correct dates, correct sources, the
+  made-up id in `not_found`, the non-YouTube note in `skipped_non_youtube`, canonical order
+  (John 43 → Acts 44 → Romans 45), and **the database byte-for-byte unchanged**. Apply: `applied: 3`,
+  dates written, all four YouTube notes stamped including the not-found one, the non-YouTube note
+  untouched. Second apply: `applied: 0`, nothing `changed`, `updated_at` unmoved.
+- **Checked by eye against YouTube's own pages**: "Streamed live on Mar 8, 2026" → `2026-03-08`;
+  "May 11, 2025" → `2025-05-11`; "Streamed live on Sep 6, 2026" → `2026-09-06`. All three agree.
+- **Failure paths through the running app**: a wrong key → 502 `YOUTUBE_KEY_REJECTED` naming
+  `YOUTUBE_API_KEY` and saying `API_KEY_INVALID`; an empty key → boot logs
+  `sermon sources: off (no YOUTUBE_API_KEY)` and the endpoint 409s, while listing notes and the
+  chapter overlay carry on unchanged.
+- **The key stayed out of the logs.** Both keyed boots checked: absent, and httpx's own INFO request
+  line reads `key=REDACTED` — slice 1's filter working in production, not just in a test.
+- `docker compose config` with and without the key: the value flows through, and an unset one
+  becomes `""`, which is falsy.
+
+### Still open
+
+- **No browser pass.** The preview dialog is covered by component tests (msw-driven), not by a human
+  or a headless browser looking at it. #122 is the standing reminder that a UI verified only in
+  tests can still look wrong; worth a glance on the Sources page in slice 3.
+- **A truly absent `YOUTUBE_API_KEY` was not exercised on a machine that has a `.env`** — see the
+  gotcha above. The empty-string path is the same branch and was.
+- The quota path (429) has never been seen for real; a full day's quota is 10,000 units and this
+  slice spent about a dozen. It stays fake-tested until a scan makes it reachable.
+
+---
+
 ## Sermon sources slice 1 — foundation (the YouTube client)
 
 - **Date:** 2026-09-07
@@ -93,6 +214,9 @@ column. Nothing user-visible changes, and with no key set nothing about the app 
   than 404, the exact error-body shape the `reason` reader depends on, and that Google accepts
   httpx's percent-encoded comma in `id=`. Slice 2 is the first real call and should treat
   confirming these as part of its acceptance.
+  *(Resolved in slice 2 — see that entry's "What the live calls actually showed". Unknown ids come
+  back absent with a 200, not a 404; the reason lives in `details[]` as well as `errors[]`, and the
+  `details[]` one is the useful one; and Google accepts the percent-encoded comma.)*
 
 ---
 
