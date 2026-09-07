@@ -125,9 +125,12 @@ _SOURCES: tuple[tuple[str, tuple[str, str]], ...] = (
     (f"https://youtube.com/playlist?list={_PLAYLIST}", ("playlist", _PLAYLIST)),
     (f"https://www.youtube.com/watch?v=dQw4w9WgXcQ&list={_PLAYLIST}", ("playlist", _PLAYLIST)),
     (f"https://m.youtube.com/playlist?list={_PLAYLIST}&index=3", ("playlist", _PLAYLIST)),
-    # Case in the host is not significant, and neither is surrounding whitespace.
+    # Case in the host is not significant, and neither is surrounding whitespace. The bare
+    # handle needs its own whitespace case: `urlsplit` trims a URL for us, but nothing trims a
+    # value that never reaches it — and "@handle\n" is exactly what a paste produces.
     (f"https://WWW.YouTube.com/{_HANDLE}", ("handle", _HANDLE)),
     (f"  https://www.youtube.com/{_HANDLE}\n", ("handle", _HANDLE)),
+    (f"  {_HANDLE}\n", ("handle", _HANDLE)),
 )
 
 _NOT_SOURCES = (
