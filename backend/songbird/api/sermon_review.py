@@ -22,7 +22,7 @@ Everything that decides shares two rules with everything else that decides:
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends
-from sqlalchemy import delete, func, select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from songbird.api._anchors import resolve_anchor, resolve_book_order_index
@@ -210,11 +210,26 @@ async def reopen_sermon_video(
     """
     row = await video_or_404(db, video_id, user.id)
     _require_state(row, ("placed",), "reopen")
-    await db.execute(
-        delete(SermonNote).where(
-            SermonNote.source_video_id == row.id, SermonNote.author_id == user.id
+    # Loaded and deleted through the ORM, one at a time, NOT with a bulk `delete()`. A bulk delete
+    # leaves the rows in `sermon_note_tags` behind — SQLite never enforces the `ON DELETE CASCADE`,
+    # because `PRAGMA foreign_keys` is off and songbird never turns it on. Those orphans then sit
+    # and wait: SQLite reuses a deleted row's id, so the next note to be given that id collides on
+    # (note, tag) and the whole check fails. That is not hypothetical — it happened, on the live
+    # acceptance run, and it broke a catalogue scan ten videos in. A video has at most ten notes,
+    # so loading them costs nothing.
+    doomed = (
+        (
+            await db.execute(
+                select(SermonNote).where(
+                    SermonNote.source_video_id == row.id, SermonNote.author_id == user.id
+                )
+            )
         )
+        .scalars()
+        .all()
     )
+    for note in doomed:
+        await db.delete(note)
     row.status = _review_target(row)
     row.placed_by = None
     row.decided_at = datetime.now(UTC)

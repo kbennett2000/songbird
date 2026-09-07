@@ -17,7 +17,14 @@ from datetime import UTC, date, datetime
 import httpx
 from songbird.concord.client import ConcordUnreachableError
 from songbird.concord.schemas import Book, Chapter, ChapterVerse
-from songbird.db.models import SermonNote, SermonSource, SermonSourceVideo, Tag, User
+from songbird.db.models import (
+    SermonNote,
+    SermonSource,
+    SermonSourceVideo,
+    Tag,
+    User,
+    sermon_note_tags,
+)
 from songbird.sermons.place import Placer, RunState
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -458,6 +465,41 @@ async def test_wrong_passage_takes_back_this_rows_notes_and_only_this_rows(
     remaining = await _notes(db_sessionmaker)
     assert [n.reference for n in remaining] == ["John 3:16"]
     assert remaining[0].source_video_id == other
+
+
+async def test_reopening_leaves_no_tag_links_behind_to_collide_with_a_later_note(
+    client_for: Callable[[FakeConcordClient], httpx.AsyncClient],
+    db_sessionmaker: async_sessionmaker[AsyncSession],
+) -> None:
+    """Found on the live run, and it broke a catalogue scan.
+
+    SQLite never enforces `ON DELETE CASCADE` — `PRAGMA foreign_keys` is off and songbird never
+    turns it on — so a bulk `delete()` of the notes leaves their `sermon_note_tags` rows behind.
+    SQLite then reuses the deleted note's id, and the next note handed that id collides on
+    (note, tag) and takes the whole check down with it. Counting the notes is not enough to catch
+    that; the join table has to be looked at.
+    """
+    await _seed_source(db_sessionmaker, tags=("sermon", "grace"))
+    row_id = await _seed_row(db_sessionmaker)
+
+    async with client_for(_concord()) as client:
+        await client.post(
+            f"/api/v1/sermon-sources/videos/{row_id}/place",
+            json={"references": ["John 3:16", "Acts 7:33-35"]},
+        )
+        await client.post(f"/api/v1/sermon-sources/videos/{row_id}/reopen")
+
+    async with db_sessionmaker() as db:
+        orphans = (
+            await db.execute(
+                select(func.count())
+                .select_from(sermon_note_tags)
+                .where(
+                    sermon_note_tags.c.sermon_note_id.notin_(select(SermonNote.id)),
+                )
+            )
+        ).scalar_one()
+    assert orphans == 0
 
 
 async def test_reopening_keeps_the_suggestions_to_choose_from_next_time(
