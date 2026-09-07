@@ -144,9 +144,9 @@ class YouTubeClient:
         `errors[]` is the legacy field and carries a generic HTTP-shaped token; `details[]` is
         the modern `google.rpc.ErrorInfo` and carries the token that actually says what is
         wrong. The quota failure, by contrast, still puts `quotaExceeded` in `errors[]`. So both
-        are read: `errors[]` first (nothing about the existing behaviour shifts), then
-        `details[]` — whose entries may carry no `reason` at all, as the LocalizedMessage above
-        shows.
+        are read, legacy first then modern — so the LAST reason is the most specific one, and
+        that is the one reported. Entries may carry no `reason` at all, as the
+        LocalizedMessage above shows.
 
         Tolerant by design — this runs while handling an error and must never raise one.
         """
@@ -168,10 +168,11 @@ class YouTubeClient:
         """Map a failing response to the right exception. Never raises, never leaks the key."""
         status = exc.response.status_code
         reasons = self._error_reasons(exc.response)
-        # The scalar stays the FIRST reason, so a quota body still reports `quotaExceeded`; the
-        # message carries them all, so `API_KEY_INVALID` reaches a log even when the generic
-        # `badRequest` is what got recorded.
-        reason = reasons[0] if reasons else None
+        # The LAST reason, because `_error_reasons` reads legacy-then-modern and the modern one
+        # is the specific one: a rejected key gives ["badRequest", "API_KEY_INVALID"], and
+        # "badRequest" tells an admin nothing. Where Google offers only one — quota, a
+        # restricted key — first and last are the same, so nothing else shifts.
+        reason = reasons[-1] if reasons else None
         detail = f"{status}" + (f" ({', '.join(reasons)})" if reasons else "")
 
         if status == 403 and any(r in _QUOTA_REASONS for r in reasons):

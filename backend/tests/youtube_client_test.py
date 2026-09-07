@@ -364,8 +364,8 @@ async def test_the_specific_reason_from_details_reaches_the_message() -> None:
     await client.aclose()
     assert "API_KEY_INVALID" in str(caught.value)
     assert "badRequest" in str(caught.value)
-    # The scalar stays the first reason, so nothing about the quota mapping shifts underneath.
-    assert caught.value.reason == "badRequest"
+    # And the scalar reports the SPECIFIC one — an admin shown "badRequest" learns nothing.
+    assert caught.value.reason == "API_KEY_INVALID"
 
 
 async def test_a_quota_reason_only_in_details_still_maps_to_quota() -> None:
