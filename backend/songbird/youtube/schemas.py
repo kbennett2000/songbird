@@ -100,6 +100,44 @@ class _WireVideo(_Wire):
     live_streaming_details: _WireLiveStreamingDetails | None = None
 
 
+class _WireTitleSnippet(_Wire):
+    """A channel's or a playlist's snippet, of which songbird wants only the name to show. It
+    cannot borrow `_WireSnippet`: neither carries the `channelId`/`publishedAt`/`description`
+    trio a video's snippet always has."""
+
+    title: str
+
+
+class _WireRelatedPlaylists(_Wire):
+    # The auto-generated lists a channel keeps. `uploads` is the one that matters — the UU… list
+    # holding everything the channel has ever posted, which is what a scan reads.
+    uploads: str | None = None
+
+
+class _WireChannelContentDetails(_Wire):
+    related_playlists: _WireRelatedPlaylists = _WireRelatedPlaylists()
+
+
+class _WireChannel(_Wire):
+    id: str
+    snippet: _WireTitleSnippet
+    content_details: _WireChannelContentDetails = _WireChannelContentDetails()
+
+
+class _WireChannelListResponse(_Wire):
+    # As with videos, YouTube omits `items` entirely when nothing matched.
+    items: list[_WireChannel] = []
+
+
+class _WirePlaylist(_Wire):
+    id: str
+    snippet: _WireTitleSnippet
+
+
+class _WirePlaylistListResponse(_Wire):
+    items: list[_WirePlaylist] = []
+
+
 class _WireVideoListResponse(_Wire):
     # YouTube omits `items` entirely when nothing matched, rather than sending an empty list.
     items: list[_WireVideo] = []
@@ -142,3 +180,44 @@ class Video(BaseModel):
             )
             for item in wire.items
         ]
+
+
+class Channel(BaseModel):
+    """One YouTube channel, flattened — the address of a catalogue, not a copy of it.
+
+    `uploads_playlist_id` is optional HERE and required by the client. Modelling it as required
+    would turn a channel that somehow lacks one into a pydantic ValidationError, i.e. a 500;
+    modelling it as optional lets the client raise a plain, explainable failure instead.
+    """
+
+    id: str
+    title: str
+    uploads_playlist_id: str | None
+
+    @classmethod
+    def parse_youtube(cls, payload: object) -> list["Channel"]:
+        """Validate a `channels.list` body and flatten every item into a `Channel`."""
+        wire = _WireChannelListResponse.model_validate(payload)
+        return [
+            cls(
+                id=item.id,
+                title=item.snippet.title,
+                # `or None`: Google writes the unset related playlists as "", not as absent.
+                uploads_playlist_id=item.content_details.related_playlists.uploads or None,
+            )
+            for item in wire.items
+        ]
+
+
+class Playlist(BaseModel):
+    """One YouTube playlist. A playlist IS its own catalogue, so there is no second id to keep —
+    the difference from `Channel` that makes `uploads_playlist_id` channels-only (spec §4)."""
+
+    id: str
+    title: str
+
+    @classmethod
+    def parse_youtube(cls, payload: object) -> list["Playlist"]:
+        """Validate a `playlists.list` body and flatten every item into a `Playlist`."""
+        wire = _WirePlaylistListResponse.model_validate(payload)
+        return [cls(id=item.id, title=item.snippet.title) for item in wire.items]

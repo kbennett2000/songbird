@@ -208,6 +208,74 @@ class RedateResult(BaseModel):
     applied: int
 
 
+# --- Sermon sources (v1.7 sermon sources, spec §4-5, §9) ---
+
+
+class SermonSourceOut(BaseModel):
+    """A registered channel or playlist. The address of a catalogue plus how the owner wants it
+    filtered — never any video or Scripture text.
+
+    `min_minutes` is null when the source follows the app-wide `SERMON_MIN_MINUTES`, which is the
+    normal case; a number means this source overrides it. `uploads_playlist_id` is null for a
+    playlist source, which is its own catalogue. The scan's counts arrive with the scan (slice 4).
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    kind: Literal["channel", "playlist"]
+    youtube_id: str
+    uploads_playlist_id: str | None
+    input_url: str  # what was pasted, kept so the owner recognises what they added
+    title: str
+    enabled: bool
+    include_live: bool
+    min_minutes: int | None
+    last_checked_at: datetime | None
+    last_check_status: str | None
+    tags: list[str]
+    created_at: datetime
+    updated_at: datetime
+
+    @field_validator("tags", mode="before")
+    @classmethod
+    def _tag_names(cls, value: Any) -> list[str]:
+        # Map ORM Tag objects → names (from_attributes); pass plain strings through.
+        return [getattr(t, "name", t) for t in value]
+
+
+class SermonSourceCreate(BaseModel):
+    """Adding a source: paste a link, say how you want it filtered. Everything else — the ids,
+    the title, the kind — comes from YouTube, never from the client."""
+
+    url: str
+    tags: list[str] = []
+    include_live: bool = True
+    # Null means "follow SERMON_MIN_MINUTES". `ge=1` because a zero-minute floor filters nothing
+    # and a negative one is nonsense; both are worth a 422 rather than a stored oddity.
+    min_minutes: int | None = Field(default=None, ge=1)
+
+
+class SermonSourceUpdate(BaseModel):
+    """Editing a source. The URL and the identity it resolved to are deliberately absent: to
+    point songbird at a different channel you delete this source and add the new one, so a
+    source's ledger can never be silently reattached to a catalogue it didn't come from."""
+
+    tags: list[str] | None = None
+    enabled: bool | None = None
+    include_live: bool | None = None
+    min_minutes: int | None = Field(default=None, ge=1)
+
+
+class SermonSourcesStatus(BaseModel):
+    """What the Sources page needs before it can render anything: whether a key is configured at
+    all (no key → the page is one setup sentence), and the default the add form hints at. Slice 6
+    adds the schedule fields to this same response."""
+
+    configured: bool
+    min_minutes_default: int
+
+
 # --- Import / Export (issue #41) ---
 
 

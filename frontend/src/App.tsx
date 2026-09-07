@@ -11,6 +11,7 @@ import { PlaceDetailView } from "@/routes/PlaceDetailView";
 import { PlacesView } from "@/routes/PlacesView";
 import { ReaderView } from "@/routes/ReaderView";
 import { SearchView } from "@/routes/SearchView";
+import { SermonSourcesView } from "@/routes/SermonSourcesView";
 import { StatusView } from "@/routes/StatusView";
 import { TopicDetailView } from "@/routes/TopicDetailView";
 import { TopicsView } from "@/routes/TopicsView";
@@ -47,6 +48,14 @@ const router = createBrowserRouter([
     element: (
       <RequireAuth>
         <CompareView />
+      </RequireAuth>
+    ),
+  },
+  {
+    path: "/sermon-sources",
+    element: (
+      <RequireAuth>
+        <SermonSourcesView />
       </RequireAuth>
     ),
   },

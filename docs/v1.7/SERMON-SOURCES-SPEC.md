@@ -112,6 +112,11 @@ YouTube once (`channels.list?forHandle=` / `?id=`, or `playlists.list`), stores 
 playlist id, and the title, then runs the **first scan immediately: the whole back catalog.** For a
 curated playlist source the playlist is the catalog.
 
+*As built:* slice 3 does the resolve-and-store half; the scan-on-add arrives with the scan itself in
+slice 4 (§15). **An unknown handle or id comes back as HTTP 200 with no `items`, not a 404** —
+confirmed live — so "nothing came back" is where a genuine not-found is detected. A link songbird
+cannot parse is rejected before any lookup, so a typo costs no quota.
+
 Why a playlist option: some churches keep a "Messages" playlist that excludes worship nights and
 announcements — a cleaner catalog than the channel's uploads.
 
@@ -232,8 +237,16 @@ Auth-gated and author-scoped, under `/api/v1/sermon-sources`:
 
 - A **Sermon sources** page (`/sermon-sources`): the source list (title, tags, enabled, include
   livestreams, minimum minutes, last checked + status, counts), **Add source**, **Check all now**,
-  per-source **Check now** / edit / delete, and the review list (§8). Linked from the top nav and from
-  the Browse view's sermon controls (next to export/import).
+  per-source **Check now** / edit / delete, and the review list (§8). Linked from the top nav (as
+  "Sources", which is what fits at phone width) and from the Browse view's sermon controls (next to
+  export/import). The counts, "Check now" and the review list arrive with the slices that produce
+  them (§15); slice 3 ships the list, add, edit and delete.
+- **Editing cannot repoint a source.** The URL and the identity it resolved to are immutable — to
+  follow a different channel you delete the source and add the new one, so a source's ledger can
+  never be silently reattached to a catalog it did not come from.
+- **The minimum-minutes field is a placeholder, not a prefill.** An empty field stores null, which
+  means "follow `SERMON_MIN_MINUTES`". Writing today's default into every source would make raising
+  the app-wide floor later reach none of them.
 - Without a key, the page shows one short explanation and the walkthrough link; nothing else appears.
 - Responsive like the rest of the app; no new dependencies.
 
@@ -249,14 +262,17 @@ Nothing is written until **Apply**. Apply sets `event_date` by the §7 date rule
 — that id comes from the URL, not from YouTube, and it is what lets a later catalog scan treat those
 videos as `already_noted`. Re-runnable; the preview is the gate, mirroring the seed loader's dry-run.
 
-**Where the button lives.** The Sources page is its home, but that page does not exist until slice 3,
-so slice 2 put it on the **Browse view's sermon controls**, next to Export/Import — where the other
-sermon-note actions already are. It moves to the Sources page when that page lands.
+**Where the button lives.** The **Sources page** — its home, as originally written. Slice 2 parked it
+on the Browse view only because that page did not exist yet; slice 3 built the page and moved it.
+Browse keeps a link to Sources where the button used to be (§10).
 
 **Not a table.** Written as "preview table", built as a list of cards: songbird has no `<table>`
 anywhere, every list in the app is a stack of bordered cards, and five columns do not fit a phone.
 Rows that would change show old → new; rows that already agree with YouTube stay visible but muted,
-so the pass reads as thorough without the unchanged rows competing for attention.
+so the pass reads as thorough without the unchanged rows competing for attention. **Muted means a
+dimmer colour, never a blanket opacity** — slice 3's browser pass found `opacity-60` had taken the
+unchanged rows' own text to 2.3:1, under the 4.5:1 a reader needs. The same mistake as #122, and the
+same rule: every text layer keeps its own contrast.
 
 ## 12. Cross-check against the product owner's real sources
 

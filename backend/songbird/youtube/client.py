@@ -24,7 +24,7 @@ from typing import Any
 
 import httpx
 
-from songbird.youtube.schemas import Video
+from songbird.youtube.schemas import Channel, Playlist, Video
 from songbird.youtube.urls import is_video_id
 
 YOUTUBE_API_BASE_URL = "https://www.googleapis.com/youtube/v3"
@@ -33,6 +33,10 @@ YOUTUBE_API_BASE_URL = "https://www.googleapis.com/youtube/v3"
 # so batching is what keeps a full back-catalogue scan affordable (spec §2).
 _BATCH_SIZE = 50
 _VIDEO_PARTS = "snippet,contentDetails,liveStreamingDetails"
+# A channel is asked for its name (snippet) and its uploads playlist (contentDetails); a playlist
+# is its own catalogue, so its name is all there is to fetch.
+_CHANNEL_PARTS = "snippet,contentDetails"
+_PLAYLIST_PARTS = "snippet"
 
 # Google's two ways of saying "you're out of quota for today".
 _QUOTA_REASONS = frozenset({"quotaExceeded", "dailyLimitExceeded"})
@@ -228,3 +232,44 @@ class YouTubeClient:
                 found[video.id] = video
 
         return [found[i] for i in wanted if i in found]
+
+    def _first_channel(self, payload: object, what: str) -> Channel:
+        """The one channel in a `channels.list` body, or the right failure.
+
+        Both channel lookups end here because both can fail the same two ways, and a caller that
+        had to remember to check for them is a caller that eventually won't.
+        """
+        channels = Channel.parse_youtube(payload)
+        if not channels:
+            # Google answers an unknown handle or id with 200 and no items rather than a 404, so
+            # "nothing came back" is where a genuine not-found is detected. Confirmed live.
+            raise YouTubeNotFoundError(f"YouTube has no {what}")
+        channel = channels[0]
+        if channel.uploads_playlist_id is None:
+            # Not a not-found: the channel exists, but there is no list to read, so registering it
+            # as a source would create something that can never be scanned.
+            raise YouTubeError(f"YouTube returned {what} with no uploads playlist to read")
+        return channel
+
+    async def resolve_channel_by_handle(self, handle: str) -> Channel:
+        """The channel behind an `@handle` — the form nearly every source link arrives in.
+
+        A handle is not an id: it is chosen by the channel owner and can be changed, so it is
+        resolved once at add time and the resulting `UC…` id is what songbird stores (spec §5).
+        """
+        response = await self._get("/channels", {"part": _CHANNEL_PARTS, "forHandle": handle})
+        return self._first_channel(response.json(), f"channel with the handle {handle}")
+
+    async def get_channel(self, channel_id: str) -> Channel:
+        """The channel with this `UC…` id."""
+        response = await self._get("/channels", {"part": _CHANNEL_PARTS, "id": channel_id})
+        return self._first_channel(response.json(), f"channel {channel_id}")
+
+    async def get_playlist(self, playlist_id: str) -> Playlist:
+        """The playlist with this `PL…` id — for the churches that keep a curated "Messages"
+        list, which is a cleaner catalogue than everything the channel has ever posted."""
+        response = await self._get("/playlists", {"part": _PLAYLIST_PARTS, "id": playlist_id})
+        playlists = Playlist.parse_youtube(response.json())
+        if not playlists:
+            raise YouTubeNotFoundError(f"YouTube has no playlist {playlist_id}")
+        return playlists[0]

@@ -1,4 +1,4 @@
-"""Pull a YouTube video id out of a sermon URL.
+"""Read a YouTube link: the video id in a sermon URL, or the channel/playlist a source names.
 
 Pure — no I/O, no httpx — so `songbird.db.models` can import it to stamp
 `sermon_notes.youtube_video_id` on every write without dragging an HTTP client into the model
@@ -6,6 +6,7 @@ layer (or into `alembic/env.py`, which imports the models).
 """
 
 import re
+from typing import Literal
 from urllib.parse import parse_qs, urlsplit
 
 # A YouTube video id is exactly 11 characters of URL-safe base64.
@@ -13,7 +14,7 @@ _VIDEO_ID = re.compile(r"^[A-Za-z0-9_-]{11}$")
 
 # Hosts we accept, after stripping a leading "www.". `m.` is the mobile site; the bare domain
 # and `youtu.be` are the share forms.
-_WATCH_HOSTS = frozenset({"youtube.com", "m.youtube.com"})
+_YOUTUBE_HOSTS = frozenset({"youtube.com", "m.youtube.com"})
 _SHORT_HOST = "youtu.be"
 
 # Path prefixes on youtube.com whose next segment IS the video id.
@@ -54,7 +55,7 @@ def youtube_video_id(url: str) -> str | None:
             return None
         return segments[0] if is_video_id(segments[0]) else None
 
-    if host not in _WATCH_HOSTS:
+    if host not in _YOUTUBE_HOSTS:
         return None
 
     if segments and segments[0] == "watch":
@@ -68,5 +69,83 @@ def youtube_video_id(url: str) -> str | None:
     # /live/<id>, /shorts/<id>, /embed/<id>
     if len(segments) == 2 and segments[0] in _ID_PATH_PREFIXES:
         return segments[1] if is_video_id(segments[1]) else None
+
+    return None
+
+
+# The shapes of the three things a source link can name. Each lives in exactly one regex, for the
+# same reason `_VIDEO_ID` does: a malformed id caught HERE is a clear message to the person who
+# pasted it, instead of a spent quota unit and a vaguer answer from Google.
+_HANDLE = re.compile(r"^@[A-Za-z0-9._-]{3,30}$")  # YouTube handles are 3-30 characters
+_CHANNEL_ID = re.compile(r"^UC[A-Za-z0-9_-]{22}$")  # "UC" + 22 = the canonical 24-character id
+_PLAYLIST_ID = re.compile(r"^PL[A-Za-z0-9_-]{10,}$")  # both the old 18- and new 34-character forms
+
+# The tabs a channel URL can be copied from. Someone browsing a church's past services copies the
+# link from /streams, not from the bare channel page.
+_CHANNEL_TABS = frozenset({"videos", "streams", "featured", "live", "playlists", "about"})
+
+# What a source link names: a handle to resolve, a channel id, or a playlist id.
+SourceRef = tuple[Literal["handle", "channel", "playlist"], str]
+
+
+def parse_source_url(url: str) -> SourceRef | None:
+    """What channel or playlist `url` names, or None if it names neither (spec §5).
+
+    Returns the KIND alongside the value because the three need different YouTube calls: a
+    handle has to be resolved (`channels.list?forHandle=`), a channel id can be fetched
+    directly, and a playlist is a different endpoint entirely.
+
+    The old `/c/name` and `/user/name` links are deliberately None. They cannot be resolved
+    through the Data API at all, so returning None here is what produces the message asking for
+    the channel's @handle link — a real answer rather than a confusing 404 from Google.
+
+    Shares `youtube_video_id`'s `urlsplit` parsing, and for the same reason: only a real URL
+    parser reads `https://www.youtube.com@evil.test/@church` correctly (the host is evil.test).
+    """
+    value = url.strip()
+    if not value:
+        return None
+
+    # A bare "@handle", typed rather than pasted — the form a person says out loud.
+    if _HANDLE.match(value):
+        return ("handle", value)
+
+    # Safari and some share sheets copy a URL without its scheme, and people paste what they
+    # copied. Supplying the scheme is safe: anything that still isn't a YouTube host is rejected
+    # by the host check below.
+    if "://" not in value:
+        value = f"https://{value}"
+
+    try:
+        parts = urlsplit(value)
+    except ValueError:
+        return None
+    if parts.scheme not in ("http", "https"):
+        return None
+    host = (parts.hostname or "").removeprefix("www.")
+    if host not in _YOUTUBE_HOSTS:
+        return None
+
+    # A `list=` anywhere wins, so both `playlist?list=` and a watch URL copied from inside a
+    # playlist name the playlist. That is the intent: someone sharing from a "Messages" playlist
+    # means the playlist, even though the URL also carries the video they had open.
+    lists = parse_qs(parts.query).get("list", [])
+    if len(lists) == 1 and _PLAYLIST_ID.match(lists[0]):
+        return ("playlist", lists[0])
+
+    segments = [s for s in parts.path.split("/") if s]
+    if not segments:
+        return None
+
+    if segments[0].startswith("@"):
+        # /@handle, optionally on one of the channel's tabs.
+        if len(segments) > 2 or (len(segments) == 2 and segments[1] not in _CHANNEL_TABS):
+            return None
+        return ("handle", segments[0]) if _HANDLE.match(segments[0]) else None
+
+    if segments[0] == "channel" and len(segments) >= 2:
+        if len(segments) > 3 or (len(segments) == 3 and segments[2] not in _CHANNEL_TABS):
+            return None
+        return ("channel", segments[1]) if _CHANNEL_ID.match(segments[1]) else None
 
     return None

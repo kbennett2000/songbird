@@ -20,7 +20,7 @@ from songbird.api.deps import (
     get_concord_client,
     get_current_user,
     get_db,
-    get_youtube_client,
+    get_youtube_client_optional,
 )
 from songbird.concord.schemas import (
     Book,
@@ -53,7 +53,8 @@ from songbird.db import models  # noqa: F401  (register models on Base.metadata)
 from songbird.db.base import Base
 from songbird.db.models import User
 from songbird.main import create_app
-from songbird.youtube.schemas import Video
+from songbird.youtube.client import YouTubeNotFoundError
+from songbird.youtube.schemas import Channel, Playlist, Video
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
@@ -405,12 +406,23 @@ class FakeYouTubeClient:
         self,
         *,
         videos: list[Video] | None = None,
+        channels: dict[str, Channel] | None = None,
+        playlists: dict[str, Playlist] | None = None,
         error: Exception | None = None,
     ) -> None:
         self._videos = videos or []
+        # Keyed by whatever a test wants to look one up BY — a handle or an id — because the
+        # real API resolves both to the same channel and songbird calls whichever the pasted
+        # link named. A key that isn't here is a not-found, which is how the real client reads
+        # YouTube's "200 with no items".
+        self._channels = channels or {}
+        self._playlists = playlists or {}
         self._error = error
         # Records the ids of every get_videos call so tests can assert batching/passthrough.
         self.get_videos_calls: list[list[str]] = []
+        # Records every channel/playlist lookup as (kind, value), so a test can assert songbird
+        # asked the right question — resolving a handle is a different call from fetching an id.
+        self.lookups: list[tuple[str, str]] = []
 
     async def get_videos(self, ids: list[str]) -> list[Video]:
         self.get_videos_calls.append(list(ids))
@@ -418,6 +430,31 @@ class FakeYouTubeClient:
             raise self._error
         wanted = set(ids)
         return [v for v in self._videos if v.id in wanted]
+
+    def _channel(self, key: str) -> Channel:
+        if self._error is not None:
+            raise self._error
+        channel = self._channels.get(key)
+        if channel is None:
+            raise YouTubeNotFoundError(f"YouTube has no channel {key}")
+        return channel
+
+    async def resolve_channel_by_handle(self, handle: str) -> Channel:
+        self.lookups.append(("handle", handle))
+        return self._channel(handle)
+
+    async def get_channel(self, channel_id: str) -> Channel:
+        self.lookups.append(("channel", channel_id))
+        return self._channel(channel_id)
+
+    async def get_playlist(self, playlist_id: str) -> Playlist:
+        self.lookups.append(("playlist", playlist_id))
+        if self._error is not None:
+            raise self._error
+        playlist = self._playlists.get(playlist_id)
+        if playlist is None:
+            raise YouTubeNotFoundError(f"YouTube has no playlist {playlist_id}")
+        return playlist
 
     async def aclose(self) -> None:
         return None
@@ -460,16 +497,18 @@ def make_concord() -> type[FakeConcordClient]:
 
 @pytest.fixture
 def with_youtube(app: FastAPI) -> Callable[[FakeYouTubeClient], None]:
-    """Install a fake YouTube client for routes that depend on `get_youtube_client`.
+    """Install a fake YouTube client for routes that depend on the YouTube client.
 
     Standalone rather than a second argument to `client_for`, so the ~20 test files that annotate
-    that fixture as `Callable[[FakeConcordClient], httpx.AsyncClient]` need no change. It has no
-    consumer until the re-date endpoint lands; it is here so the fake and its wiring arrive with
-    the client they fake.
+    that fixture as `Callable[[FakeConcordClient], httpx.AsyncClient]` need no change.
+
+    It overrides the OPTIONAL dependency — the single seam — and `get_youtube_client` resolves
+    through it, so both the routes that demand a client and the status endpoint that merely asks
+    whether there is one see the same fake. Not installing it is how a test says "no key".
     """
 
     def _install(youtube: FakeYouTubeClient) -> None:
-        app.dependency_overrides[get_youtube_client] = lambda: youtube
+        app.dependency_overrides[get_youtube_client_optional] = lambda: youtube
 
     return _install
 

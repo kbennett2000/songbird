@@ -4,6 +4,134 @@ A running log of per-slice decisions, gotchas, and how each slice was verified. 
 
 ---
 
+## Sermon sources slice 3 — sources CRUD (and the browser pass slice 2 skipped)
+
+- **Date:** 2026-09-07
+- **Branch:** `slice/sermon-sources-3-sources`
+
+### Why
+
+Slices 1 and 2 built the YouTube client and used it to fix dates on notes that already existed.
+This is the first half of what the feature is actually for: telling songbird **where sermons come
+from**. A source is a channel or playlist you register once by pasting a link; songbird resolves it
+through YouTube and stores the ids a later scan will read.
+
+Nothing is scanned yet. Spec §5 has the first catalogue scan run on add, and that is slice 4 — the
+seam is deliberate, so the CRUD reviews as one diff and the scan as another.
+
+### What landed
+
+- **`sermon_sources` + `sermon_source_tags`** (migration `0011`), spec §4 exactly. Tags are a third
+  arm on the *same* vocabulary, so a tag put on a channel shows up in the type-ahead everywhere.
+- **`parse_source_url`** in `youtube/urls.py` — handle, channel id, or playlist id, or None.
+- **Three client lookups**: `resolve_channel_by_handle`, `get_channel`, `get_playlist`.
+- **`/api/v1/sermon-sources`** with list / add / get / edit / delete, plus `/status`.
+- **The Sermon sources page** (`/sermon-sources`), linked from the top nav and from Browse. The
+  re-date button and its dialog moved here from Browse, which held them only until this page existed.
+- **`scripts/screenshots/inspect-sources.mjs`** — a sibling of `capture.mjs` that walks the page
+  through every state at two widths in both themes. Its output is throwaway; it exists so slices 4
+  and 5 don't have to write it again.
+
+### What the live calls showed
+
+All five real sources resolved on the first try — the four churches and one curated playlist:
+
+| pasted | kind | id | uploads | title |
+|---|---|---|---|---|
+| `@cornerstonechpl` | channel | `UCgS2kskDIvTyzKKJzkhivxw` | `UUgS2kskDIvTyzKKJzkhivxw` | Cornerstone Chapel - Leesburg, VA |
+| `@CelebrationChurch_org` | channel | `UCjp6iEjx01RUfsFjLdooC2Q` | `UUjp6iEjx01RUfsFjLdooC2Q` | Celebration Church |
+| `@2819Church` | channel | `UCrPGIKiPtgQ25TaW1fLdR0Q` | `UUrPGIKiPtgQ25TaW1fLdR0Q` | 2819 Church |
+| `@majesticviewchurchlive407` | channel | `UCsVNa_Y5Gia4nG4RW5Xr5Kg` | `UUsVNa_Y5Gia4nG4RW5Xr5Kg` | MajesticViewChurchLive |
+| `playlist?list=PLw5K9…` | playlist | `PLw5K9iridI-CW2ABjjNWoHQAwomBqHV5t` | — | Gary Hamrick - Cornerstone Chapel, Leesburg - 01. Genesis - Deuteronomy |
+
+- **An unknown `@handle` is HTTP 200 with no `items`, not a 404.** Asked for
+  `@nosuchchurchanywhere1234`; the logged response was `"HTTP/1.1 200 OK"`. So the client's
+  empty-items → `YouTubeNotFoundError` rule is what produces the 404 a person sees, and a client
+  that only mapped status codes would have stored a source that isn't there.
+- **`forHandle` takes the `@`.** httpx percent-encodes it (`forHandle=%40cornerstonechpl`) and
+  Google resolves it fine — same story as slice 2's `%2C`.
+- **The uploads playlist is the channel id with `UC` → `UU`** in all four cases. songbird still
+  *reads* it from `contentDetails.relatedPlaylists.uploads` rather than deriving it; the pattern is
+  an observation, not a contract.
+- **A `/c/…` link spends no quota.** It is rejected by the parser before any lookup — confirmed by
+  there being no outbound request in the log for it.
+- **The duplicate check is on the resolved id, not the pasted text.** Added Cornerstone by its
+  `@handle`, then again by its `/channel/UC…` link, and got the 409.
+- The key stayed out of the logs: 20 outbound request lines, all reading `key=REDACTED`.
+
+### The browser pass — three real defects, all in slice 2's dialog
+
+This is the check #122 taught us not to skip, and slice 2 skipped it. Every state of the page at
+1440px and 390px in both themes: no key, empty, populated, add form, edit, delete confirm, and the
+re-date preview with eight real rows. What it found, all in the dialog nobody had looked at:
+
+1. **`opacity-60` on an unchanged preview row broke its own contrast.** The blanket opacity blended
+   every layer, including the small grey reference and date lines — which *are* the content of an
+   unchanged row. Measured: **2.33:1 in light mode, 3.02:1 in dark**, against the 4.5:1 a reader
+   needs. Now muted by a dimmer colour instead, with every layer at 4.83:1 or better. Exactly the
+   #122 mistake in a new place: a whole-element effect on text with no contrast to spare.
+2. **Two groups, one phrase.** The counts line read "1 note isn't on YouTube" directly above a list
+   of two headed "Couldn't be found on YouTube". They mean different things — a note whose link
+   isn't YouTube at all, versus a video YouTube wouldn't return — and side by side in a browser you
+   cannot tell that. The first now says "links somewhere else".
+3. **The form's fields didn't match the app.** They carried their own `bg-white dark:bg-gray-900`,
+   overriding the base rule in `index.css` that gives every dark input a surface. Removed.
+
+Also fixed in the harness: dialog shots were `fullPage`, which stitches the page *behind* a fixed
+modal in below the fold. Viewport shots now, as `capture.mjs` already does for the same reason.
+
+None of the three would have been caught by a test. All three were obvious within seconds of
+looking.
+
+### Gotchas / things to know
+
+- **`select(...).union(a).union(b)` does not work.** The first `.union()` returns a `CompoundSelect`,
+  which has no `.union` of its own — `union(a, b)` in one call is the form. Pyright did not catch it;
+  the existing tag tests did, immediately.
+- **`/status` had to be declared before `/{source_id}`.** FastAPI matches in registration order, so
+  the other way round "status" is parsed as an int id and 422s. There is a test that would fail if
+  the two were ever swapped.
+- **`/status` also needed a dependency that doesn't refuse.** Every other route demands a YouTube
+  client and 409s without one — right for them, wrong for the one route whose *job* is to report
+  that there is no key. So `get_youtube_client_optional` is now the seam and `get_youtube_client`
+  derives from it. Tests override the seam and both move together.
+- **`min_minutes` is the one field where null is a value.** Absent means "leave it", null means
+  "follow `SERMON_MIN_MINUTES` again", so PATCH reads `body.model_fields_set` for that field alone.
+  Two tests hold the pair apart; without both, the `is not None` idiom would look correct.
+- **The add form shows the default as a placeholder, not a prefill.** A literal prefill would write
+  today's default onto every source and make the nullable column dead on arrival. This is a
+  deliberate departure from the slice brief's wording, agreed up front.
+- **A mutation found a test that couldn't fail.** Deleting `url.strip()` left the URL suite green:
+  `urlsplit` trims a URL itself, so the strip only ever mattered on the bare-handle path — which had
+  no whitespace case. `"@handle\n"` is exactly what a paste produces, and now it is tested.
+- **Delete asks in the row.** The app had no confirm pattern at all — no `window.confirm`, no confirm
+  dialog. Keeping the question next to the source means you can still see which one you're removing.
+
+### How it was verified
+
+- `make check` (**342 passed**, up from 313; ruff + `ruff format --check` clean, pyright strict 0
+  errors) and `make check-frontend` (**269 passed**, up from 258; eslint / tsc / build clean).
+- **Migration round-trip**: `upgrade head` → `downgrade -1` → `upgrade head` on a scratch DB, plus a
+  column-by-column comparison of what the migration created against what the models declare — they
+  match, so the test suite's `create_all` and a real deployment cannot drift.
+- **Mutation testing, 36 mutations across the four suites** — parser 8, client lookups 7, API 11,
+  frontend 10. Thirty-five were caught first time; the one survivor exposed a real test gap (the
+  whitespace case above) and was caught once that gap was closed. Source committed before each
+  mutation (slice 2's `git checkout --` lesson).
+- **Live, through the browser, against the real API**: all five real sources added, edited and
+  deleted; the `/c/…` message read back as a first-time reader would; an unknown handle recorded.
+- **The browser pass above.** Every source and note created for it was deleted afterwards; the
+  scratch `DATA_DIR` is gone.
+
+### Still open
+
+- **The 429 quota path has never been seen for real**, only faked. It needs an exhausted key, which
+  is not worth arranging.
+- **`last_checked_at` is always null**, so the page always says "never checked". Slice 4 fills it in.
+- The counts spec §10 wants on each source row wait on the scan that produces them.
+
+---
+
 ## Sermon sources slice 2 — re-date (the first live YouTube calls)
 
 - **Date:** 2026-09-07

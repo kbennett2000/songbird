@@ -19,6 +19,11 @@ class ErrorCode(StrEnum):
     NOT_FOUND = "NOT_FOUND"
     ANNOTATION_NOT_FOUND = "ANNOTATION_NOT_FOUND"
     SERMON_NOTE_NOT_FOUND = "SERMON_NOTE_NOT_FOUND"
+    # Sermon sources (v1.7 slice 3). INVALID_SOURCE_URL is the one the owner meets most: a link
+    # songbird cannot resolve, answered with the accepted forms rather than a bare rejection.
+    SOURCE_NOT_FOUND = "SOURCE_NOT_FOUND"
+    INVALID_SOURCE_URL = "INVALID_SOURCE_URL"
+    SOURCE_EXISTS = "SOURCE_EXISTS"
     INVALID_SCOPE = "INVALID_SCOPE"
     INVALID_BOOK = "INVALID_BOOK"
     INVALID_TRANSLATION = "INVALID_TRANSLATION"
