@@ -131,27 +131,50 @@ class YouTubeClient:
         return _QUERY_KEY.sub(rf"\1{_REDACTED}", text.replace(self._api_key, _REDACTED))
 
     @staticmethod
-    def _error_reason(response: httpx.Response) -> str | None:
-        """Google's machine-readable failure reason, e.g. `quotaExceeded` / `keyInvalid`.
-        Tolerant by design — this runs while handling an error and must never raise one."""
+    def _error_reasons(response: httpx.Response) -> list[str]:
+        """Every machine-readable reason Google offers, in preference order.
+
+        Google writes the reason in two places and they do not agree. Observed live against a
+        deliberately wrong key:
+
+            "errors":  [{"domain": "global",            "reason": "badRequest"}]
+            "details": [{"@type": "…/ErrorInfo",        "reason": "API_KEY_INVALID"},
+                        {"@type": "…/LocalizedMessage", "message": "…"}]
+
+        `errors[]` is the legacy field and carries a generic HTTP-shaped token; `details[]` is
+        the modern `google.rpc.ErrorInfo` and carries the token that actually says what is
+        wrong. The quota failure, by contrast, still puts `quotaExceeded` in `errors[]`. So both
+        are read: `errors[]` first (nothing about the existing behaviour shifts), then
+        `details[]` — whose entries may carry no `reason` at all, as the LocalizedMessage above
+        shows.
+
+        Tolerant by design — this runs while handling an error and must never raise one.
+        """
+        reasons: list[str] = []
         try:
             payload: Any = response.json()
-            errors: Any = payload["error"]["errors"]
-            for entry in errors:
-                reason: Any = entry.get("reason")
-                if isinstance(reason, str):
-                    return reason
+            error: Any = payload["error"]
+            for key in ("errors", "details"):
+                entries: Any = error.get(key)
+                for entry in entries or ():
+                    reason: Any = entry.get("reason")
+                    if isinstance(reason, str) and reason not in reasons:
+                        reasons.append(reason)
         except (ValueError, KeyError, TypeError, AttributeError):
-            return None
-        return None
+            return reasons
+        return reasons
 
     def _from_status(self, exc: httpx.HTTPStatusError) -> YouTubeError:
         """Map a failing response to the right exception. Never raises, never leaks the key."""
         status = exc.response.status_code
-        reason = self._error_reason(exc.response)
-        detail = f"{status}" + (f" ({reason})" if reason else "")
+        reasons = self._error_reasons(exc.response)
+        # The scalar stays the FIRST reason, so a quota body still reports `quotaExceeded`; the
+        # message carries them all, so `API_KEY_INVALID` reaches a log even when the generic
+        # `badRequest` is what got recorded.
+        reason = reasons[0] if reasons else None
+        detail = f"{status}" + (f" ({', '.join(reasons)})" if reasons else "")
 
-        if status == 403 and reason in _QUOTA_REASONS:
+        if status == 403 and any(r in _QUOTA_REASONS for r in reasons):
             return YouTubeQuotaError(
                 f"YouTube's daily quota is spent: {detail}", status=status, reason=reason
             )
