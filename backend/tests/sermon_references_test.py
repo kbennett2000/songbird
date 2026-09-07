@@ -159,3 +159,21 @@ def test_the_date_guard_drops_one_candidate_and_leaves_the_other() -> None:
     # `Mar 15` is the string that made the wrong note; `Service Mar 15` never could — Concord
     # refuses it. Only the first is dropped, so the guard stays as small as the defect.
     assert find_candidates("Sunday Service Mar. 15") == ["Service Mar 15"]
+
+
+# The year clause on its own. These shapes look strange on purpose: every everyday date — `Mar. 15`,
+# `Mar. 15, 2026`, `Mar. 15th 2026` — is already caught by having no verse part, so a span with a
+# `:` in it is the only place a trailing year is the thing doing the work. A mutation pass proved
+# these branches were otherwise unpinned and could be deleted with every other test still green.
+_DATED_WITH_A_VERSE_PART = (
+    "Mar. 15:16 2026",
+    "Mar. 15:16, 2026",
+    "Mar. 15:16th 2026",
+)
+
+
+def test_a_year_behind_the_number_settles_it_even_with_a_verse_part() -> None:
+    for text in _DATED_WITH_A_VERSE_PART:
+        assert find_candidates(text) == [], text
+    # And with no year behind it, the same string is Mark and goes to Concord.
+    assert find_candidates("Mar. 15:16") == ["Mar 15:16"]
