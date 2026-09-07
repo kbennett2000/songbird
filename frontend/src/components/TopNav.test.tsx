@@ -40,6 +40,7 @@ describe("TopNav", () => {
     for (const [name, href] of [
       ["Reader", "/read"],
       ["Browse notes", "/browse"],
+      ["Sources", "/sermon-sources"],
       ["Search", "/search"],
       ["Places", "/places"],
       ["Compare", "/compare"],
