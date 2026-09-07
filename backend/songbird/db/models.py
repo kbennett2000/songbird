@@ -55,6 +55,22 @@ sermon_note_tags = Table(
     Index("ix_sermon_note_tags_tag", "tag_id"),
 )
 
+# Many-to-many join between sermon sources and those SAME tags (v1.7 sermon sources, spec §4).
+# A third arm on one vocabulary, not a parallel set: a tag put on a channel is the same tag the
+# annotations and sermon notes use, and `api/tags.py` counts all three as "in use".
+sermon_source_tags = Table(
+    "sermon_source_tags",
+    Base.metadata,
+    Column(
+        "source_id",
+        Integer,
+        ForeignKey("sermon_sources.id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+    Column("tag_id", Integer, ForeignKey("tags.id", ondelete="CASCADE"), primary_key=True),
+    Index("ix_sermon_source_tags_tag", "tag_id"),
+)
+
 
 def _utcnow() -> datetime:
     return datetime.now(UTC)
@@ -248,3 +264,56 @@ class SermonNote(Base):
         """
         self.youtube_video_id = extract_youtube_video_id(value)
         return value
+
+
+class SermonSource(Base):
+    """A YouTube channel or playlist to collect sermons from (v1.7 sermon sources, spec §4).
+
+    Registered once by pasting a link: songbird resolves it through YouTube and stores the
+    canonical id, the uploads playlist a later scan will read, and the title to show. No
+    Scripture text and no video text lives here (invariant 5) — this row is only the address of
+    a catalogue, plus how the owner wants it filtered.
+
+    `min_minutes` is nullable ON PURPOSE: null means "follow SERMON_MIN_MINUTES", so raising the
+    app-wide floor reaches every source that never overrode it. A stored copy of today's default
+    would silently pin it.
+    """
+
+    __tablename__ = "sermon_sources"
+    __table_args__ = (
+        # One author can register a given channel/playlist once. Scoped to the author, not
+        # global: two users may follow the same church.
+        UniqueConstraint("author_id", "youtube_id", name="uq_sermon_source_author_youtube"),
+        Index("ix_sermon_sources_author", "author_id"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+
+    kind: Mapped[str] = mapped_column(String(16), nullable=False)  # "channel" | "playlist"
+    youtube_id: Mapped[str] = mapped_column(String(64), nullable=False)  # UC… or PL…
+    # The UU… list every check reads. Channels only — a playlist IS its own catalogue.
+    uploads_playlist_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    input_url: Mapped[str] = mapped_column(Text, nullable=False)  # what was pasted, for display
+    title: Mapped[str] = mapped_column(Text, nullable=False)  # from YouTube, cached for display
+
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="1")
+    # Past livestreams count as sermons — for most churches they ARE the sermons.
+    include_live: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default="1"
+    )
+    min_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    # Written by the scan (slice 4); null until then, and the UI reads null as "never".
+    last_checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_check_status: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    author_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=_utcnow
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=_utcnow, onupdate=_utcnow
+    )
+
+    tags: Mapped[list["Tag"]] = relationship(secondary=sermon_source_tags, lazy="selectin")
