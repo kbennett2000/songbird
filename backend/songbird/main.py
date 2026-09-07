@@ -34,6 +34,7 @@ from songbird.concord.client import ConcordClient
 from songbird.config import get_settings
 from songbird.core.sessions import cleanup_all_expired_sessions
 from songbird.db.session import async_session_factory
+from songbird.youtube.client import YouTubeClient
 
 logger = logging.getLogger("songbird")
 
@@ -50,7 +51,13 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     settings = get_settings()
     settings.data_dir.mkdir(parents=True, exist_ok=True)
     app.state.concord = ConcordClient(settings.concord_base_url, settings.concord_timeout)
+    # YouTube is optional: no key means the sermon-source feature is off and nothing else
+    # changes (spec §2). Assigned on every boot path so the dependency has something to read.
+    app.state.youtube = (
+        YouTubeClient(settings.youtube_api_key) if settings.youtube_api_key else None
+    )
     logger.info("songbird %s starting; Concord at %s", __version__, settings.concord_base_url)
+    logger.info("sermon sources: %s", "on" if app.state.youtube else "off (no YOUTUBE_API_KEY)")
     # Hygiene: sweep dead session rows for users who never return (per-user cleanup only runs on
     # that user's next login). Best-effort — it must never block boot, so failures are logged.
     try:
@@ -63,7 +70,13 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     try:
         yield
     finally:
-        await app.state.concord.aclose()
+        # Nested so Concord's pool is closed even if closing YouTube's raises. ASGI swallows
+        # lifespan-shutdown errors, so a flat pair of statements would leak it silently.
+        try:
+            if app.state.youtube is not None:
+                await app.state.youtube.aclose()
+        finally:
+            await app.state.concord.aclose()
 
 
 def _mount_frontend(app: FastAPI, dist_dir: Path) -> None:

@@ -121,9 +121,7 @@ async def test_list_is_in_canonical_book_order(
     await _seed_note(
         db_sessionmaker, book_usfm="REV", book_order_index=66, reference="Revelation 1:1"
     )
-    await _seed_note(
-        db_sessionmaker, book_usfm="GEN", book_order_index=1, reference="Genesis 1:1"
-    )
+    await _seed_note(db_sessionmaker, book_usfm="GEN", book_order_index=1, reference="Genesis 1:1")
     async with client_for(_fake()) as client:
         rows = (await client.get("/api/v1/sermon-notes")).json()
     assert [r["book_usfm"] for r in rows] == ["GEN", "REV"]
@@ -193,9 +191,7 @@ async def _seed_tagged_corpus(
                 tags=[by_name[t] for t in tags],
             )
 
-        session.add_all(
-            [note(16, ["grace", "faith"]), note(17, ["grace"]), note(18, [])]
-        )
+        session.add_all([note(16, ["grace", "faith"]), note(17, ["grace"]), note(18, [])])
         await session.commit()
 
 
@@ -231,9 +227,7 @@ async def test_list_filter_match_any(
     await _seed_tagged_corpus(db_sessionmaker)
     async with client_for(_fake()) as client:
         rows = (
-            await client.get(
-                "/api/v1/sermon-notes", params={"tags": "faith,nope", "match": "any"}
-            )
+            await client.get("/api/v1/sermon-notes", params={"tags": "faith,nope", "match": "any"})
         ).json()
     assert _start_verses(rows) == [16]
 
@@ -447,3 +441,95 @@ async def test_delete_other_author_404(
     # The other author's note still exists.
     async with db_sessionmaker() as session:
         assert await session.get(SermonNote, other_id) is not None
+
+
+# --- youtube_video_id stamping (v1.7 sermon sources) ---------------------------------------
+
+# The link shapes a sermon URL actually arrives in, and the id every one of them means.
+_YOUTUBE_LINKS = (
+    "https://www.youtube.com/watch?v=dQw4w9WgXcQ&t=1832s",
+    "https://youtu.be/dQw4w9WgXcQ?si=Xy1Z_aBcDeFgH",
+    "https://www.youtube.com/live/dQw4w9WgXcQ",
+    "https://m.youtube.com/watch?v=dQw4w9WgXcQ",
+    "https://www.youtube.com/shorts/dQw4w9WgXcQ",
+    "https://www.youtube.com/embed/dQw4w9WgXcQ",
+)
+_VIDEO_ID = "dQw4w9WgXcQ"
+
+
+async def test_create_stamps_the_youtube_video_id_for_every_link_form(
+    client_for: Callable[[FakeConcordClient], httpx.AsyncClient],
+) -> None:
+    # Server-derived, never client-supplied: the POST body carries only the URL.
+    async with client_for(_fake("KJV", resolved=build_range("JHN", 3, 16, 16))) as client:
+        for url in _YOUTUBE_LINKS:
+            created = await client.post(
+                "/api/v1/sermon-notes", json={**_CREATE_BODY, "sermon_url": url}
+            )
+            assert created.status_code == 201, url
+            assert created.json()["youtube_video_id"] == _VIDEO_ID, url
+
+
+async def test_create_with_a_non_youtube_url_leaves_the_id_null(
+    client_for: Callable[[FakeConcordClient], httpx.AsyncClient],
+) -> None:
+    # A sermon hosted anywhere else is perfectly valid — it just has no video id.
+    async with client_for(_fake("KJV", resolved=build_range("JHN", 3, 16, 16))) as client:
+        created = await client.post(
+            "/api/v1/sermon-notes",
+            json={**_CREATE_BODY, "sermon_url": "https://sermons.example.org/2026-01-05"},
+        )
+    assert created.status_code == 201
+    assert created.json()["youtube_video_id"] is None
+
+
+async def test_patching_the_url_restamps_and_can_clear_the_id(
+    db_sessionmaker: async_sessionmaker[AsyncSession],
+    client_for: Callable[[FakeConcordClient], httpx.AsyncClient],
+) -> None:
+    # The id must follow the URL in both directions, or a note could keep pointing at a video it
+    # no longer links to — and a later scan would think that video was already noted.
+    note_id = await _seed_note(db_sessionmaker, sermon_url="https://example.test/sermon")
+    async with client_for(_fake()) as client:
+        stamped = await client.patch(
+            f"/api/v1/sermon-notes/{note_id}",
+            json={"sermon_url": "https://youtu.be/dQw4w9WgXcQ"},
+        )
+        assert stamped.status_code == 200
+        assert stamped.json()["youtube_video_id"] == _VIDEO_ID
+
+        cleared = await client.patch(
+            f"/api/v1/sermon-notes/{note_id}",
+            json={"sermon_url": "https://sermons.example.org/later"},
+        )
+    assert cleared.status_code == 200
+    assert cleared.json()["youtube_video_id"] is None
+
+
+async def test_patching_something_else_leaves_the_id_alone(
+    db_sessionmaker: async_sessionmaker[AsyncSession],
+    client_for: Callable[[FakeConcordClient], httpx.AsyncClient],
+) -> None:
+    note_id = await _seed_note(db_sessionmaker, sermon_url="https://youtu.be/dQw4w9WgXcQ")
+    async with client_for(_fake()) as client:
+        resp = await client.patch(f"/api/v1/sermon-notes/{note_id}", json={"title": "New"})
+    assert resp.status_code == 200
+    assert resp.json()["youtube_video_id"] == _VIDEO_ID
+
+
+async def test_the_id_is_derived_not_accepted_from_the_client(
+    client_for: Callable[[FakeConcordClient], httpx.AsyncClient],
+) -> None:
+    # A client asserting its own id would be a way to make a note claim a video it doesn't link
+    # to. The field isn't on SermonNoteCreate, so the value is ignored and the URL wins.
+    async with client_for(_fake("KJV", resolved=build_range("JHN", 3, 16, 16))) as client:
+        created = await client.post(
+            "/api/v1/sermon-notes",
+            json={
+                **_CREATE_BODY,
+                "sermon_url": "https://youtu.be/dQw4w9WgXcQ",
+                "youtube_video_id": "somethingelse",
+            },
+        )
+    assert created.status_code == 201
+    assert created.json()["youtube_video_id"] == _VIDEO_ID

@@ -41,6 +41,7 @@ function sermon(overrides: Record<string, unknown> = {}) {
     end_chapter: 15,
     end_verse: 11,
     event_date: null,
+    youtube_video_id: null,
     tags: [] as string[],
     author_id: 1,
     created_at: "2026-06-02T00:00:00Z",

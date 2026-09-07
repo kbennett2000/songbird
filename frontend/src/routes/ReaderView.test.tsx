@@ -139,6 +139,7 @@ function sermonNote(overrides: Record<string, unknown> = {}) {
     end_chapter: 3,
     end_verse: 16,
     event_date: "2026-01-05",
+    youtube_video_id: null,
     tags: ["faith"] as string[],
     author_id: 1,
     created_at: "2026-06-05T00:00:00Z",

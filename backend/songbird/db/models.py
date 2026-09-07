@@ -20,9 +20,10 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
 )
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
 
 from songbird.db.base import Base
+from songbird.youtube.urls import youtube_video_id as extract_youtube_video_id
 
 # Many-to-many join between annotations and tags (tags are songbird-owned; Concord never hears
 # about them).
@@ -195,6 +196,8 @@ class SermonNote(Base):
         Index("ix_sermon_notes_anchor", "book_usfm", "start_chapter", "end_chapter"),
         # Canonical-order listing (the ordering annotations lack).
         Index("ix_sermon_notes_order", "book_order_index"),
+        # "have we already noted this video?" — the scan's dedupe check (v1.7 sermon sources).
+        Index("ix_sermon_notes_youtube_video_id", "youtube_video_id"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -215,6 +218,10 @@ class SermonNote(Base):
 
     event_date: Mapped[date | None] = mapped_column(Date, nullable=True)  # the sermon's date
 
+    # The YouTube video this note links to, when `sermon_url` is a YouTube link (v1.7 sermon
+    # sources). Derived, never client-supplied — see the validator below.
+    youtube_video_id: Mapped[str | None] = mapped_column(String(16), nullable=True)
+
     author_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
 
     created_at: Mapped[datetime] = mapped_column(
@@ -225,3 +232,19 @@ class SermonNote(Base):
     )
 
     tags: Mapped[list["Tag"]] = relationship(secondary=sermon_note_tags, lazy="selectin")
+
+    @validates("sermon_url")
+    def _stamp_youtube_video_id(self, _key: str, value: str) -> str:
+        """Keep `youtube_video_id` in step with `sermon_url` on every write.
+
+        It lives here rather than in the routes because there are three places a sermon note is
+        created — the POST route, the import, and the seed loader — plus the PATCH route's
+        reassignment, and a helper called from each is a helper one of them will eventually
+        forget. Setting it where the URL is set means the two cannot drift.
+
+        SQLAlchemy does not fire validators when loading a row, so a value written directly to
+        the column (the re-date back-fill) survives being read back. A bulk `update()` WOULD
+        bypass this; nothing in songbird issues one.
+        """
+        self.youtube_video_id = extract_youtube_video_id(value)
+        return value

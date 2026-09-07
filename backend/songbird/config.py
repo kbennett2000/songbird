@@ -30,6 +30,13 @@ class Settings(BaseSettings):
     concord_base_url: str = "http://localhost:8000"
     concord_timeout: float = 5.0
 
+    # YouTube — the sermon-source collector's data feed (v1.7). Unlike Concord, this is NOT a
+    # hard dependency: with no key the feature is simply off, and nothing else changes. The key
+    # is a secret — it is never logged and never sent to the browser.
+    youtube_api_key: str | None = None
+    sermon_check_interval_hours: int = 168  # weekly; 0 turns the scheduled check off
+    sermon_min_minutes: int = 10  # videos shorter than this are skipped
+
     # Session cookie `Secure` flag. Default False suits the LAN-HTTP single-unit deploy; set
     # COOKIE_SECURE=1 the moment songbird is fronted with TLS (see docs/SECURITY.md).
     cookie_secure: bool = False

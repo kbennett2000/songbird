@@ -151,6 +151,7 @@ class SermonNoteOut(BaseModel):
     end_chapter: int
     end_verse: int
     event_date: date | None
+    youtube_video_id: str | None  # derived from sermon_url; null when it isn't a YouTube link
     tags: list[str]
     author_id: int
     created_at: datetime

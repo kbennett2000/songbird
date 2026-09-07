@@ -16,7 +16,12 @@ import httpx
 import pytest
 import pytest_asyncio
 from fastapi import Depends, FastAPI
-from songbird.api.deps import get_concord_client, get_current_user, get_db
+from songbird.api.deps import (
+    get_concord_client,
+    get_current_user,
+    get_db,
+    get_youtube_client,
+)
 from songbird.concord.schemas import (
     Book,
     Chapter,
@@ -48,6 +53,7 @@ from songbird.db import models  # noqa: F401  (register models on Base.metadata)
 from songbird.db.base import Base
 from songbird.db.models import User
 from songbird.main import create_app
+from songbird.youtube.schemas import Video
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
@@ -171,9 +177,7 @@ class FakeConcordClient:
             else CrossRefResponse(cross_references=[])
         )
 
-    async def get_verse_topics(
-        self, book: str, chapter: int, verse: int
-    ) -> VerseTopicsResponse:
+    async def get_verse_topics(self, book: str, chapter: int, verse: int) -> VerseTopicsResponse:
         if self._error is not None:
             raise self._error
         return (
@@ -219,7 +223,9 @@ class FakeConcordClient:
         return (
             self._topics_page
             if self._topics_page is not None
-            else TopicsResponse(q=q, section=section, limit=limit, offset=offset, total=0, topics=[])
+            else TopicsResponse(
+                q=q, section=section, limit=limit, offset=offset, total=0, topics=[]
+            )
         )
 
     async def get_topic(self, topic_id: str) -> TopicDetail:
@@ -319,7 +325,9 @@ class FakeConcordClient:
         }
         if self._error is not None:
             raise self._error
-        return self._places_page if self._places_page is not None else PlacesPage(places=[], total=0)
+        return (
+            self._places_page if self._places_page is not None else PlacesPage(places=[], total=0)
+        )
 
     async def get_place(self, place_id: str) -> PlaceDetail:
         if self._error is not None:
@@ -385,6 +393,36 @@ class FakeConcordClient:
         return self._note_search if self._note_search is not None else NoteSearchResponse(hits=[])
 
 
+class FakeYouTubeClient:
+    """Duck-types YouTubeClient for tests. Returns canned videos or raises `error`.
+
+    Mirrors FakeConcordClient deliberately, including the `error` contract — but note the
+    difference in what that error MEANS: an unreachable Concord is fatal (invariant 3), while an
+    unreachable YouTube is a condition a source records and the app survives (spec §2).
+    """
+
+    def __init__(
+        self,
+        *,
+        videos: list[Video] | None = None,
+        error: Exception | None = None,
+    ) -> None:
+        self._videos = videos or []
+        self._error = error
+        # Records the ids of every get_videos call so tests can assert batching/passthrough.
+        self.get_videos_calls: list[list[str]] = []
+
+    async def get_videos(self, ids: list[str]) -> list[Video]:
+        self.get_videos_calls.append(list(ids))
+        if self._error is not None:
+            raise self._error
+        wanted = set(ids)
+        return [v for v in self._videos if v.id in wanted]
+
+    async def aclose(self) -> None:
+        return None
+
+
 @pytest_asyncio.fixture
 async def db_sessionmaker() -> AsyncIterator[async_sessionmaker[AsyncSession]]:
     engine = create_async_engine(
@@ -418,6 +456,22 @@ def app() -> FastAPI:
 @pytest.fixture
 def make_concord() -> type[FakeConcordClient]:
     return FakeConcordClient
+
+
+@pytest.fixture
+def with_youtube(app: FastAPI) -> Callable[[FakeYouTubeClient], None]:
+    """Install a fake YouTube client for routes that depend on `get_youtube_client`.
+
+    Standalone rather than a second argument to `client_for`, so the ~20 test files that annotate
+    that fixture as `Callable[[FakeConcordClient], httpx.AsyncClient]` need no change. It has no
+    consumer until the re-date endpoint lands; it is here so the fake and its wiring arrive with
+    the client they fake.
+    """
+
+    def _install(youtube: FakeYouTubeClient) -> None:
+        app.dependency_overrides[get_youtube_client] = lambda: youtube
+
+    return _install
 
 
 @pytest.fixture

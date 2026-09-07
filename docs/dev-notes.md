@@ -4,6 +4,98 @@ A running log of per-slice decisions, gotchas, and how each slice was verified. 
 
 ---
 
+## Sermon sources slice 1 — foundation (the YouTube client)
+
+- **Date:** 2026-09-07
+- **Branch:** `slice/sermon-sources-1-foundation`
+
+### Why
+
+v1.7 sermon sources (`docs/v1.7/SERMON-SOURCES-SPEC.md`) needs a second outbound HTTP dependency —
+YouTube's Data API v3 — held to the same rules as Concord. This slice lays that foundation and
+nothing else: settings, the client, the URL helper, and the `sermon_notes.youtube_video_id`
+column. Nothing user-visible changes, and with no key set nothing about the app changes at all.
+
+### What landed
+
+- **Three settings** (`YOUTUBE_API_KEY`, `SERMON_CHECK_INTERVAL_HOURS`, `SERMON_MIN_MINUTES`).
+  Only the key is read so far; the other two land now so later slices don't reopen config.
+- **`songbird/youtube/`** — `urls.py` (pure), `schemas.py` (wire models + the flattened `Video`),
+  `client.py` (`YouTubeClient.get_videos`, batching 50 ids per call). Built in the lifespan only
+  when a key is set; `get_youtube_client` 409s `YOUTUBE_NOT_CONFIGURED` when there isn't one.
+- **Migration `0010`** — nullable, indexed `sermon_notes.youtube_video_id`, stamped from
+  `sermon_url` by a `@validates` on the model.
+
+### Gotchas / things to know
+
+- **httpx prints the API key on every successful request, and nothing about exception handling
+  fixes that.** httpx logs `HTTP Request: GET <full url> "200 OK"` at **INFO**, and `create_app()`
+  calls `logging.basicConfig(level=INFO)` when no handler is configured — which is the production
+  path, because uvicorn configures only its own loggers. The client installs a redacting
+  `logging.Filter` on the `httpx` logger from its constructor. This was the single biggest finding
+  of the slice, and it was invisible in every test that only looked at exceptions.
+- **`raise ... from exc` leaks the key; `from None` does not.** `HTTPStatusError`'s message embeds
+  the full URL. Measured: with `from exc` the key appears in
+  `"".join(traceback.format_exception(e))`, with `from None` it does not. A bare `raise E(...)`
+  inside an `except` block leaks it too, via the implicit `__context__`. So this one client
+  overrides the `concord/client.py` idiom deliberately — the comment at the top of the file says
+  so, because it otherwise reads like an oversight.
+- **Nothing stores the httpx exception.** `ConcordUnreachableError` keeps `.cause`; the equivalent
+  here would keep `exc.request.url` and the key with it. `YouTubeError` carries `status` and
+  `reason` instead — safe scalars, and what a source's `last_check_status` will want anyway.
+- **A secrecy test that can't fail is worse than no test.** All three were mutation-checked:
+  reverting `from None`, removing the log filter, and un-redacting the transport-error message
+  each turn the matching test red. The log test in particular must call
+  `caplog.at_level(logging.DEBUG)` with **no `logger=` argument** — scoping it to `"songbird"`
+  makes it permanently green, because the logger that leaks is `httpx`'s.
+- **`@validates` does not fire when SQLAlchemy loads a row** (verified against 2.0.36). That is
+  what makes it safe for the re-date back-fill: a value written straight to the column survives
+  being read back. It *does* fire on constructor kwargs and on reassignment, including clearing
+  the id when a URL stops being a YouTube one. A bulk `update()` **would** bypass it — nothing in
+  songbird issues one today, and slice 2 should set both columns explicitly rather than rely on it.
+- **The validator is the first in this codebase, and it earns it.** There are three places a
+  `SermonNote` is constructed — `api/sermon_notes.py`, `api/import_export.py`, and
+  `scripts/seed_sermon_notes.py` — plus the PATCH route's reassignment. A helper called from each
+  is a helper one of them eventually forgets; the seed loader in particular gets this for free.
+- **`duration_seconds is None` means unknown, not zero.** Slice 4's filter must be
+  `if seconds is not None and seconds < minimum`, or a video of unknown length gets ledgered as
+  `too_short` — a reason it hasn't earned.
+- **`youtube/__init__.py` must stay a bare docstring.** `alembic/env.py` imports
+  `songbird.db.models`, which now imports `songbird.youtube.urls`; re-exporting the client from
+  the package `__init__` would drag httpx into every migration run.
+- **The URL helper uses `urlsplit`, not a regex.** Only a real parser reads
+  `https://www.youtube.com@evil.test/watch?v=ID` correctly — the host there is `evil.test`.
+- **`_norm_sermon` in `import_export_test.py` whitelists the keys it compares**, so it cannot
+  notice a *new* key appearing in the export. Pinning "the export is unchanged" needed an exact
+  key-set assertion; that too was mutation-checked.
+
+### How it was verified
+
+- Backend: `ruff check`, `ruff format --check`, `pyright` strict (**0 errors**), `pytest`
+  (**280 passed**, up from 241; 4 concord-deselected). *`pyright` needs the venv on
+  `PATH`/`VIRTUAL_ENV` or it can't resolve `fastapi` and reports ~1459 phantom errors.*
+- Frontend: `eslint`, `tsc --noEmit`, `vitest` (**253 passed**, 38 files — unchanged, as intended),
+  `vite build`.
+- Migration run for real on a scratch DB: `alembic upgrade head` → the column and
+  `ix_sermon_notes_youtube_video_id` appear; `downgrade -1` → both disappear cleanly; upgrade
+  again. Existing rows keep null.
+- The stamping chain exercised end to end against a real session: create stamps, a non-YouTube URL
+  clears, a YouTube URL re-stamps, and the model's index name matches the migration's.
+- The three secrecy guards mutation-tested (above).
+
+### Still open
+
+- No test runs the lifespan itself, so "the client is built only when a key is set" is covered by
+  reading, not by a test — consistent with the rest of the repo, where the lifespan is never run in
+  the fast suite. Worth revisiting if the lifespan grows a third client.
+- **No live YouTube call has been made yet.** Nothing calls the client this slice, so a handful of
+  assumptions are still unconfirmed: that `videos.list` returns unknown ids as simply absent rather
+  than 404, the exact error-body shape the `reason` reader depends on, and that Google accepts
+  httpx's percent-encoded comma in `id=`. Slice 2 is the first real call and should treat
+  confirming these as part of its acceptance.
+
+---
+
 ## #122 follow-up — the dark highlight, done properly
 
 - **Date:** 2026-09-06

@@ -9,12 +9,14 @@ from songbird.core.errors import ErrorCode, raise_http
 from songbird.core.sessions import extend_session, get_session
 from songbird.db.models import User
 from songbird.db.session import get_db
+from songbird.youtube.client import YouTubeClient
 
 __all__ = [
     "get_concord_client",
     "get_current_user",
     "get_current_user_optional",
     "get_db",
+    "get_youtube_client",
 ]
 
 
@@ -24,6 +26,23 @@ def get_concord_client(request: Request) -> ConcordClient:
     Overridden in tests to inject a fake — no live Concord needed for the fast suite.
     """
     client: ConcordClient = request.app.state.concord
+    return client
+
+
+def get_youtube_client(request: Request) -> YouTubeClient:
+    """Return the process-wide YouTube client built in the app lifespan, or 409 if there is none.
+
+    No key configured means the feature is simply switched off (spec §2), which is a normal
+    state and not a server fault — hence 409 rather than 500 or 503. Read via `getattr` because
+    the fast test suite never runs the lifespan, so the attribute may not exist at all.
+    """
+    client: YouTubeClient | None = getattr(request.app.state, "youtube", None)
+    if client is None:
+        raise_http(
+            409,
+            ErrorCode.YOUTUBE_NOT_CONFIGURED,
+            "No YouTube API key is configured, so sermon sources are switched off.",
+        )
     return client
 
 

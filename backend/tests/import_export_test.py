@@ -243,3 +243,72 @@ async def test_export_and_import_require_auth(
     async with unauth_client(_fake()) as client:
         assert (await client.get("/api/v1/export")).status_code == 401
         assert (await client.post("/api/v1/import", json=_document())).status_code == 401
+
+
+# --- youtube_video_id: stamped on import, absent from the export (v1.7 sermon sources) -------
+
+# Every key the portable sermon-note shape carries. Pinned exactly, because `_norm_sermon`
+# above whitelists the keys it compares and so would not notice a NEW one appearing.
+_SERMON_EXPORT_KEYS = {
+    "title",
+    "sermon_url",
+    "reference",
+    "book_usfm",
+    "start_chapter",
+    "start_verse",
+    "end_chapter",
+    "end_verse",
+    "event_date",
+    "tags",
+}
+
+
+async def test_import_stamps_the_youtube_video_id(
+    client_for: Callable[[FakeConcordClient], httpx.AsyncClient],
+) -> None:
+    # Import creates rows directly rather than going through the POST route, so this is the
+    # path that would drift if the id were stamped in the routes instead of on the model.
+    doc = _document()
+    doc["sermon_notes"] = [
+        {**_document()["sermon_notes"][0], "sermon_url": "https://youtu.be/dQw4w9WgXcQ"},  # type: ignore[index]
+    ]
+    async with client_for(_fake()) as client:
+        imported = await client.post("/api/v1/import", json=doc)
+        assert imported.status_code == 200
+        notes = (await client.get("/api/v1/sermon-notes")).json()
+    assert [n["youtube_video_id"] for n in notes] == ["dQw4w9WgXcQ"]
+
+
+async def test_export_does_not_carry_the_youtube_video_id(
+    client_for: Callable[[FakeConcordClient], httpx.AsyncClient],
+) -> None:
+    # The id is derivable from sermon_url, so it has no business in a portable document — an
+    # import re-derives it. This pins the export's key set so it can't drift in by accident.
+    doc = _document()
+    doc["sermon_notes"] = [
+        {**_document()["sermon_notes"][0], "sermon_url": "https://youtu.be/dQw4w9WgXcQ"},  # type: ignore[index]
+    ]
+    async with client_for(_fake()) as client:
+        await client.post("/api/v1/import", json=doc)
+        exported = (await client.get("/api/v1/export")).json()
+    assert exported["sermon_notes"]
+    for note in exported["sermon_notes"]:
+        assert set(note) == _SERMON_EXPORT_KEYS
+
+
+async def test_a_youtube_note_still_round_trips_and_stays_idempotent(
+    client_for: Callable[[FakeConcordClient], httpx.AsyncClient],
+) -> None:
+    # The id is not part of the dedupe key; re-importing must still skip rather than duplicate.
+    doc = _document()
+    doc["sermon_notes"] = [
+        {**_document()["sermon_notes"][0], "sermon_url": "https://youtu.be/dQw4w9WgXcQ"},  # type: ignore[index]
+    ]
+    async with client_for(_fake()) as client:
+        first = await client.post("/api/v1/import", json=doc)
+        exported = (await client.get("/api/v1/export")).json()
+        again = await client.post("/api/v1/import", json=exported)
+        notes = (await client.get("/api/v1/sermon-notes")).json()
+    assert first.json()["sermon_notes"] == {"created": 1, "skipped": 0, "failed": 0}
+    assert again.json()["sermon_notes"] == {"created": 0, "skipped": 1, "failed": 0}
+    assert [n["youtube_video_id"] for n in notes] == ["dQw4w9WgXcQ"]
