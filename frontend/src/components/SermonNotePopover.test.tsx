@@ -18,6 +18,7 @@ function note(overrides: Partial<SermonNote> = {}): SermonNote {
     end_chapter: 2,
     end_verse: 47,
     event_date: "2026-01-05",
+    youtube_video_id: null,
     tags: ["acts", "church"],
     author_id: 1,
     created_at: "2026-06-05T00:00:00Z",
