@@ -3,19 +3,29 @@
 Pure — no I/O, no Concord, no database. It answers one question: which substrings of this text are
 *shaped* like a reference? It does not answer what any of them mean, and it must not try.
 
-**Concord is the judge.** The pattern is deliberately loose, so `Episode 63`, `Sunday 9:00` and
-`Israel 24:03` all come out of here as candidates and are thrown away a moment later when Concord
-refuses to resolve them (confirmed live: all three are a 404). That is the whole design. songbird
-never decides what a book name means, and a finder tight enough to reject `Episode` would be a
-finder that had opinions about book names — the exact thing invariant 4 keeps out of songbird.
+**Concord is the judge.** The pattern is deliberately loose, so `Episode 63` and `Sunday 9:30` both
+come out of here as candidates and are thrown away a moment later when Concord refuses to resolve
+them (confirmed live: both are a 404). That is the whole design. songbird never decides what a book
+name means, and a finder tight enough to reject `Episode` would be a finder that had opinions about
+book names — the exact thing invariant 4 keeps out of songbird.
 
-**The one exception, and it is not a book-name opinion: a date.** Majestic View titles every service
-by the day it happened — `Livestream Sunday Worship Service - Mar. 15 2026 …` — and `Mar.` is an
-abbreviation Concord accepts for Mark. Left alone, the finder hands Concord `Mar 15`, Concord
-correctly says that is Mark 15, and a sermon on John gets a note on Mark. Five notes were made that
-way in the first live run before this guard existed. So the finder recognizes **what a date looks
-like** and declines to offer it — a judgement about the *shape of the surrounding text*, not about
-what `Mar` means. Concord still decides every string that does leave here.
+**The one exception, and it is not a book-name opinion: a date.** Churches title services by the day
+they happened, in two shapes, and both collide with a real reference.
+
+*A month name.* Majestic View writes `Livestream Sunday Worship Service - Mar. 15 2026 …`, and
+`Mar.` is an abbreviation Concord accepts for Mark. Left alone, the finder hands Concord `Mar 15`,
+Concord correctly says that is Mark 15, and a sermon on John gets a note on Mark. Five notes were
+made that way in the first live run before this guard existed.
+
+*All digits.* The same channel also writes
+`MVC - Talking About Respect with Pastor John 06-25-2020`. There is no month word to notice — the
+tells are that `06` is zero-padded and that a four-digit year sits behind the span. Left alone,
+Concord reads `John 06-25` as John 6–25 and a video about respect gets a note spanning sixteen
+chapters. That was the one wrong note in 1,082 that survived the live audit of slice 4b.
+
+Both guards recognize **what a date looks like** and decline to offer it — a judgement about the
+*shape of the surrounding text*, not about what `Mar` or `John` means. Concord still decides every
+string that does leave here.
 
 What it DOES do is normalize, so that two spellings of one reference are one string:
 
@@ -71,6 +81,23 @@ _MONTHS: Final = frozenset(
 # `15th 2026`. The trailing `(?!\d)` keeps a longer run of digits from passing as a year.
 _YEAR_AFTER: Final = re.compile(r"(?:st|nd|rd|th)?\s*,?\s*\d{4}(?!\d)")
 
+# A number written with a leading zero is a day or a month, never a chapter or a verse: nobody
+# writes `John 06` or `John 3:06`, and every numeric date pads. This tell alone catches
+# `John 06-25-2020`, with no year needed — and it quietly retires video timestamps like `9:00` and
+# `24:03`, which were only ever costing a lookup that came back 404.
+_PADDED: Final = re.compile(r"(?<!\d)0\d")
+
+# The rest of a numeric date, sitting immediately behind the span. Whitespace is optional on either
+# side of the separator, exactly as it is for the month rule's year.
+_SEP: Final = r"\s*[-–—/.]\s*"
+
+# A separator and a four-digit year — with an **optional day of its own in between**, which is the
+# part that is easy to leave out and easy to get wrong. `/` is not a span separator, so in
+# `John 6/25/2020` the span is only `6` and the year is not behind it: `/25/2020` is. The dash form
+# needs no such help, because `6-25` joins the span and leaves `-2020` directly behind. The trailing
+# `(?!\d)` is the month rule's, for the month rule's reason: a longer run of digits is not a year.
+_DATE_TAIL: Final = re.compile(rf"(?:{_SEP}\d{{1,2}})?{_SEP}\d{{4}}(?!\d)")
+
 
 def _is_date(word: str, span: str, text: str, end: int) -> bool:
     """Is this a service date rather than a reference?
@@ -85,17 +112,35 @@ def _is_date(word: str, span: str, text: str, end: int) -> bool:
     return ":" not in span or _YEAR_AFTER.match(text, end) is not None
 
 
+def _is_numeric_date(span: str, text: str, end: int) -> bool:
+    """Is this a date written entirely in digits — `06-25-2020` — rather than a chapter and verse?
+
+    Two independent tells, either one enough: a zero-padded number anywhere in the span, or the rest
+    of a date behind it. They overlap on the title that prompted them and each catches forms the
+    other misses — `John 06-25` has no year, `John 6-25-2020` pads nothing.
+
+    Unlike the month rule this asks nothing about the book part, so it applies to every candidate,
+    including the second-word reading.
+    """
+    return _PADDED.search(span) is not None or _DATE_TAIL.match(text, end) is not None
+
+
 def _candidate(numeral: str | None, book: str, span: str, text: str, end: int) -> str | None:
     """One normalized candidate string, or `None` for a date.
 
-    `len(words) == 1` is load-bearing. It confines the date guard to a **bare** month, so the
-    two-word reading of `Sunday Service Mar. 15` — `Service Mar 15` — is left exactly as it was:
-    Concord already refuses it, and it was never the string that made the wrong note. The one this
-    drops is the second-word fallback, `Mar 15`, which is.
+    `len(words) == 1` is load-bearing, and it guards **only the month rule**. It confines that rule
+    to a **bare** month, so the two-word reading of `Sunday Service Mar. 15` — `Service Mar 15` — is
+    left exactly as it was: Concord already refuses it, and it was never the string that made the
+    wrong note. The one this drops is the second-word fallback, `Mar 15`, which is.
+
+    The numeric rule carries no such guard, because `Pastor John 06-25` and `John 06-25` are *both*
+    the date, and leaving either would leave the defect.
     """
     words = book.replace(".", "").split()
     if numeral is not None:
         words.insert(0, _ROMAN.get(numeral, numeral))
+    if _is_numeric_date(span, text, end):
+        return None
     if len(words) == 1 and _is_date(words[0], span, text, end):
         return None
     return f"{' '.join(words)} {_DASHES.sub('-', span)}"
