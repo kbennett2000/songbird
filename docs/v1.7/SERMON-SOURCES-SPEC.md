@@ -229,7 +229,7 @@ string goes to Concord — the normalizing matters less for resolution (Concord 
 trailing periods and shouted case perfectly well) than for **counting**, since the boilerplate rule
 below tallies strings and a template that writes `II Timothy 2:2` one week and `2 Timothy 2:2` the
 next must count once. **Concord is the judge:** every candidate is resolved via `/v1/verses/{ref}`;
-whatever Concord rejects (`Episode 63`, `Sunday 9:00`, `Israel 24:03` — all three confirmed live as
+whatever Concord rejects (`Episode 63`, `Sunday 9:30`, `Israel 24:13` — all three confirmed live as
 a 404) is discarded. songbird never decides what a book name means.
 
 *As built (slice 4b):* **a two-word book name also offers its second word alone.** Two words are
@@ -242,11 +242,33 @@ safe because Concord refuses a bare ambiguous name (`Corinthians 13` and `Peter 
 name. It costs one lookup, answered from the run's cache after the first time.
 
 **Dates are not references.** The one thing the finder decides for itself, and it is a judgement
-about the shape of the surrounding text rather than about what a word means. A candidate whose book
-part is a bare month — full name or three-letter short form, period optional, any case — is dropped
-when it either carries no verse part or is followed immediately by a four-digit year (a comma and an
-ordinal suffix both optional). `Mark 15` and `Mar. 15:16-20` still go to Concord; `Mar. 15 2026`,
-`Mar. 15, 2026`, `Mar. 15th 2026` and a year-less `Sunday Service Mar. 15` do not.
+about the shape of the surrounding text rather than about what a word means. Churches title services
+by the day they happened, in two shapes, and both collide with a real reference.
+
+*Written with a month name.* A candidate whose book part is a bare month — full name or three-letter
+short form, period optional, any case — is dropped when it either carries no verse part or is
+followed immediately by a four-digit year (a comma and an ordinal suffix both optional). `Mark 15`
+and `Mar. 15:16-20` still go to Concord; `Mar. 15 2026`, `Mar. 15, 2026`, `Mar. 15th 2026` and a
+year-less `Sunday Service Mar. 15` do not.
+
+*Written in digits.* A candidate is dropped when **either** a number in its span is written with a
+leading zero — a chapter is never `06` and a verse is never `:03`, while every numeric date pads —
+**or** the rest of a date sits immediately behind it: a separator (`-`, `–`, `—`, `/` or `.`,
+whitespace optional either side, as above) and a four-digit year, with an optional day of its own in
+between. That day part matters because `/` is not a span separator: in `John 6/25/2020` the
+candidate is only `John 6`, and the year is not directly behind it. Unlike the month rule this asks
+nothing about the book part, so it drops the second-word reading too — `Pastor John 06-25` and
+`John 06-25` are both the date. `John 6-25`, `John 6:25` and `Genesis 1-11` are untouched.
+
+This second rule exists because the by-eye audit of slice 4b found **one wrong note in 1,082**, and
+this was it: Majestic View's `MVC - Talking About Respect with Pastor John 06-25-2020`. `John 06-25`
+is a reference Concord correctly reads as John 6–25, so a video about respect carried a note
+spanning sixteen chapters. Slice 5's review list gave that a one-tap cure; this is the prevention.
+Two things follow, both accepted. It also stops offering video timestamps (`9:00`, `24:03`), which
+were only ever costing a lookup that came back 404 — a small bonus. And because whitespace is
+allowed either side of the separator, a series title like `Genesis 1 - 2025 Vision Series` loses its
+candidate and the video goes to the review list instead: a miss into the list is the safe direction,
+and it is one tap to place.
 
 This exists because live acceptance found it the hard way. Majestic View titles every service by the
 day it happened, and **`Mar.` is an abbreviation Concord accepts for Mark** — so `Mar. 15 2026`
@@ -535,13 +557,6 @@ otherwise.
   8 of them across 1,273. (A plain cross-chapter range with verses on both ends, `2 Chronicles
   30:1-31:7`, resolves fine.) Fixing it would mean songbird interpreting a reference rather than
   asking, which invariant 4 keeps out; a miss into the review list is the safe direction.
-- **A numeric date behind a book's name still resolves.** The date rule in §7 catches a month
-  *name*; it does not catch `MM-DD-YYYY`. Majestic View has one video titled
-  `MVC - Talking About Respect with Pastor John 06-25-2020`, and `John 06-25` is a reference Concord
-  reads as John 6-25 — a note spanning sixteen chapters on a video whose subject is respect. **One
-  wrong note in 1,082** across the four sources; the only one that survived the by-eye audit, and
-  the same family of defect the month rule fixed. The same guard extended to a bare `N-N` span
-  followed by `-NNNN` would catch it.
 - **A source's boilerplate can be evaded by spelling.** The tally counts normalized candidate
   strings, so a template writing one reference two ways that normalize differently is counted twice
   and may clear neither half. Not observed live — no source currently has boilerplate at all (§12).

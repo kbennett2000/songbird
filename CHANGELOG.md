@@ -17,6 +17,13 @@ This project follows [Keep a Changelog](https://keepachangelog.com/) and
 
 ## [Unreleased]
 
+### Fixed
+- **A sermon titled with a plain numeric date no longer gets the wrong passage.** A video called
+  something like "… with Pastor John 06-25-2020" was being read as John chapters 6 to 25, so a talk
+  about respect ended up noted across sixteen chapters. songbird now recognises a date written in
+  digits the same way it already recognised one written with a month name, and leaves that video for
+  you to place yourself.
+
 ### Added
 - **songbird can follow your church's YouTube channel and write the sermon notes for you.** Add a
   channel or playlist once, on the new **Sermon sources** page, and songbird reads through it: for
