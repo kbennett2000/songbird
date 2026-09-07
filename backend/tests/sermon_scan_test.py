@@ -826,3 +826,167 @@ async def test_a_naive_timestamp_from_sqlite_still_compares_correctly(
 
     await _runner(db_sessionmaker, youtube).run()
     assert (await _source_row(db_sessionmaker)).check_requested_at is None
+
+
+async def test_another_users_ledger_row_does_not_hide_the_video_from_this_one(
+    db_sessionmaker: async_sessionmaker[AsyncSession],
+) -> None:
+    """ "Have I seen this?" is asked per author, not globally.
+
+    Two people can follow the same church, and each needs their own ledger row — the uniqueness
+    is on (author_id, video_id) precisely so that they can. A membership check that forgot the
+    author would make the second person's catalogue look entirely already-seen.
+    """
+    [video_id] = _ids(1)
+    youtube = FakeYouTubeClient(videos=[_video(video_id)], pages={_UPLOADS: [[video_id]]})
+    async with db_sessionmaker() as db:
+        db.add(User(id=2, name="someone-else"))
+        await db.commit()
+    # Someone else already has this exact video in their ledger, from their own source.
+    await _seed_source(
+        db_sessionmaker,
+        source_id=2,
+        author_id=2,
+        youtube_id="UCzzzzzzzzzzzzzzzzzzzzzz",
+        uploads_playlist_id="UUzzzzzzzzzzzzzzzzzzzzzz",
+        last_checked_at=datetime(2026, 1, 1, tzinfo=UTC),
+        last_check_status=STATUS_OK,
+        scan_complete=True,
+    )
+    async with db_sessionmaker() as db:
+        db.add(
+            SermonSourceVideo(
+                source_id=2,
+                author_id=2,
+                video_id=video_id,
+                title="Theirs",
+                description="",
+                published_at=_PUBLISHED,
+                duration_seconds=3600,
+                status="pending",
+                seen_at=datetime.now(UTC),
+            )
+        )
+        await db.commit()
+    await _seed_source(db_sessionmaker, source_id=1, author_id=1)
+
+    await _runner(db_sessionmaker, youtube).run()
+
+    assert [r.video_id for r in await _ledger(db_sessionmaker, author_id=1)] == [video_id]
+
+
+async def test_only_enabled_sources_are_ever_due(
+    db_sessionmaker: async_sessionmaker[AsyncSession],
+) -> None:
+    """The due query itself, driven directly.
+
+    `_scan_source` re-checks `enabled` as well, because a source can be paused between the query
+    and the scan — but that second guard hides this one from the loop, so the filter that decides
+    what a check even costs is tested where it lives.
+    """
+    runner = _runner(db_sessionmaker, FakeYouTubeClient())
+    checked = datetime(2026, 1, 1, tzinfo=UTC)
+    # Never checked → due. Asked for → due. Paused → never, whichever of those is also true.
+    await _seed_source(db_sessionmaker, source_id=1, youtube_id="UC00000000000000000000a1")
+    await _seed_source(
+        db_sessionmaker,
+        source_id=2,
+        youtube_id="UC00000000000000000000a2",
+        last_checked_at=checked,
+        check_requested_at=datetime.now(UTC),
+    )
+    await _seed_source(
+        db_sessionmaker,
+        source_id=3,
+        youtube_id="UC00000000000000000000a3",
+        enabled=False,
+        check_requested_at=datetime.now(UTC),
+    )
+    # Checked already, and nobody has asked again — the steady state, and not due.
+    await _seed_source(
+        db_sessionmaker,
+        source_id=4,
+        youtube_id="UC00000000000000000000a4",
+        last_checked_at=checked,
+        last_check_status=STATUS_OK,
+        scan_complete=True,
+    )
+
+    assert sorted(d.id for d in await runner._due_sources()) == [1, 2]  # noqa: SLF001
+
+
+async def test_a_video_that_appears_on_two_pages_is_ledgered_once(
+    db_sessionmaker: async_sessionmaker[AsyncSession],
+) -> None:
+    """YouTube pages over a list that shifts while you walk it.
+
+    A video posted mid-scan pushes everything down a slot, so an id already read on page one can
+    arrive again on page two. Ledgering it twice is an IntegrityError on (author_id, video_id)
+    that would abort the batch and lose the whole page with it — so this is a correctness guard,
+    not a tidiness one. Pages here are small on purpose: nothing has been committed yet when the
+    repeat arrives, so the database cannot be what catches it.
+    """
+    a, b, c = _ids(3)
+    youtube = FakeYouTubeClient(
+        videos=[_video(a), _video(b), _video(c)],
+        pages={_UPLOADS: [[a, b], [b, c]]},  # b slides onto the second page
+    )
+    await _seed_source(db_sessionmaker)
+
+    await _runner(db_sessionmaker, youtube).run()
+
+    assert [row.video_id for row in await _ledger(db_sessionmaker)] == [a, b, c]
+
+
+async def test_a_scan_killed_after_a_batch_leaves_the_catalogue_marked_incomplete(
+    db_sessionmaker: async_sessionmaker[AsyncSession],
+) -> None:
+    """Why `scan_complete` goes False with the first batch's commit rather than in a `finally`.
+
+    A container restart, a power cut, a kill -9 — none of them reach the code that records a
+    check's outcome. Writing the flag as part of a commit that was happening anyway is what makes
+    those cases safe: the next check sees an unfinished catalogue and walks the whole thing,
+    rather than trusting a stop rule whose premise died with the process.
+    """
+    # A full batch on the first page, because unseen ids buffer ACROSS pages: fewer than fifty
+    # and nothing commits until the walk ends. That pairing is the point — the flag goes False in
+    # the same commit as the rows, so a scan killed before either wrote anything leaves no hole
+    # to mark and no flag to clear.
+    ids = _ids(51)
+    committed = asyncio.Event()
+
+    class DiesAfterTheFirstBatch(FakeYouTubeClient):
+        async def list_playlist_page(
+            self, playlist_id: str, page_token: str | None = None
+        ) -> PlaylistPage:
+            if page_token is not None:
+                committed.set()  # the first page's batch is on disk by now
+                await asyncio.sleep(3600)  # …and then the process goes away
+            return await super().list_playlist_page(playlist_id, page_token)
+
+    youtube = DiesAfterTheFirstBatch(
+        videos=[_video(v) for v in ids], pages={_UPLOADS: [ids[0:50], ids[50:51]]}
+    )
+    # A source whose last check DID finish, so False here can only have come from this scan.
+    await _seed_source(
+        db_sessionmaker,
+        last_checked_at=datetime(2026, 1, 1, tzinfo=UTC),
+        last_check_status=STATUS_OK,
+        scan_complete=True,
+        check_requested_at=datetime.now(UTC),
+    )
+    runner = _runner(db_sessionmaker, youtube)
+
+    runner.request_scan()
+    await committed.wait()
+    await runner.aclose()  # nothing records an outcome down this path
+
+    # The fifty are on disk…
+    assert len(await _ledger(db_sessionmaker)) == 50
+    source = await _source_row(db_sessionmaker)
+    # …so the catalogue is known to be incomplete, and the next check will walk all of it.
+    assert source.scan_complete is False
+    # And the outcome really was never recorded — nothing down this path reaches the recorder,
+    # which is exactly why the flag cannot be written there.
+    assert source.last_check_status == STATUS_OK
+    assert source.last_checked_at == datetime(2026, 1, 1)
