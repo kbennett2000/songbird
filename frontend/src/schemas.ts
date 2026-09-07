@@ -131,6 +131,16 @@ export const redateResultSchema = z.object({
 // address of a catalogue plus how it's filtered — never any video. `min_minutes` is null when the
 // source follows the app-wide default; `uploads_playlist_id` is null for a playlist, which is its
 // own catalogue. The scan's counts arrive with the scan.
+// What a source's checks have found so far, by state. Nested rather than five more fields on the
+// source: it is one idea that grows, and it describes the ledger rather than the source itself.
+export const sermonSourceCountsSchema = z.object({
+  pending: z.number(),
+  needs_passage: z.number(),
+  placed: z.number(),
+  skipped: z.number(),
+  already_noted: z.number(),
+});
+
 export const sermonSourceSchema = z.object({
   id: z.number(),
   kind: z.enum(["channel", "playlist"]),
@@ -143,17 +153,65 @@ export const sermonSourceSchema = z.object({
   min_minutes: z.number().nullable(),
   last_checked_at: z.string().nullable(),
   last_check_status: z.string().nullable(),
+  // Set when a check is asked for and cleared once it has been served, so a row can say it is
+  // waiting rather than the page pretending every queued source is being read at once.
+  check_requested_at: z.string().nullable(),
+  counts: sermonSourceCountsSchema,
   tags: z.array(z.string()),
   created_at: z.string(),
   updated_at: z.string(),
 });
 export const sermonSourcesListSchema = z.array(sermonSourceSchema);
 
+// Every state a ledger row can be in. Only `pending`, `skipped` and `already_noted` are written
+// today; the rest arrive with the slices that place notes and review them.
+export const sermonVideoStatusSchema = z.enum([
+  "pending",
+  "needs_passage",
+  "placed",
+  "skipped",
+  "dismissed",
+  "already_noted",
+]);
+
+// One row of the ledger: a video a check has seen, and what songbird decided about it. The
+// video's description isn't here — the page never shows it, and the server doesn't send it.
+export const sermonSourceVideoSchema = z.object({
+  id: z.number(),
+  source_id: z.number(),
+  source_title: z.string(),
+  video_id: z.string(),
+  title: z.string(),
+  published_at: z.string(),
+  duration_seconds: z.number().nullable(), // null = unknown length, NOT zero
+  is_live: z.boolean(),
+  status: sermonVideoStatusSchema,
+  skip_reason: z.enum(["too_short", "live_excluded"]).nullable(),
+  placed_by: z.enum(["scripture_line", "title", "first_line", "manual"]).nullable(),
+  suggestions: z.array(z.string()),
+  seen_at: z.string(),
+  decided_at: z.string().nullable(),
+});
+
+// One page of the ledger — `total` drives "Load more", like the other page-outs.
+export const sermonSourceVideosPageSchema = z.object({
+  videos: z.array(sermonSourceVideoSchema),
+  total: z.number(),
+});
+
+// "Check now" answers with how many sources were queued, not with what was found: the scan runs
+// in the background and the page watches the status endpoint for it.
+export const sermonCheckQueuedSchema = z.object({ queued: z.number() });
+
 // What the Sources page needs before it can render anything: whether a key is configured at all
 // (no key → the page is one setup sentence), and the default the add form hints at.
 export const sermonSourcesStatusSchema = z.object({
   configured: z.boolean(),
   min_minutes_default: z.number(),
+  // The one thing on this page that changes without the reader doing anything, and so the one
+  // thing the page polls for.
+  scan_running: z.boolean(),
+  scan_started_at: z.string().nullable(),
 });
 
 export const readVerseSchema = z.object({
@@ -389,6 +447,11 @@ export type RedateNotFound = z.infer<typeof redateNotFoundSchema>;
 export type RedateResult = z.infer<typeof redateResultSchema>;
 export type SermonSource = z.infer<typeof sermonSourceSchema>;
 export type SermonSourcesStatus = z.infer<typeof sermonSourcesStatusSchema>;
+export type SermonSourceCounts = z.infer<typeof sermonSourceCountsSchema>;
+export type SermonVideoStatus = z.infer<typeof sermonVideoStatusSchema>;
+export type SermonSourceVideo = z.infer<typeof sermonSourceVideoSchema>;
+export type SermonSourceVideosPage = z.infer<typeof sermonSourceVideosPageSchema>;
+export type SermonCheckQueued = z.infer<typeof sermonCheckQueuedSchema>;
 export type ReadVerse = z.infer<typeof readVerseSchema>;
 export type ReadChapter = z.infer<typeof readChapterSchema>;
 export type ResolvedReference = z.infer<typeof resolvedReferenceSchema>;

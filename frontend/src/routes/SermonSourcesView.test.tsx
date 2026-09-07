@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
 import { MemoryRouter } from "react-router-dom";
@@ -21,6 +21,8 @@ function source(overrides: Record<string, unknown> = {}) {
     min_minutes: null,
     last_checked_at: null,
     last_check_status: null,
+    check_requested_at: null,
+    counts: { pending: 0, needs_passage: 0, placed: 0, skipped: 0, already_noted: 0 },
     tags: ["sunday"],
     created_at: "2026-09-01T00:00:00Z",
     updated_at: "2026-09-01T00:00:00Z",
@@ -42,10 +44,21 @@ const TEACHING = source({
   tags: [],
 });
 
+/** The sources list alone. A source's title also appears as an option in the ledger's source
+ * filter below, so an unscoped query for it now matches twice — this says which one is meant. */
+function sourceList() {
+  return within(screen.getByRole("region", { name: "Sources" }));
+}
+
 /** The status endpoint gates the whole page, so every test has to answer it. */
-function statusHandler(configured = true, minMinutesDefault = 10) {
+function statusHandler(configured = true, minMinutesDefault = 10, scanRunning = false) {
   return http.get("/api/v1/sermon-sources/status", () =>
-    HttpResponse.json({ configured, min_minutes_default: minMinutesDefault }),
+    HttpResponse.json({
+      configured,
+      min_minutes_default: minMinutesDefault,
+      scan_running: scanRunning,
+      scan_started_at: scanRunning ? "2026-09-07T12:00:00Z" : null,
+    }),
   );
 }
 
@@ -78,7 +91,8 @@ describe("SermonSourcesView", () => {
     server.use(statusHandler(), sourcesHandler(CORNERSTONE, TEACHING));
     renderPage();
 
-    expect(await screen.findByText("Cornerstone Chapel")).toBeInTheDocument();
+    await screen.findByRole("region", { name: "Sources" });
+    expect(sourceList().getByText("Cornerstone Chapel")).toBeInTheDocument();
     // A channel that follows the app-wide minimum reads it as a number, not as "default".
     expect(
       screen.getByText(/Channel · includes livestreams · 10 minutes or longer · never checked/),
@@ -86,7 +100,7 @@ describe("SermonSourcesView", () => {
     expect(screen.getByText("sunday")).toBeInTheDocument();
 
     // A playlist with its own overrides, paused.
-    expect(screen.getByText("Sunday Teaching")).toBeInTheDocument();
+    expect(sourceList().getByText("Sunday Teaching")).toBeInTheDocument();
     expect(
       screen.getByText(/Playlist · no livestreams · 25 minutes or longer · never checked/),
     ).toBeInTheDocument();
@@ -147,7 +161,7 @@ describe("SermonSourcesView", () => {
 
     expect(await screen.findByText("Added Cornerstone Chapel.")).toBeInTheDocument();
     // Only the invalidation can refresh the list with these query defaults.
-    expect(await screen.findByText("Cornerstone Chapel")).toBeInTheDocument();
+    expect(await sourceList().findByText("Cornerstone Chapel")).toBeInTheDocument();
   });
 
   it("won't submit an empty link", async () => {
@@ -270,7 +284,7 @@ describe("SermonSourcesView", () => {
     await user.click(screen.getByRole("button", { name: "Cancel" }));
 
     expect(screen.queryByText(/Remove Cornerstone Chapel\?/)).not.toBeInTheDocument();
-    expect(screen.getByText("Cornerstone Chapel")).toBeInTheDocument();
+    expect(sourceList().getByText("Cornerstone Chapel")).toBeInTheDocument();
   });
 
   // --- Re-dating YouTube sermons (v1.7 spec §11) -------------------------------------------

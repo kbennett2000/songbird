@@ -106,6 +106,12 @@ export const defaultHandlers = [
   http.get("/api/v1/tags", () => HttpResponse.json([])),
   http.get("/api/v1/annotations", () => HttpResponse.json([])),
   http.get("/api/v1/sermon-notes", () => HttpResponse.json([])),
+  // The Sources page's ledger (v1.7 slice 4a) renders as soon as there is a source, so every test
+  // that puts one on the page would otherwise hit `onUnhandledRequest: "error"`. Ledger-specific
+  // tests override this per case.
+  http.get("/api/v1/sermon-sources/videos", () =>
+    HttpResponse.json({ videos: [], total: 0 }),
+  ),
   http.get("/api/v1/cross-references/:book/:chapter/:verse", () => HttpResponse.json([])),
   // Topical Bible (v1.6) defaults — most verses/topics queries are panel-on-demand; topics-specific
   // tests override per-case via server.use().
