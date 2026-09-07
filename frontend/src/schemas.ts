@@ -135,14 +135,16 @@ export const redateResultSchema = z.object({
 // address of a catalogue plus how it's filtered — never any video. `min_minutes` is null when the
 // source follows the app-wide default; `uploads_playlist_id` is null for a playlist, which is its
 // own catalogue. The scan's counts arrive with the scan.
-// What a source's checks have found so far, by state. Nested rather than five more fields on the
+// What a source's checks have found so far, by state. Nested rather than six more fields on the
 // source: it is one idea that grows, and it describes the ledger rather than the source itself.
+// Also the per-state tallies behind the review list's filter bar — the same idea asked of a filter.
 export const sermonSourceCountsSchema = z.object({
   pending: z.number(),
   needs_passage: z.number(),
   placed: z.number(),
   skipped: z.number(),
   already_noted: z.number(),
+  dismissed: z.number(),
 });
 
 export const sermonSourceSchema = z.object({
@@ -167,8 +169,7 @@ export const sermonSourceSchema = z.object({
 });
 export const sermonSourcesListSchema = z.array(sermonSourceSchema);
 
-// Every state a ledger row can be in. `dismissed` is the only one nothing writes yet — it arrives
-// with the review list.
+// Every state a ledger row can be in, in the API's vocabulary.
 export const sermonVideoStatusSchema = z.enum([
   "pending",
   "needs_passage",
@@ -194,20 +195,35 @@ export const sermonSourceVideoSchema = z.object({
   status: sermonVideoStatusSchema,
   skip_reason: z.enum(["too_short", "live_excluded"]).nullable(),
   placed_by: z.enum(["scripture_line", "title", "first_line", "manual"]).nullable(),
-  // References found deeper in the text when no rule placed the video. Shown as-is for now; the
-  // review list turns each into a one-tap button.
+  // References found deeper in the text when no rule placed the video. The review list turns
+  // each into a one-tap button.
   suggestions: z.array(z.string()),
   // The sermon notes this row's placement created — empty for every row that placed nothing.
-  notes: z.array(z.object({ id: z.number(), reference: z.string() })),
+  // `book_usfm` and `start_chapter` are enough to open the passage in the reader.
+  notes: z.array(
+    z.object({
+      id: z.number(),
+      reference: z.string(),
+      book_usfm: z.string(),
+      start_chapter: z.number(),
+    }),
+  ),
   seen_at: z.string(),
   decided_at: z.string().nullable(),
 });
 
-// One page of the ledger — `total` drives "Load more", like the other page-outs.
+// One page of the ledger — `total` drives "Load more", like the other page-outs. `counts` tallies
+// the same filter with the state clause taken out, which is what puts a number beside every state
+// in the filter bar and where "Dismiss all N matching" gets its N.
 export const sermonSourceVideosPageSchema = z.object({
   videos: z.array(sermonSourceVideoSchema),
   total: z.number(),
+  counts: sermonSourceCountsSchema,
 });
+
+// How many rows a bulk dismiss actually marked — which can be fewer than the filter matched,
+// because it never touches a row with notes behind it.
+export const sermonVideosDismissedSchema = z.object({ dismissed: z.number() });
 
 // "Check now" answers with how many sources were queued, not with what was found: the scan runs
 // in the background and the page watches the status endpoint for it.
@@ -462,6 +478,7 @@ export type SermonVideoStatus = z.infer<typeof sermonVideoStatusSchema>;
 export type SermonSourceVideo = z.infer<typeof sermonSourceVideoSchema>;
 export type SermonSourceVideosPage = z.infer<typeof sermonSourceVideosPageSchema>;
 export type SermonCheckQueued = z.infer<typeof sermonCheckQueuedSchema>;
+export type PlacedNote = SermonSourceVideo["notes"][number];
 export type ReadVerse = z.infer<typeof readVerseSchema>;
 export type ReadChapter = z.infer<typeof readChapterSchema>;
 export type ResolvedReference = z.infer<typeof resolvedReferenceSchema>;
