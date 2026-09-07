@@ -25,6 +25,14 @@ const SKIP_REASON: Record<"too_short" | "live_excluded", string> = {
   live_excluded: "a livestream, and this source leaves those out",
 };
 
+/** Where songbird read the passage, so a placement can be traced to the rule that made it. */
+const PLACED_BY: Record<"scripture_line" | "title" | "first_line" | "manual", string> = {
+  scripture_line: "from the scripture line in the description",
+  title: "from the title",
+  first_line: "from the first line of the description",
+  manual: "because you chose it",
+};
+
 function LedgerRow({ video }: { video: SermonSourceVideo }): JSX.Element {
   return (
     <li className="rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-3">
@@ -56,6 +64,50 @@ function LedgerRow({ video }: { video: SermonSourceVideo }): JSX.Element {
       <p className="mt-0.5 break-words text-sm text-gray-500 dark:text-gray-400">
         {video.source_title}
       </p>
+
+      {/* What songbird made of it. A placed row names the passages it wrote a note on and the
+          rule that read them, so a wrong placement can be traced to the rule that made it. The
+          references are text rather than links: these are ordinary sermon notes, and Browse and
+          the reader are where you open one. */}
+      {video.notes.length > 0 && (
+        <p className="mt-1 flex flex-wrap items-baseline gap-x-2 text-sm text-gray-700 dark:text-gray-200">
+          <span className="text-gray-500 dark:text-gray-400">Noted on</span>
+          {video.notes.map((note, index) => (
+            <span key={note.id} className="font-medium">
+              {index > 0 && (
+                <span aria-hidden="true" className="mr-2 font-normal">
+                  ·
+                </span>
+              )}
+              {note.reference}
+            </span>
+          ))}
+          {video.placed_by !== null && (
+            <span className="text-gray-500 dark:text-gray-400">{PLACED_BY[video.placed_by]}</span>
+          )}
+        </p>
+      )}
+
+      {/* What it found but could not choose between. Deliberately not buttons yet — tapping one
+          does nothing until the review list ships, and a control that does nothing is worse than
+          plain text. */}
+      {video.suggestions.length > 0 && (
+        <div className="mt-1">
+          <p className="text-sm text-gray-500 dark:text-gray-400">
+            songbird couldn&rsquo;t tell which of these the sermon was on:
+          </p>
+          <ul aria-label="Possible passages" className="mt-1 flex flex-wrap gap-1">
+            {video.suggestions.map((reference) => (
+              <li
+                key={reference}
+                className="rounded bg-gray-100 dark:bg-gray-700 px-2 py-0.5 text-xs text-gray-700 dark:text-gray-200"
+              >
+                {reference}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       <a
         href={watchUrl(video.video_id)}
@@ -168,7 +220,9 @@ export function SermonVideoLedger({ sources }: { sources: SermonSource[] }): JSX
           <p className="mb-2 text-sm text-gray-500 dark:text-gray-400">
             {videos.length} of {total}
           </p>
-          <ul className="flex flex-col gap-2">
+          {/* Named, because a row can now hold a list of its own (the suggested passages), and
+              "the list of videos" has to stay something a reader — and a test — can ask for. */}
+          <ul aria-label="Videos" className="flex flex-col gap-2">
             {videos.map((v) => (
               <LedgerRow key={v.id} video={v} />
             ))}

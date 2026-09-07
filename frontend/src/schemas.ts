@@ -163,8 +163,8 @@ export const sermonSourceSchema = z.object({
 });
 export const sermonSourcesListSchema = z.array(sermonSourceSchema);
 
-// Every state a ledger row can be in. Only `pending`, `skipped` and `already_noted` are written
-// today; the rest arrive with the slices that place notes and review them.
+// Every state a ledger row can be in. `dismissed` is the only one nothing writes yet — it arrives
+// with the review list.
 export const sermonVideoStatusSchema = z.enum([
   "pending",
   "needs_passage",
@@ -190,7 +190,11 @@ export const sermonSourceVideoSchema = z.object({
   status: sermonVideoStatusSchema,
   skip_reason: z.enum(["too_short", "live_excluded"]).nullable(),
   placed_by: z.enum(["scripture_line", "title", "first_line", "manual"]).nullable(),
+  // References found deeper in the text when no rule placed the video. Shown as-is for now; the
+  // review list turns each into a one-tap button.
   suggestions: z.array(z.string()),
+  // The sermon notes this row's placement created — empty for every row that placed nothing.
+  notes: z.array(z.object({ id: z.number(), reference: z.string() })),
   seen_at: z.string(),
   decided_at: z.string().nullable(),
 });

@@ -61,6 +61,7 @@ function ledgerVideo(overrides: Record<string, unknown> = {}) {
     skip_reason: null,
     placed_by: null,
     suggestions: [],
+    notes: [],
     seen_at: "2026-09-07T00:00:00Z",
     decided_at: null,
     ...overrides,
@@ -85,11 +86,14 @@ function sourceList() {
   return within(screen.getByRole("region", { name: "Sources" }));
 }
 
-/** The ledger's list alone. Its state words also appear as options in the state filter above it,
- * so an unscoped query matches twice — `ul` is the list of rows and nothing else. */
+/** The ledger's rows alone. Its state words also appear as options in the state filter above it,
+ * so an unscoped query matches twice — and a row can itself hold a list of suggested passages, so
+ * the rows are asked for by name rather than as "the list". */
 function ledgerRows() {
   return within(
-    within(screen.getByRole("region", { name: "What songbird found" })).getByRole("list"),
+    within(screen.getByRole("region", { name: "What songbird found" })).getByRole("list", {
+      name: "Videos",
+    }),
   );
 }
 
@@ -668,6 +672,74 @@ describe("SermonSourcesView", () => {
     // The reason reads as a phrase, not as a field name.
     expect(screen.getByText("shorter than this source's minimum")).toBeInTheDocument();
     expect(screen.getByText("2 of 2")).toBeInTheDocument();
+  });
+
+  it("says which passages a placed video was noted on, and which rule read them", async () => {
+    // Spec §7: a placement records the rule that made it, so a wrong anchor can be traced back
+    // to the rule rather than guessed at.
+    const placed = ledgerVideo({
+      status: "placed",
+      placed_by: "first_line",
+      notes: [
+        { id: 11, reference: "Acts 7:33-35" },
+        { id: 12, reference: "Exodus 3:5-10" },
+      ],
+    });
+    server.use(
+      statusHandler(),
+      sourcesHandler(CORNERSTONE),
+      http.get("/api/v1/sermon-sources/videos", () =>
+        HttpResponse.json({ videos: [placed], total: 1 }),
+      ),
+    );
+    renderPage();
+
+    expect(await screen.findByText("Acts 7:33-35")).toBeInTheDocument();
+    expect(screen.getByText("Exodus 3:5-10")).toBeInTheDocument();
+    // The rule, in the reader's words rather than as a field name.
+    expect(screen.getByText("from the first line of the description")).toBeInTheDocument();
+    expect(ledgerRows().getByText("Placed")).toBeInTheDocument();
+  });
+
+  it("shows what it found when it could not tell which passage was preached", async () => {
+    const unplaced = ledgerVideo({
+      status: "needs_passage",
+      suggestions: ["Psalms 23", "John 3:16"],
+    });
+    server.use(
+      statusHandler(),
+      sourcesHandler(CORNERSTONE),
+      http.get("/api/v1/sermon-sources/videos", () =>
+        HttpResponse.json({ videos: [unplaced], total: 1 }),
+      ),
+    );
+    renderPage();
+
+    expect(
+      await screen.findByText("songbird couldn\u2019t tell which of these the sermon was on:"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Psalms 23")).toBeInTheDocument();
+    expect(screen.getByText("John 3:16")).toBeInTheDocument();
+    // Not buttons: tapping one does nothing until the review list ships, and a control that does
+    // nothing is worse than plain text.
+    expect(ledgerRows().queryAllByRole("button")).toHaveLength(0);
+  });
+
+  it("says nothing about passages for a row that placed none", async () => {
+    server.use(
+      statusHandler(),
+      sourcesHandler(CORNERSTONE),
+      http.get("/api/v1/sermon-sources/videos", () =>
+        HttpResponse.json({ videos: [PENDING_VIDEO], total: 1 }),
+      ),
+    );
+    renderPage();
+
+    await screen.findByText("An in-depth study of 2 Chronicles 29");
+    expect(screen.queryByText("Noted on")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("songbird couldn\u2019t tell which of these the sermon was on:"),
+    ).not.toBeInTheDocument();
   });
 
   it("says a video of unknown length is unknown, not zero", async () => {
