@@ -429,5 +429,7 @@ class SermonSourceVideo(Base):
     seen_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=_utcnow
     )
-    # When this row stopped being `pending`. Null while it still is.
+    # When this row was last decided. Null while it is still `pending` — but not frozen at the
+    # moment it left, because the review list (spec §8) lets a row be decided again: placed, taken
+    # back, dismissed, restored.
     decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
