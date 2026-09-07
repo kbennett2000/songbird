@@ -85,6 +85,14 @@ def test_an_empty_label_does_not_shadow_a_real_one_below_it() -> None:
     assert text is not None and "John 3:16" in text
 
 
+def test_a_labelled_line_with_no_reference_on_it_does_not_shadow_one_below() -> None:
+    # A labelled line WINS by carrying a reference, not by existing. "Scripture: TBA" would
+    # otherwise be taken as the answer and the real one below it never looked at.
+    description = "Scripture: TBA\n\nMain Scripture: John 3:16"
+    text = scripture_line(description)
+    assert text is not None and "John 3:16" in text
+
+
 def test_the_first_line_is_the_first_one_with_anything_on_it() -> None:
     # Cornerstone's shape, under a couple of blank lines.
     assert first_line("\n\n  7/22/2026 An in-depth study of 2 Chronicles 29.\nmore") == (

@@ -23,9 +23,9 @@ from songbird.concord.client import ConcordUnreachableError
 from songbird.concord.schemas import Book, Chapter, ChapterVerse
 from songbird.db.models import SermonNote, SermonSource, SermonSourceVideo, Tag, User
 from songbird.sermons.place import STATUS_CONCORD_DOWN, Placer, RunState
-from songbird.sermons.scan import STATUS_OK, ScanRunner
+from songbird.sermons.scan import STATUS_OK, STATUS_UNKNOWN, ScanRunner
 from songbird.youtube.schemas import Video
-from sqlalchemy import select
+from sqlalchemy import event, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from tests.conftest import FakeConcordClient, FakeYouTubeClient
 from tests.helpers import build_chapter
@@ -489,8 +489,10 @@ async def test_every_note_from_one_video_shares_its_title_link_date_and_tags(
     assert {n.sermon_url for n in notes} == {"https://www.youtube.com/watch?v=vid00000001"}
     assert {n.event_date for n in notes} == {_PUBLISHED.date()}
     assert {tuple(sorted(t.name for t in n.tags)) for n in notes} == {("cornerstone", "sermon")}
-    # The link back to the row that made them, and the id derived from the URL by the model.
-    assert {n.source_video_id for n in notes} == {notes[0].source_video_id}
+    # The link back to the row that made them — the actual row, not merely "all the same".
+    row = (await _rows(db_sessionmaker))["vid00000001"]
+    assert {n.source_video_id for n in notes} == {row.id}
+    # And the id the model derives from the URL, which is what makes a later check skip this video.
     assert {n.youtube_video_id for n in notes} == {"vid00000001"}
     # Canonical order comes from Concord, never from songbird.
     assert sorted(n.book_order_index for n in notes) == [2, 44]
@@ -600,10 +602,16 @@ async def test_a_row_that_has_left_pending_is_never_read_again(
     assert (await _rows(db_sessionmaker))["vid00000001"].status == "dismissed"
 
 
-async def test_a_source_with_nothing_pending_asks_concord_nothing(
+async def test_a_source_with_nothing_pending_does_no_work_at_all(
     db_sessionmaker: async_sessionmaker[AsyncSession],
 ) -> None:
-    # The common weekly case. No boilerplate pass over a thousand descriptions, and no lookups.
+    """The common weekly case, and the reason for the early return.
+
+    No lookups, and — the part worth counting — no boilerplate pass either. That pass reads every
+    description this source has ever ledgered, which on a real church is a thousand of them, and
+    doing it to decide nothing is the difference between a check that costs nothing at rest and one
+    that does not.
+    """
     concord = _concord()
     await _seed(db_sessionmaker, [("vid00000001", "A study", "Scripture: John 3:16")])
     async with db_sessionmaker() as db:
@@ -611,9 +619,21 @@ async def test_a_source_with_nothing_pending_asks_concord_nothing(
         row.status = "already_noted"
         await db.commit()
 
-    await _place(db_sessionmaker, concord)
+    engine = db_sessionmaker.kw["bind"]
+    reads: list[str] = []
+
+    @event.listens_for(engine.sync_engine, "before_cursor_execute")
+    def _record(_conn: object, _cur: object, statement: str, *_rest: object) -> None:
+        reads.append(statement)
+
+    try:
+        await _place(db_sessionmaker, concord)
+    finally:
+        event.remove(engine.sync_engine, "before_cursor_execute", _record)
 
     assert concord.resolve_calls == []
+    # Nothing went looking for the text a passage is read out of.
+    assert not [s for s in reads if "description" in s]
 
 
 # ---- Concord going away, mid-run ---------------------------------------------------------------
@@ -699,15 +719,20 @@ async def test_a_run_keeps_fetching_after_concord_goes_away(
             )
         await db.commit()
 
+    concord = FakeConcordClient(
+        error=ConcordUnreachableError("http://concord.test", httpx.ConnectError("down"))
+    )
     runner = ScanRunner(
         db_sessionmaker,
         youtube,  # type: ignore[arg-type]
-        FakeConcordClient(  # type: ignore[arg-type]
-            error=ConcordUnreachableError("http://concord.test", httpx.ConnectError("down"))
-        ),
+        concord,  # type: ignore[arg-type]
         default_min_minutes=10,
     )
     await runner.run()
+
+    # Asked once, for the first source's first candidate, and never again. Concord being down is a
+    # fact about Concord: rediscovering it per source would be a round trip each for nothing.
+    assert concord.resolve_calls == ["John 3:16"]
 
     # Both catalogues were walked and ledgered — YouTube was never the problem.
     rows = await _rows(db_sessionmaker)
@@ -784,3 +809,55 @@ async def test_a_scan_created_note_shows_in_a_translation_the_scan_never_saw(
     assert by_verse[15]["sermon_notes"] == []
     assert by_verse[17]["sermon_notes"] == []
     assert read["translation"] == "WEB"
+
+
+async def test_an_evaluation_that_blows_up_does_not_condemn_the_walk(
+    db_sessionmaker: async_sessionmaker[AsyncSession],
+) -> None:
+    """Two different facts, and only one of them is about paging.
+
+    `scan_complete` means "the catalogue was walked to its natural stop", and the next check reads
+    it to decide whether it may trust the incremental stop rule. A bug in the reading half has
+    nothing to say about that — writing False there would make every future check re-walk the whole
+    catalogue to atone for something that happened after the walk was over.
+    """
+
+    class Explodes(FakeConcordClient):
+        async def list_books(self) -> list[Book]:
+            raise RuntimeError("a bug, not a network")
+
+    youtube = FakeYouTubeClient(
+        videos=[_video("vid00000001", "A study", "Scripture: John 3:16")],
+        pages={_UPLOADS: [["vid00000001"]]},
+    )
+    async with db_sessionmaker() as db:
+        db.add(
+            SermonSource(
+                id=1,
+                kind="channel",
+                youtube_id=_CHANNEL_ID,
+                uploads_playlist_id=_UPLOADS,
+                input_url="https://www.youtube.com/@achurch",
+                title="A Church",
+                author_id=1,
+            )
+        )
+        await db.commit()
+
+    runner = ScanRunner(
+        db_sessionmaker,
+        youtube,  # type: ignore[arg-type]
+        Explodes(resolved_by_ref=_KNOWN),  # type: ignore[arg-type]
+        default_min_minutes=10,
+    )
+    await runner.run()
+
+    async with db_sessionmaker() as db:
+        source = await db.get(SermonSource, 1)
+    assert source is not None
+    # The owner is told something went wrong, in the words that say nothing technical...
+    assert source.last_check_status == STATUS_UNKNOWN
+    # ...and the catalogue is still known to be complete.
+    assert source.scan_complete is True
+    # The video was fetched and is waiting to be read again.
+    assert (await _rows(db_sessionmaker))["vid00000001"].status == "pending"
