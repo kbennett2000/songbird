@@ -32,7 +32,7 @@ from songbird.api.sermon_sources import router as sermon_sources_router
 from songbird.api.strongs import router as strongs_router
 from songbird.api.tags import router as tags_router
 from songbird.api.topics import router as topics_router
-from songbird.concord.client import ConcordClient
+from songbird.concord.client import ConcordClient, ConcordUnreachableError
 from songbird.config import get_settings
 from songbird.core.sessions import cleanup_all_expired_sessions
 from songbird.db.session import async_session_factory
@@ -77,6 +77,16 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         else None
     )
     logger.info("songbird %s starting; Concord at %s", __version__, settings.concord_base_url)
+    # Which corpus actually answered. The address alone can't tell you that you reached the
+    # Concord you meant: a wrong-but-live one answers just as happily, and the only visible
+    # difference is the translations it serves. Best-effort — Concord being down is a real
+    # runtime error (invariant 3), but it is one for the requests that need it to raise, not
+    # for boot to die on. Mirrors the session sweep below.
+    try:
+        ids = sorted(t.id for t in await app.state.concord.list_translations())
+        logger.info("Concord corpus: %d translations (%s)", len(ids), ", ".join(ids))
+    except ConcordUnreachableError as exc:
+        logger.warning("Concord not reachable at startup: %s", exc)
     logger.info("sermon sources: %s", "on" if app.state.youtube else "off (no YOUTUBE_API_KEY)")
     # Hygiene: sweep dead session rows for users who never return (per-user cleanup only runs on
     # that user's next login). Best-effort — it must never block boot, so failures are logged.
