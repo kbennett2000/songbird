@@ -222,14 +222,11 @@ export function SermonSourcesView(): JSX.Element {
         queryClient.invalidateQueries({ queryKey: ["sermon-sources-status"] }),
         queryClient.invalidateQueries({ queryKey: ["sermon-sources"] }),
       ]);
-      setActionMsg(
-        result.queued === 0
-          ? { kind: "ok", text: "Nothing to check — every source is paused." }
-          : // Announced here rather than by the indicator below, because this banner is the
-            // page's only live region: a screen-reader user who pressed the button has to be
-            // told something started.
-            { kind: "ok", text: "Checking your sources…" },
-      );
+      // Nothing in the banner when work was queued: the indicator below is the live region for
+      // scan state, and saying it in both places puts the same sentence on screen twice.
+      if (result.queued === 0) {
+        setActionMsg({ kind: "ok", text: "Nothing to check — every source is paused." });
+      }
     },
     onError: (err) => fail(err, "Couldn't start a check."),
   });
@@ -393,12 +390,14 @@ export function SermonSourcesView(): JSX.Element {
                     Check all now
                   </button>
                   {scanning && (
-                    // Visual state beside the control that caused it — deliberately NOT a second
-                    // `role="status"`. The banner above is the page's one live region, and two
-                    // of them announce over each other for a screen reader while telling a
-                    // sighted reader the same thing twice. Its own text in its own colour, never
-                    // an opacity on something else.
-                    <span className="text-sm text-gray-600 dark:text-gray-300">
+                    // The live region for scan state, and the only place it is said: a check
+                    // starting is news, and it belongs beside the control that caused it. The
+                    // banner stays quiet for a queued check so the same sentence does not appear
+                    // twice on screen.
+                    //
+                    // Status, not a dimmed control — its own text in its own colour, never an
+                    // opacity on something else.
+                    <span role="status" className="text-sm text-gray-600 dark:text-gray-300">
                       Checking your sources…
                     </span>
                   )}

@@ -52,12 +52,23 @@ async function ensureSignedIn(page, base) {
   if (page.url().includes("/login")) {
     await page.getByLabel("Username").fill(USERNAME);
     await page.getByLabel("Password").fill(PASSWORD);
-    // Register-or-sign-in: whichever this account needs.
-    const register = page.getByRole("button", { name: /Create account|Register/ });
-    const signIn = page.getByRole("button", { name: /Sign in|Log in/ });
+    // Sign in if the account exists, register if it doesn't. Trying sign-in FIRST and falling
+    // back is the only order that works against both a used instance and a fresh one — and the
+    // no-key instance is always fresh, which is how this was found.
+    const signIn = page.getByRole("button", { name: /^(Sign in|Log in)$/ });
     if (await signIn.count()) await signIn.first().click();
-    else await register.first().click();
-    await page.waitForURL((url) => !url.pathname.includes("/login"), { timeout: 10000 });
+    const landed = await page
+      .waitForURL((url) => !url.pathname.includes("/login"), { timeout: 4000 })
+      .then(() => true)
+      .catch(() => false);
+    if (!landed) {
+      const toggle = page.getByRole("button", { name: /Need an account\? Register/ });
+      if (await toggle.count()) await toggle.first().click();
+      await page.getByLabel("Username").fill(USERNAME);
+      await page.getByLabel("Password").fill(PASSWORD);
+      await page.getByRole("button", { name: /^(Register|Create account)$/ }).first().click();
+      await page.waitForURL((url) => !url.pathname.includes("/login"), { timeout: 10000 });
+    }
   }
 }
 

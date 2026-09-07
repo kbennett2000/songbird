@@ -504,10 +504,19 @@ describe("SermonSourcesView", () => {
 
   // ---- Checking, counts and the ledger (v1.7 slice 4a) --------------------------------------
 
-  it("queues a check and says nothing, because the indicator says it instead", async () => {
+  it("queues a check and says so exactly once", async () => {
     let queued = false;
     server.use(
-      statusHandler(),
+      // The server reports the scan as running once it has been asked for, which is what the
+      // page's own refetch then sees — the real sequence, not a frozen snapshot of it.
+      http.get("/api/v1/sermon-sources/status", () =>
+        HttpResponse.json({
+          configured: true,
+          min_minutes_default: 10,
+          scan_running: queued,
+          scan_started_at: queued ? "2026-09-07T12:00:00Z" : null,
+        }),
+      ),
       sourcesHandler(CORNERSTONE),
       http.post("/api/v1/sermon-sources/check", () => {
         queued = true;
@@ -519,13 +528,9 @@ describe("SermonSourcesView", () => {
 
     await user.click(await screen.findByRole("button", { name: "Check all now" }));
 
-    await waitFor(() => expect(queued).toBe(true));
-    // Someone who pressed the button is told something started — and told it exactly once.
-    // Two live regions talk over each other for a screen reader, which is what the browser pass
-    // found when the indicator carried a `role="status"` of its own.
-    const announced = await screen.findByRole("status");
-    expect(announced).toHaveTextContent("Checking your sources…");
-    expect(screen.queryAllByRole("status")).toHaveLength(1);
+    // Said once, in one place. The browser pass caught this sentence on screen TWICE — as the
+    // banner and as the indicator — when both were made to say it.
+    expect(await screen.findAllByText("Checking your sources…")).toHaveLength(1);
     expect(screen.queryByText(/Nothing to check/)).not.toBeInTheDocument();
   });
 
@@ -580,12 +585,13 @@ describe("SermonSourcesView", () => {
     server.use(statusHandler(true, 10, true), sourcesHandler(CORNERSTONE));
     renderPage();
 
-    expect(await screen.findByText("Checking your sources…")).toBeInTheDocument();
+    // The indicator IS the live region for scan state, so a reader who cannot see the disabled
+    // buttons is still told a check is running.
+    expect(await screen.findByRole("status")).toHaveTextContent("Checking your sources…");
     expect(screen.getByRole("button", { name: "Check all now" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Check now" })).toBeDisabled();
-    // Nothing to announce: this page was loaded while a check was already running, so the reader
-    // did nothing that needs a reply. The indicator is visual state, not a live region.
-    expect(screen.queryAllByRole("status")).toHaveLength(0);
+    // …and it is the only one on the page, so nothing talks over it.
+    expect(screen.queryAllByRole("status")).toHaveLength(1);
   });
 
   it("says a source is waiting its turn once one has been asked for", async () => {
