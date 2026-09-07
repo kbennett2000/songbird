@@ -8,6 +8,11 @@ from fastapi import HTTPException
 
 class ErrorCode(StrEnum):
     CONCORD_UNREACHABLE = "CONCORD_UNREACHABLE"
+    # YouTube (v1.7 sermon sources). Unlike Concord, YouTube's absence is a recorded condition,
+    # not a fatal one — NOT_CONFIGURED simply means no key was set and the feature is off.
+    YOUTUBE_NOT_CONFIGURED = "YOUTUBE_NOT_CONFIGURED"
+    YOUTUBE_UNREACHABLE = "YOUTUBE_UNREACHABLE"
+    YOUTUBE_QUOTA = "YOUTUBE_QUOTA"
     NOT_FOUND = "NOT_FOUND"
     ANNOTATION_NOT_FOUND = "ANNOTATION_NOT_FOUND"
     SERMON_NOTE_NOT_FOUND = "SERMON_NOTE_NOT_FOUND"
