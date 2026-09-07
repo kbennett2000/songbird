@@ -44,6 +44,10 @@ describe("TopNav", () => {
       ["Search", "/search"],
       ["Places", "/places"],
       ["Compare", "/compare"],
+      // Utility rather than content, but it must be *reachable*: it's the only page that names
+      // which Concord songbird is reading, and so the only place a missing translation is
+      // explicable. It was routed but unlinked, which is how a wrong-Concord swap stayed hidden.
+      ["Status", "/status"],
     ] as const) {
       expect(within(banner).getByRole("link", { name })).toHaveAttribute("href", href);
     }
@@ -54,6 +58,12 @@ describe("TopNav", () => {
   it("emphasizes the current page's link", () => {
     renderNav("/places");
     expect(screen.getByRole("link", { name: "Places" })).toHaveClass("font-semibold");
+    expect(screen.getByRole("link", { name: "Search" })).not.toHaveClass("font-semibold");
+  });
+
+  it("emphasizes Status on the status page", () => {
+    renderNav("/status");
+    expect(screen.getByRole("link", { name: "Status" })).toHaveClass("font-semibold");
     expect(screen.getByRole("link", { name: "Search" })).not.toHaveClass("font-semibold");
   });
 

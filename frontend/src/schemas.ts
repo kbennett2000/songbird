@@ -17,6 +17,10 @@ export const concordStatusSchema = z.object({
   reachable: z.boolean(),
   status: z.string().nullable(),
   translation_count: z.number().nullable(),
+  // Which translations that Concord actually serves. A reachable-but-wrong Concord looks
+  // identical on every other field, so this is the one that gives it away. Optional so an
+  // older backend (no such field) still parses.
+  translation_ids: z.array(z.string()).nullable().optional(),
   error: z.string().nullable(),
 });
 
