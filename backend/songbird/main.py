@@ -38,6 +38,7 @@ from songbird.config import get_settings
 from songbird.core.sessions import cleanup_all_expired_sessions
 from songbird.db.session import async_session_factory
 from songbird.sermons.scan import ScanRunner
+from songbird.sermons.schedule import ScheduledCheck
 from songbird.youtube.client import YouTubeClient
 
 logger = logging.getLogger("songbird")
@@ -61,10 +62,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         YouTubeClient(settings.youtube_api_key) if settings.youtube_api_key else None
     )
     # No key means nothing to scan, so there is no runner at all — one null check at the seam
-    # instead of a runner that can only ever answer "switched off". It is built here rather than
-    # started here: nothing runs until a source is added or "Check now" is pressed (the scheduled
-    # check, spec §6c, is slice 6). Note the moment this deploys, every existing source has a null
-    # `last_checked_at` and so is due — the first check will scan all of their back catalogues.
+    # instead of a runner that can only ever answer "switched off". Note the moment this deploys,
+    # every existing source has a null `last_checked_at` and so is due — the first check will scan
+    # all of their back catalogues.
     app.state.sermon_scan = (
         ScanRunner(
             async_session_factory,
@@ -77,6 +77,20 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         if app.state.youtube is not None
         else None
     )
+    # The schedule (spec §6c). Only where there is something for it to start: no key means no
+    # runner, and an interval of 0 means `start()` creates no task at all. Built and started here
+    # because a timer's whole point is to outlive every request.
+    app.state.sermon_schedule = (
+        ScheduledCheck(
+            async_session_factory,
+            app.state.sermon_scan,
+            interval_hours=settings.sermon_check_interval_hours,
+        )
+        if app.state.sermon_scan is not None
+        else None
+    )
+    if app.state.sermon_schedule is not None:
+        app.state.sermon_schedule.start()
     logger.info("songbird %s starting; Concord at %s", __version__, settings.concord_base_url)
     # Which corpus actually answered. The address alone can't tell you that you reached the
     # Concord you meant: a wrong-but-live one answers just as happily, and the only visible
@@ -89,6 +103,13 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     except ConcordUnreachableError as exc:
         logger.warning("Concord not reachable at startup: %s", exc)
     logger.info("sermon sources: %s", "on" if app.state.youtube else "off (no YOUTUBE_API_KEY)")
+    if app.state.sermon_schedule is not None:
+        logger.info(
+            "scheduled check: %s",
+            f"every {settings.sermon_check_interval_hours}h"
+            if app.state.sermon_schedule.enabled
+            else "off (SERMON_CHECK_INTERVAL_HOURS=0); use Check now",
+        )
     # Hygiene: sweep dead session rows for users who never return (per-user cleanup only runs on
     # that user's next login). Best-effort — it must never block boot, so failures are logged.
     try:
@@ -104,18 +125,25 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         # Nested so every close still happens if an earlier one raises. ASGI swallows
         # lifespan-shutdown errors, so a flat sequence would leak it silently.
         #
-        # The scan stops FIRST, because it holds the YouTube client the next line closes — the
+        # The schedule stops FIRST of all, because its whole job is to start scans: stopping it
+        # last would let it hand the runner new work while the runner was shutting down.
+        #
+        # The scan stops next, because it holds the YouTube client the line after closes — the
         # other order would leave an in-flight request against a closed transport, raising inside
         # a task nobody awaits.
         try:
-            if app.state.sermon_scan is not None:
-                await app.state.sermon_scan.aclose()
+            if app.state.sermon_schedule is not None:
+                await app.state.sermon_schedule.aclose()
         finally:
             try:
-                if app.state.youtube is not None:
-                    await app.state.youtube.aclose()
+                if app.state.sermon_scan is not None:
+                    await app.state.sermon_scan.aclose()
             finally:
-                await app.state.concord.aclose()
+                try:
+                    if app.state.youtube is not None:
+                        await app.state.youtube.aclose()
+                finally:
+                    await app.state.concord.aclose()
 
 
 def _mount_frontend(app: FastAPI, dist_dir: Path) -> None:

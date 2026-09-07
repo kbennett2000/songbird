@@ -31,6 +31,7 @@ from songbird.api.deps import (
     get_current_user,
     get_db,
     get_scan_runner_optional,
+    get_scheduled_check_optional,
     get_youtube_client,
     get_youtube_client_optional,
 )
@@ -50,6 +51,7 @@ from songbird.config import get_settings
 from songbird.core.errors import ErrorCode, raise_http
 from songbird.db.models import SermonNote, SermonSource, SermonSourceVideo, User
 from songbird.sermons.scan import ScanRunner
+from songbird.sermons.schedule import ScheduledCheck
 from songbird.youtube.client import (
     YouTubeAuthError,
     YouTubeClient,
@@ -161,22 +163,31 @@ async def _resolve(url: str, youtube: YouTubeClient) -> tuple[str, str, str | No
 async def sermon_sources_status(
     youtube: YouTubeClient | None = Depends(get_youtube_client_optional),
     runner: ScanRunner | None = Depends(get_scan_runner_optional),
+    schedule: ScheduledCheck | None = Depends(get_scheduled_check_optional),
     user: User = Depends(get_current_user),
 ) -> SermonSourcesStatus:
-    """Whether the feature is switched on, the default the add form hints at, and whether a check
-    is running right now — which the page polls for while one is.
+    """Whether the feature is switched on, the default the add form hints at, whether a check is
+    running right now — which the page polls for while one is — and the schedule behind it.
 
-    Uses the OPTIONAL dependencies for both: with no key this must answer `configured: false`
-    rather than 409 (the page's setup message IS the answer), and with no runner it must answer
-    "nothing is running", which is true. `scan_started_at` is read only when a scan really is
-    running, so the two fields can never disagree with each other.
+    Uses the OPTIONAL dependencies for all three: with no key this must answer
+    `configured: false` rather than 409 (the page's setup message IS the answer), and with no
+    runner or no timer it must answer "nothing is running, nothing is scheduled", which is true.
+    `scan_started_at` is read only when a scan really is running, so the two fields can never
+    disagree with each other.
     """
     running = runner is not None and runner.running
+    settings = get_settings()
     return SermonSourcesStatus(
         configured=youtube is not None,
-        min_minutes_default=get_settings().sermon_min_minutes,
+        min_minutes_default=settings.sermon_min_minutes,
         scan_running=running,
         scan_started_at=runner.started_at if running and runner is not None else None,
+        # The interval comes from settings, not from the timer, so the number is still right on a
+        # box with no key — where there is no timer to ask.
+        interval_hours=settings.sermon_check_interval_hours,
+        timer_enabled=schedule is not None and schedule.enabled,
+        last_scheduled_run_at=schedule.last_run_at if schedule is not None else None,
+        next_scheduled_run_at=schedule.next_run_at if schedule is not None else None,
     )
 
 

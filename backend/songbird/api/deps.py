@@ -10,6 +10,7 @@ from songbird.core.sessions import extend_session, get_session
 from songbird.db.models import User
 from songbird.db.session import get_db
 from songbird.sermons.scan import ScanRunner
+from songbird.sermons.schedule import ScheduledCheck
 from songbird.youtube.client import YouTubeClient
 
 __all__ = [
@@ -57,6 +58,16 @@ def get_scan_runner_optional(request: Request) -> ScanRunner | None:
     """
     runner: ScanRunner | None = getattr(request.app.state, "sermon_scan", None)
     return runner
+
+
+def get_scheduled_check_optional(request: Request) -> ScheduledCheck | None:
+    """The interval timer built in the app lifespan, or None if there isn't one.
+
+    `getattr` and optional for the same two reasons as the runner above: the fast suite never runs
+    the lifespan, and a box with no key has no timer to report on. `/status` answers either way.
+    """
+    schedule: ScheduledCheck | None = getattr(request.app.state, "sermon_schedule", None)
+    return schedule
 
 
 def get_youtube_client(

@@ -624,13 +624,19 @@ async def test_status_reports_no_key_without_failing(
 
     assert resp.status_code == 200
     # The whole shape, so a field added later has to be added here deliberately. `scan_running`
-    # is false because the fast suite never runs the lifespan and so has no runner — which is
-    # exactly the "answer, don't fail" property this endpoint exists for, now applied twice.
+    # and `timer_enabled` are false because the fast suite never runs the lifespan and so has
+    # neither a runner nor a timer — which is exactly the "answer, don't fail" property this
+    # endpoint exists for, now applied three times. `interval_hours` still reports the setting,
+    # because it comes from settings rather than from the timer that does not exist.
     assert resp.json() == {
         "configured": False,
         "min_minutes_default": 10,
         "scan_running": False,
         "scan_started_at": None,
+        "interval_hours": 168,
+        "timer_enabled": False,
+        "last_scheduled_run_at": None,
+        "next_scheduled_run_at": None,
     }
 
 
