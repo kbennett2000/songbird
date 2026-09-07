@@ -94,7 +94,9 @@ annotations and sermon notes (v1.2 §4), not a parallel set.
 a livestream), `status` (**`pending`** | `placed` | `needs_passage` | `skipped` | `dismissed` |
 `already_noted`), `skip_reason` (nullable: `too_short` | `live_excluded`), `placed_by` (nullable:
 `scripture_line` | `title` | `first_line` | `manual`), `suggestions` (JSON list of reference strings
-found deeper in the text, §7), `seen_at`, `decided_at`. Index on (`author_id`, `status`) for the
+found deeper in the text, §7), `seen_at`, `decided_at` (**when the row was last decided** — null
+while it is still `pending`; slice 5 restamps it on every place, dismiss, restore and reopen, since
+a row can now be decided more than once). Index on (`author_id`, `status`) for the
 review list and on (`author_id`, `video_id`) for the "have we seen this" check — the latter is the
 uniqueness constraint itself, which in SQLite *is* an index.
 
@@ -326,6 +328,66 @@ On the Sources page, filtered by status:
 - **Dismissed**: restorable to *Needs a passage*.
 - **Placed**: links to the notes it created.
 
+*As built (slice 5).* The list this describes is the one the live data demands: **one church left
+351 rows in `needs_passage` after a single scan**, because a service titled by its date names no
+passage, and they get worked through a few at a time over months. Five things follow from that
+number.
+
+**One definition of what a filter selects.** The listing (`GET /videos`) grows `published_after`,
+`published_before` and `q` (a case-insensitive title substring), and the bulk dismiss takes the same
+five fields as its body. Both go through one WHERE builder, because a sweep that selected different
+rows from the ones on screen would dismiss videos the reader never saw and nothing on the page would
+show that it had. The listing also answers with **`counts`** — the same filter tallied per state
+with the state clause removed — which puts a number beside every state in the filter bar and is
+where the bulk button gets its N.
+
+**The dates compare against the day the row shows** — `coalesce(actual_start_time, published_at)`,
+the §7 rule expressed in SQL. A service streamed 14:55 on the Sunday and posted 04:32 on the Monday
+displays as Sunday, and a filter that disagreed with the screen would be a filter feeding a bulk
+write. Ordering stays by `published_at`: the two differ by at most a day, and re-sorting a list
+somebody is working through row by row is worse than the inconsistency.
+
+**Undo has one rule, shared by restore and reopen.** A row carrying a `skip_reason` goes back to
+`skipped` with its reason; everything else goes to `needs_passage`. `skip_reason` is the only record
+of where a row came from, which is why **placing keeps it** rather than clearing it — without that,
+"Note it anyway" followed by "Wrong passage" would quietly promote a three-minute announcement clip
+into the sermon queue.
+
+**Reopen, and its automatic half.** `POST /videos/{id}/reopen` on a placed row deletes the notes
+that row created — scoped by `source_video_id`, so a note the owner wrote by hand on the same sermon
+is untouched — clears `placed_by`, keeps the suggestions, and applies the rule above. It is the fix
+path for the defect this feature is most likely to produce: a title that reads as a reference and
+isn't (§13). **The same reopening happens when the last note behind a video is deleted through the
+ordinary sermon-note DELETE**, because otherwise deleting a wrong note from Browse would leave the
+row marked `placed` with nothing behind it — invisible in the review list, findable only by someone
+who thought to filter by a state they had no reason to suspect. A surviving sibling note leaves the
+row alone, and so does a row somebody has since decided something else about.
+
+**The bulk dismiss, and the two things it will not do.** `POST /videos/dismiss-matching` marks
+everything the filter selects as not a sermon and answers with the count. It **refuses an empty
+filter** (422 `EMPTY_FILTER`) — unrecoverable in one action, since restore is per row — and it
+**only ever touches rows in `needs_passage` or `skipped`**, so however wide the filter it can never
+delete a note, and never throw away a `pending` row the next check is about to read. The count it
+returns can therefore be smaller than the number of rows on screen, and it is the count that gets
+reported. In the UI the offer is narrower still: a **state on its own does not earn the button**.
+Choosing "Needs a passage" is the first thing anybody does, and the live pass found it putting
+"Dismiss all 349 matching" on screen before a single row had been read — so the sweep needs a
+source, a date or a search behind it.
+
+**Anything else is a 409** (`VIDEO_STATE`): the row is real and yours, and it has already moved on,
+usually because another tab is showing a state that stopped being true. Placing is allowed from
+`needs_passage`, `skipped` and `dismissed`.
+
+**A row that is acted on stays where it is** and grows its undo, rather than dropping out of a
+filtered list. It keeps the reader's place among hundreds, puts the mistake just made within reach,
+and means no action refetches the pages already loaded. The per-state counts are moved with the row,
+or the bulk button would start promising a number the server would not deliver. Only the bulk sweep
+refetches — it changes rows wholesale, so there is no place left to keep.
+
+**No migration.** `dismissed` and `manual` were already legal values of the plain `String(24)`
+`status` and `placed_by` columns — the vocabulary is held in Python at both ends by design (§4) —
+and `skip_reason` already carried everything undo needs. The absence of a `0014` is deliberate.
+
 ## 9. API
 
 Auth-gated and author-scoped, under `/api/v1/sermon-sources`:
@@ -338,9 +400,11 @@ Auth-gated and author-scoped, under `/api/v1/sermon-sources`:
 | `POST` | `/api/v1/sermon-sources/{id}/check` | Check this source now → `202 {queued}` |
 | `POST` | `/api/v1/sermon-sources/check` | Check all enabled sources now → `202 {queued}` |
 | `GET` | `/api/v1/sermon-sources/status` | Key configured? interval, running?, last/next scheduled run |
-| `GET` | `/api/v1/sermon-sources/videos?status=…&source_id=…` | The ledger, filtered (no filter = every state) |
+| `GET` | `/api/v1/sermon-sources/videos?status=…&source_id=…&published_after=…&published_before=…&q=…` | The ledger, filtered (no filter = every state); answers `{videos, total, counts}` |
 | `POST` | `/api/v1/sermon-sources/videos/{id}/place` | Body `{references: [...]}` → one note per reference; row → `placed`/`manual` |
 | `POST` | `/api/v1/sermon-sources/videos/{id}/dismiss` · `/restore` | Dismiss / undo |
+| `POST` | `/api/v1/sermon-sources/videos/{id}/reopen` | §8: delete the notes this row made, put it back in the list |
+| `POST` | `/api/v1/sermon-sources/videos/dismiss-matching` | Body = the listing's filters → `{dismissed: n}`; 422 on an empty filter |
 | `POST` | `/api/v1/sermon-notes/redate` | §11: `?dry_run=true` returns the preview; without it, applies |
 
 *As built (slice 4a), two corrections this table needed:*
@@ -352,6 +416,17 @@ Auth-gated and author-scoped, under `/api/v1/sermon-sources`:
   checked" for ever. Both endpoints still require a key: queueing work that could never run is a lie
   told in the friendliest possible way. **`GET /videos` does not** — it reads songbird's own table,
   and a key rotated out must not take away the record of what was already found.
+*As built (slice 5):*
+
+- **The four row actions live in their own module** (`api/sermon_review.py`) on the same prefix, the
+  shape `sermon_redate.py` already uses. `sermon_sources.py` is the catalogue — registering a channel
+  and reporting what has been seen; this is the deciding, and the two review as separate diffs. The
+  scoping, the filter builder and the row-shaped response they share live in `api/_sermon_ledger.py`.
+- **Every action answers with the updated row**, in the same shape a page of them uses, so the list
+  can redraw one row instead of refetching hundreds (§8).
+- **`dismiss-matching` is declared before `/videos/{id}/…`** for the reason `/status` and `/videos`
+  already document, and has its own test.
+
 - **The ledger's default filter is every state, not `needs_passage`.** Nothing can *be*
   `needs_passage` until the placement slice, so that default would answer the first person who ever
   opens the view with an empty list. Which state to show first is the client's business.
@@ -438,6 +513,12 @@ otherwise.
 - Other platforms (Vimeo, podcast feeds). The source `kind` column leaves the door open.
 - Per-source custom placement patterns (regex). The three built-in rules cover all four real sources.
 
+- **Reopening an `already_noted` row.** Deleting the last note behind a *placed* video puts it
+  back in the review list (§8); deleting a hand-written note that made a video `already_noted` does
+  not. Nothing links the two — an `already_noted` row is matched by `youtube_video_id` at scan time
+  and no note ever points at it (§4) — so there is nothing to follow back. The video simply returns
+  to the review list at the next check, which is the right answer arrived at slowly.
+
 **Known limitations, found live in slice 4a:**
 
 - **A broadcast that never airs is re-read on every check.** §6's first filter deliberately leaves an
@@ -506,7 +587,10 @@ Smallest reviewable, load-bearing unit; branch `slice/N-…`, PR per slice, Plan
      and `sermon_notes.source_video_id` (`0013`). Consumes `pending`. Fixture-driven tests on the
      real description shapes, and a by-eye audit against the real channels that caught the date
      collision §7 now guards against.
-5. **Review list** (§8) — place / dismiss / restore / note-it-anyway, UI.
+5. **Review list** (§8) — ✅ place / dismiss / restore / note-it-anyway, plus reopen, the
+   automatic reopen when a video's last note is deleted, the listing's date and title filters
+   with per-state counts, and the bulk dismiss. Worked for real against 351 live rows, which is
+   what found the six things the UI got wrong and the one that corrupted a scan.
 6. **Schedule + docs** — the in-process timer with boot catch-up, status endpoint, compose lines,
    User's Guide walkthrough, CHANGELOG, SECURITY note, Dockerfile comment.
 

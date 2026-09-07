@@ -26,7 +26,7 @@ from songbird.api._tags import resolve_tags
 from songbird.concord.client import ConcordClient, ConcordNotFoundError
 from songbird.db.models import SermonNote, SermonSource, SermonSourceVideo, Tag
 from songbird.sermons.anchor import BookOrder, ResolvedSpan, UnknownBookError, resolve_span
-from songbird.sermons.dates import sermon_day
+from songbird.sermons.notes import build_sermon_note
 from songbird.sermons.passages import PlacedBy, boilerplate, rule_texts
 from songbird.sermons.references import find_candidates
 
@@ -247,29 +247,16 @@ class Placer:
         now: datetime,
         state: RunState,
     ) -> None:
-        event_date, _ = sermon_day(row.actual_start_time, row.published_at)
         for span in spans:
             db.add(
-                SermonNote(
-                    title=row.title,
-                    # Setting the URL is what stamps `youtube_video_id`, through the model's own
-                    # validator — so a later check sees this video as already noted.
-                    sermon_url=f"https://www.youtube.com/watch?v={row.video_id}",
-                    # Concord's spelling, not the church's: `2 Cor 5:17` is stored as
-                    # `2 Corinthians 5:17`, so notes from four sources read alike.
-                    reference=span.reference,
-                    book_usfm=span.book_usfm,
-                    # Answered from the cache the resolve above already filled, so this is a dict
-                    # lookup rather than a second trip to Concord.
-                    book_order_index=await state.books.index_for(span.book_usfm, self._concord),
-                    start_chapter=span.first.chapter,
-                    start_verse=span.first.verse,
-                    end_chapter=span.last.chapter,
-                    end_verse=span.last.verse,
-                    event_date=event_date,
-                    author_id=row.author_id,
-                    source_video_id=row.id,
-                    tags=tags,
+                # The same builder the review list uses, so a note a person taps into place is
+                # identical to one a rule made. The book order is answered from the cache the
+                # resolve above already filled — a dict lookup, not a second trip to Concord.
+                build_sermon_note(
+                    row,
+                    span,
+                    await state.books.index_for(span.book_usfm, self._concord),
+                    tags,
                 )
             )
         row.status = "placed"

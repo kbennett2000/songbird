@@ -13,6 +13,17 @@ const DEFAULT_USER = {
   created_at: "2026-01-01T00:00:00Z",
 };
 
+/** Every state zero — the shape the review list's filter bar reads its numbers from. Exported so
+ * a ledger test can spread it and override only the counts it cares about. */
+export const EMPTY_LEDGER_COUNTS = {
+  pending: 0,
+  needs_passage: 0,
+  placed: 0,
+  skipped: 0,
+  already_noted: 0,
+  dismissed: 0,
+};
+
 export const defaultHandlers = [
   http.get("/api/v1/auth/me", () => HttpResponse.json({ user: DEFAULT_USER })),
   // Echo the patched reading position back as the updated user (position-specific tests override).
@@ -111,7 +122,7 @@ export const defaultHandlers = [
   // that puts one on the page would otherwise hit `onUnhandledRequest: "error"`. Ledger-specific
   // tests override this per case.
   http.get("/api/v1/sermon-sources/videos", () =>
-    HttpResponse.json({ videos: [], total: 0 }),
+    HttpResponse.json({ videos: [], total: 0, counts: EMPTY_LEDGER_COUNTS }),
   ),
   http.get("/api/v1/cross-references/:book/:chapter/:verse", () => HttpResponse.json([])),
   // Topical Bible (v1.6) defaults — most verses/topics queries are panel-on-demand; topics-specific

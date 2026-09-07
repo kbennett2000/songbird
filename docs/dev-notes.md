@@ -4,6 +4,108 @@ A running log of per-slice decisions, gotchas, and how each slice was verified. 
 
 ---
 
+## Sermon sources slice 5 — the review list
+
+- **Date:** 2026-09-07
+- **Branch:** `slice/sermon-sources-5-review`
+
+### Why
+
+Slice 4b shipped the scan and left **~970 videos in `needs_passage` across four channels** — mostly
+dated livestreams whose text never names a passage. That list was read-only. This slice makes it
+work, and the design constraint is that number: hundreds of rows, worked through over months, not a
+handful.
+
+### What landed
+
+- **`api/_sermon_ledger.py`** — one WHERE builder for the listing and the bulk dismiss. They must
+  not be able to disagree about what a filter selects, or a sweep would take rows nobody saw.
+- **`sermons/notes.py`** — `build_sermon_note`, used by both the scan and the review list, so a note
+  tapped into place is the note a rule would have made. **`api/_anchors.py`** — the Concord-to-HTTP
+  shims, so a reference that will not resolve fails identically wherever it was typed.
+- **`api/sermon_review.py`** — place / dismiss / restore / reopen, plus `dismiss-matching`, plus
+  `reopen_if_last_note`, which the sermon-note DELETE calls.
+- **The listing** gains `published_after`, `published_before`, `q`, and per-state `counts`.
+- **The UI**: filter bar with counts, one-tap chips, a reference box, per-row undo, and the bulk
+  confirm. A row that is acted on **stays where it is** and grows its undo; the cache is patched
+  rather than invalidated, so the reader keeps their place among hundreds.
+- **No migration.** `dismissed` and `manual` were already legal in their `String(24)` columns.
+
+### The ten minutes, and the six things it found
+
+The point of the exercise, and it earned its keep. Working the real Majestic View list:
+
+1. **Choosing "Needs a passage" put "Dismiss all 349 matching" on screen** — a one-confirm sweep of
+   the entire untouched queue, offered by the first thing anybody does. A state is no longer a
+   narrowing on its own; the sweep needs a source, a date or a search.
+2. The source card above kept its own tallies and went stale — **"350 needs a passage" over a filter
+   bar reading 349**. A row change refreshes them now.
+3. The bulk confirm had **two headings**, the Modal's and its own, with the one that mattered
+   underneath.
+4. It read **"up to 2021-12-31"** over rows all saying "Dec 26, 2021".
+5. A misspelling answered in the server's words: *"Couldn't find reference 'Jhon 3:16': Concord could
+   not resolve 'Jhon 3:16'"* — the reference twice, and a sentence about Concord.
+6. At phone width **six filter controls pushed every row below the fold**, on the page most likely to
+   be opened on a phone. Dates and search fold away now, and say so when one is still on.
+
+Nothing here was visible from reading the code.
+
+### Gotchas
+
+- **A bulk `delete()` orphans a many-to-many.** "Wrong passage" deleted its notes with
+  `delete(SermonNote).where(…)`, leaving the `sermon_note_tags` rows behind — SQLite never enforces
+  `ON DELETE CASCADE`, because `PRAGMA foreign_keys` is off and songbird never turns it on. SQLite
+  then **reuses the deleted note's id**, and the next note handed that id collided on (note, tag) and
+  **took a whole catalogue scan down ten videos in**. Loaded and deleted through the ORM now. The
+  test that missed it counted notes; the new one looks at the join table.
+- **`git checkout --` in a mutation harness will eat an uncommitted fix.** It ate this one: the fix
+  was written, tested, then reverted by the harness's cleanup, and committed in its reverted state.
+  Caught by re-running the gate. This is the third slice to record the same lesson — **commit before
+  mutating** is not advice, it is a precondition.
+- **`pkill -f` kills its own shell.** Fourth time. `ss -lptnH "sport = :8099" | grep -oP 'pid=\K[0-9]+'`
+  is the way to stop a dev server.
+- A Playwright **locator re-resolves lazily**: "the first row with chips" points somewhere else the
+  moment a row is placed. Find the card by title.
+- `uvicorn` needs `--factory` here: `songbird.main` exposes `create_app`, not `app`.
+
+### How it was verified
+
+`make check` **514 passed**, Ruff and Pyright-strict clean; `make check-frontend` **316 passed**
+across 41 files, ESLint, tsc and build clean.
+
+**Mutation testing, 26/26 killed.** 20 on the backend — the shared undo rule, the state guard, the
+`placed`-exclusion in the sweep, the empty-filter refusal, the sibling count in auto-reopen, the
+scoping, the date edges, the search escaping — and 6 on the cache patcher. One survivor, on the
+title search: deleting `autoescape=True` changed nothing because the fixture had no title a wildcard
+would reach and an escaped one would not. A title containing "100" as a prefix closes it.
+
+**Live acceptance** against the real key and a dockerised Concord, one source
+(`@majesticviewchurchlive407`), ~33 quota units over two scans. The clean scan reproduced slice 4b
+exactly — **13 placed, 351 needs a passage, 7 skipped**, `last_check_status: ok`. Then the list was
+worked for real: three placed from their own suggestions, one typed by hand (misspelled first, on
+purpose, to see what it said), **94 dismissed in one sweep by date**, and the known-wrong anchor from
+slice 4b — `MVC - Talking About Respect with Pastor John 06-25-2020` → `John 6-25`, sixteen chapters
+— reopened, with the reader confirmed clear of it afterwards. Zero orphaned join rows, zero
+tracebacks, zero key-shaped tokens in the logs, every URL redacted. Test data deleted afterwards.
+
+**Browser pass** on `inspect-sources.mjs`, extended with the review states — dismissed rows, the
+reopen confirm, the folded filters, the bulk dialog — light and dark, 1440px and 390px. Phone
+`scrollWidth` 390: nothing overflows. **Contrast measured, not eyeballed**: selected chip 6.70:1 both
+themes, unselected 10.31:1 light / 11.86:1 dark, row title 17.74:1 / 13.34:1, the grey facts line
+4.83:1 / 5.78:1, Place 5.48:1. One failure, and it was **pre-existing since slice 4a**: the filter
+selects inherited their label's `text-gray-500` and measured **4.20:1** against the grey the browser
+paints behind them. They carry their own colour now — 15.43:1. Same class of mistake as #122.
+
+### Still open
+
+- The `MM-DD-YYYY` date collision (spec §13) is still unfixed — this slice gives it a one-tap cure
+  rather than a prevention. Extending §7's date guard to a bare `N-N` span followed by `-NNNN` would
+  catch it, and that is still Kris's call.
+- A contrast harness has now been written from scratch three slices running. It is worth promoting
+  to `scripts/screenshots/` next to `inspect-sources.mjs`, but that is not this slice's job.
+
+---
+
 ## Incident — the deployment overrode Concord's address
 
 - **Date:** 2026-09-07

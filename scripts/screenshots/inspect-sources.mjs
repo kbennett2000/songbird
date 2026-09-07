@@ -164,6 +164,47 @@ async function captureLedger(page, label) {
   await ledger.scrollIntoViewIfNeeded();
   await shot(page, `${label}-ledger-needs-passage`, { fullPage: false });
 
+  // Dismissed rows (v1.7 slice 5): the state a bulk sweep leaves hundreds of videos in, and the
+  // only control on the row is the one that brings it back.
+  await page.getByLabel("Filter by state").selectOption("dismissed");
+  await page.waitForTimeout(600);
+  await ledger.scrollIntoViewIfNeeded();
+  await shot(page, `${label}-ledger-dismissed`, { fullPage: false });
+
+  // The confirm in front of "Wrong passage": two steps, in place, so the row you are about to
+  // un-note is still on screen while you decide.
+  await page.getByLabel("Filter by state").selectOption("placed");
+  await page.waitForTimeout(600);
+  const wrong = page.getByRole("button", { name: "Wrong passage" }).first();
+  if (await wrong.count()) {
+    await wrong.click();
+    await page.waitForTimeout(300);
+    await ledger.scrollIntoViewIfNeeded();
+    await shot(page, `${label}-ledger-reopen-confirm`, { fullPage: false });
+    await page.getByRole("button", { name: "Cancel" }).first().click();
+  }
+
+  // The folded-away filters, and the bulk confirm behind them. The date range is what turns a year
+  // of dated livestreams into one action, and the dialog has to say the number AND the filter.
+  await page.getByLabel("Filter by state").selectOption("needs_passage");
+  await page.getByRole("button", { name: /More filters/ }).click();
+  await page.waitForTimeout(300);
+  await ledger.scrollIntoViewIfNeeded();
+  await shot(page, `${label}-ledger-more-filters`, { fullPage: false });
+  await page.getByLabel("Published on or before").fill("2021-12-31");
+  await page.waitForTimeout(900);
+  const bulk = page.getByRole("button", { name: /Dismiss all \d+ matching/ });
+  if (await bulk.count()) {
+    await bulk.first().click();
+    await page.getByRole("dialog").waitFor();
+    await shot(page, `${label}-bulk-confirm`, { fullPage: false });
+    await page.getByRole("button", { name: "Cancel" }).first().click();
+  } else {
+    console.warn(`  ⚠ no bulk button at ${label} — is anything dated before 2022?`);
+  }
+  await page.getByLabel("Published on or before").fill("");
+  await page.getByRole("button", { name: /Fewer filters/ }).click();
+
   // A filter combination with nothing in it — the empty state a reader will actually hit.
   // (Not `placed` any more: since 4b that one has rows in it.)
   await page.getByLabel("Filter by state").selectOption("already_noted");

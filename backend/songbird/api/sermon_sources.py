@@ -14,12 +14,18 @@ a setup message, and it can only know to do that if something answers.
 """
 
 from collections.abc import Sequence
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from songbird.api._sermon_ledger import (
+    ledger_scope,
+    notes_for,
+    source_or_404,
+    status_counts,
+)
 from songbird.api._tags import resolve_tags
 from songbird.api.deps import (
     get_current_user,
@@ -29,7 +35,6 @@ from songbird.api.deps import (
     get_youtube_client_optional,
 )
 from songbird.api.schemas import (
-    PlacedNoteOut,
     SermonCheckQueued,
     SermonSourceCounts,
     SermonSourceCreate,
@@ -38,6 +43,7 @@ from songbird.api.schemas import (
     SermonSourceUpdate,
     SermonSourceVideoOut,
     SermonSourceVideosPage,
+    SermonVideoFilters,
     SermonVideoStatus,
 )
 from songbird.config import get_settings
@@ -72,19 +78,6 @@ _KEY_REJECTED = (
 )
 
 
-async def _get_or_404(db: AsyncSession, source_id: int, author_id: int) -> SermonSource:
-    # Scoped to the author: another user's source is a 404 (no existence leak).
-    result = await db.execute(
-        select(SermonSource).where(
-            SermonSource.id == source_id, SermonSource.author_id == author_id
-        )
-    )
-    source = result.scalar_one_or_none()
-    if source is None:
-        raise_http(404, ErrorCode.SOURCE_NOT_FOUND, f"No sermon source {source_id}")
-    return source
-
-
 async def _counts_for(db: AsyncSession, source_ids: Sequence[int]) -> dict[int, SermonSourceCounts]:
     """Every source's ledger tally, in ONE query rather than one per source.
 
@@ -110,38 +103,6 @@ async def _counts_for(db: AsyncSession, source_ids: Sequence[int]) -> dict[int, 
     # A status word this model does not know is ignored rather than fatal: the ledger's vocabulary
     # grows over two more slices, and a stale API shape must not 500 the page.
     return {sid: SermonSourceCounts.model_validate(tallies.get(sid, {})) for sid in source_ids}
-
-
-async def _notes_for(db: AsyncSession, video_ids: Sequence[int]) -> dict[int, list[PlacedNoteOut]]:
-    """The notes each of these ledger rows created, in ONE query for the whole page.
-
-    A relationship would be a query per row, or — with `selectin` — every note behind every ledger
-    listing whether the page shows them or not. This is the same trade `_counts_for` makes just
-    above, for the same reason.
-
-    Author scoping is inherited rather than repeated: `video_ids` only ever comes from rows already
-    filtered to one author, and a note can only point at a row belonging to the person who owns it.
-
-    Ordered canonically, so a video placed on Acts and Exodus lists them in the order the rest of
-    songbird lists sermon notes in, rather than in whichever order the rules happened to find them.
-    """
-    if not video_ids:
-        return {}
-    stmt = (
-        select(SermonNote)
-        .where(SermonNote.source_video_id.in_(video_ids))
-        .order_by(
-            SermonNote.book_order_index,
-            SermonNote.start_chapter,
-            SermonNote.start_verse,
-            SermonNote.id,
-        )
-    )
-    notes: dict[int, list[PlacedNoteOut]] = {}
-    for note in (await db.execute(stmt)).scalars():
-        assert note.source_video_id is not None  # the WHERE guarantees it; this tells pyright
-        notes.setdefault(note.source_video_id, []).append(PlacedNoteOut.model_validate(note))
-    return notes
 
 
 async def _one_out(db: AsyncSession, source: SermonSource) -> SermonSourceOut:
@@ -223,6 +184,9 @@ async def sermon_sources_status(
 async def list_sermon_source_videos(
     status_filter: SermonVideoStatus | None = Query(default=None, alias="status"),
     source_id: int | None = Query(default=None, ge=1),
+    published_after: date | None = Query(default=None),
+    published_before: date | None = Query(default=None),
+    q: str | None = Query(default=None, max_length=200),
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
     db: AsyncSession = Depends(get_db),
@@ -241,23 +205,32 @@ async def list_sermon_source_videos(
     The `id` tiebreak in the ordering is required, not decoration. A church that posts a series in
     one sitting gives several videos the same `publishedAt` to the second, and without a total
     order the offsets behind "Load more" would repeat some rows and drop others.
+
+    The dates and the title search arrive with the review list (spec §8), where a list of hundreds
+    has to be narrowed before it can be worked. They are read through the shared `ledger_scope`,
+    the same one the bulk dismiss uses, so what this page shows and what that button takes can
+    never drift apart.
+
+    Ordering stays by `published_at` while the date FILTER goes by the day the row shows. The two
+    differ by at most a day, and changing the sort would reshuffle every page of a list people are
+    working through row by row.
     """
-    where = [SermonSourceVideo.author_id == user.id]
-    if source_id is not None:
-        # A 404 rather than an empty page: an id that isn't yours must not read as "nothing
-        # found", which is the no-existence-leak answer everywhere else on this router.
-        await _get_or_404(db, source_id, user.id)
-        where.append(SermonSourceVideo.source_id == source_id)
-    if status_filter is not None:
-        where.append(SermonSourceVideo.status == status_filter)
+    filters = SermonVideoFilters(
+        source_id=source_id,
+        status=status_filter,
+        published_after=published_after,
+        published_before=published_before,
+        q=q,
+    )
+    scope = await ledger_scope(db, user.id, filters)
 
     total = (
-        await db.execute(select(func.count()).select_from(SermonSourceVideo).where(*where))
+        await db.execute(select(func.count()).select_from(SermonSourceVideo).where(*scope.all))
     ).scalar_one()
     stmt = (
         select(SermonSourceVideo, SermonSource.title)
         .join(SermonSource, SermonSource.id == SermonSourceVideo.source_id)
-        .where(*where)
+        .where(*scope.all)
         .order_by(SermonSourceVideo.published_at.desc(), SermonSourceVideo.id.desc())
         .limit(limit)
         .offset(offset)
@@ -267,10 +240,14 @@ async def list_sermon_source_videos(
         item = SermonSourceVideoOut.model_validate(video)
         item.source_title = source_title
         videos.append(item)
-    notes = await _notes_for(db, [v.id for v in videos])
+    notes = await notes_for(db, [v.id for v in videos])
     for item in videos:
         item.notes = notes.get(item.id, [])
-    return SermonSourceVideosPage(videos=videos, total=total)
+    return SermonSourceVideosPage(
+        videos=videos,
+        total=total,
+        counts=await status_counts(db, scope.without_status),
+    )
 
 
 @router.get("", response_model=list[SermonSourceOut])
@@ -389,7 +366,7 @@ async def get_sermon_source(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> SermonSourceOut:
-    return await _one_out(db, await _get_or_404(db, source_id, user.id))
+    return await _one_out(db, await source_or_404(db, source_id, user.id))
 
 
 @router.patch("/{source_id}", response_model=SermonSourceOut)
@@ -401,7 +378,7 @@ async def update_sermon_source(
 ) -> SermonSourceOut:
     """Edit how a source is filtered. The URL and the identity it resolved to are immutable —
     to point songbird at a different channel, delete this source and add the new one."""
-    source = await _get_or_404(db, source_id, user.id)
+    source = await source_or_404(db, source_id, user.id)
     if body.enabled is not None:
         source.enabled = body.enabled
     if body.include_live is not None:
@@ -433,7 +410,7 @@ async def check_sermon_source(
     "waiting to be checked" forever. The page doesn't offer the button on a paused source; this
     is the answer if something asks anyway.
     """
-    source = await _get_or_404(db, source_id, user.id)
+    source = await source_or_404(db, source_id, user.id)
     if not source.enabled:
         return SermonCheckQueued(queued=0)
     source.check_requested_at = datetime.now(UTC)
@@ -463,7 +440,7 @@ async def delete_sermon_source(
     Bulk statements rather than ORM relationships: a `selectin` relationship would drag every
     scanned video behind the sources LIST, and a lazy one would issue a statement per row.
     """
-    source = await _get_or_404(db, source_id, user.id)
+    source = await source_or_404(db, source_id, user.id)
     await db.execute(
         update(SermonNote)
         .where(

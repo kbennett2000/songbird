@@ -6,6 +6,7 @@ import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
 
 import { SermonSourcesView } from "@/routes/SermonSourcesView";
+import { EMPTY_LEDGER_COUNTS } from "@/test/msw/handlers";
 import { server } from "@/test/msw/server";
 
 function source(overrides: Record<string, unknown> = {}) {
@@ -22,7 +23,14 @@ function source(overrides: Record<string, unknown> = {}) {
     last_checked_at: null,
     last_check_status: null,
     check_requested_at: null,
-    counts: { pending: 0, needs_passage: 0, placed: 0, skipped: 0, already_noted: 0 },
+    counts: {
+      pending: 0,
+      needs_passage: 0,
+      placed: 0,
+      skipped: 0,
+      already_noted: 0,
+      dismissed: 0,
+    },
     tags: ["sunday"],
     created_at: "2026-09-01T00:00:00Z",
     updated_at: "2026-09-01T00:00:00Z",
@@ -43,6 +51,20 @@ const TEACHING = source({
   enabled: false,
   tags: [],
 });
+
+/** One page of the ledger. `counts` is what the review list's filter bar reads its numbers from,
+ * and the schema requires it — so it is defaulted here rather than spelled out in every test. */
+function ledgerPage(
+  videos: unknown[],
+  total: number,
+  counts: Record<string, number> = {},
+) {
+  return {
+    videos,
+    total,
+    counts: { ...EMPTY_LEDGER_COUNTS, ...counts },
+  };
+}
 
 function ledgerVideo(overrides: Record<string, unknown> = {}) {
   return {
@@ -632,7 +654,14 @@ describe("SermonSourcesView", () => {
       statusHandler(),
       sourcesHandler(
         source({
-          counts: { pending: 3, needs_passage: 0, placed: 0, skipped: 12, already_noted: 1 },
+          counts: {
+            pending: 3,
+            needs_passage: 0,
+            placed: 0,
+            skipped: 12,
+            already_noted: 1,
+            dismissed: 0,
+          },
         }),
       ),
     );
@@ -654,7 +683,7 @@ describe("SermonSourcesView", () => {
       statusHandler(),
       sourcesHandler(CORNERSTONE),
       http.get("/api/v1/sermon-sources/videos", () =>
-        HttpResponse.json({ videos: [PENDING_VIDEO, SKIPPED_VIDEO], total: 2 }),
+        HttpResponse.json(ledgerPage([PENDING_VIDEO, SKIPPED_VIDEO], 2)),
       ),
     );
     renderPage();
@@ -681,15 +710,15 @@ describe("SermonSourcesView", () => {
       status: "placed",
       placed_by: "first_line",
       notes: [
-        { id: 11, reference: "Acts 7:33-35" },
-        { id: 12, reference: "Exodus 3:5-10" },
+        { id: 11, reference: "Acts 7:33-35", book_usfm: "ACT", start_chapter: 7 },
+        { id: 12, reference: "Exodus 3:5-10", book_usfm: "EXO", start_chapter: 3 },
       ],
     });
     server.use(
       statusHandler(),
       sourcesHandler(CORNERSTONE),
       http.get("/api/v1/sermon-sources/videos", () =>
-        HttpResponse.json({ videos: [placed], total: 1 }),
+        HttpResponse.json(ledgerPage([placed], 1)),
       ),
     );
     renderPage();
@@ -710,7 +739,7 @@ describe("SermonSourcesView", () => {
       statusHandler(),
       sourcesHandler(CORNERSTONE),
       http.get("/api/v1/sermon-sources/videos", () =>
-        HttpResponse.json({ videos: [unplaced], total: 1 }),
+        HttpResponse.json(ledgerPage([unplaced], 1)),
       ),
     );
     renderPage();
@@ -718,11 +747,13 @@ describe("SermonSourcesView", () => {
     expect(
       await screen.findByText("songbird couldn\u2019t tell which of these the sermon was on:"),
     ).toBeInTheDocument();
-    expect(screen.getByText("Psalms 23")).toBeInTheDocument();
-    expect(screen.getByText("John 3:16")).toBeInTheDocument();
-    // Not buttons: tapping one does nothing until the review list ships, and a control that does
-    // nothing is worse than plain text.
-    expect(ledgerRows().queryAllByRole("button")).toHaveLength(0);
+    // Buttons now, not plain text: this is the review list, and tapping one chooses that
+    // passage. Slice 4b asserted the opposite, because a control that did nothing would have been
+    // worse than text.
+    expect(screen.getByRole("button", { name: "Psalms 23" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "John 3:16" })).toBeInTheDocument();
+    expect(ledgerRows().getByRole("button", { name: "Place" })).toBeInTheDocument();
+    expect(ledgerRows().getByRole("button", { name: "Not a sermon" })).toBeInTheDocument();
   });
 
   it("says nothing about passages for a row that placed none", async () => {
@@ -730,7 +761,7 @@ describe("SermonSourcesView", () => {
       statusHandler(),
       sourcesHandler(CORNERSTONE),
       http.get("/api/v1/sermon-sources/videos", () =>
-        HttpResponse.json({ videos: [PENDING_VIDEO], total: 1 }),
+        HttpResponse.json(ledgerPage([PENDING_VIDEO], 1)),
       ),
     );
     renderPage();
@@ -749,10 +780,7 @@ describe("SermonSourcesView", () => {
       statusHandler(),
       sourcesHandler(CORNERSTONE),
       http.get("/api/v1/sermon-sources/videos", () =>
-        HttpResponse.json({
-          videos: [{ ...PENDING_VIDEO, duration_seconds: null }],
-          total: 1,
-        }),
+        HttpResponse.json(ledgerPage([{ ...PENDING_VIDEO, duration_seconds: null }], 1)),
       ),
     );
     renderPage();
@@ -768,10 +796,12 @@ describe("SermonSourcesView", () => {
       http.get("/api/v1/sermon-sources/videos", ({ request }) => {
         const status = new URL(request.url).searchParams.get("status");
         asked.push(status);
-        return HttpResponse.json({
-          videos: status === "skipped" ? [SKIPPED_VIDEO] : [PENDING_VIDEO, SKIPPED_VIDEO],
-          total: status === "skipped" ? 1 : 2,
-        });
+        return HttpResponse.json(
+          ledgerPage(
+            status === "skipped" ? [SKIPPED_VIDEO] : [PENDING_VIDEO, SKIPPED_VIDEO],
+            status === "skipped" ? 1 : 2,
+          ),
+        );
       }),
     );
     const user = userEvent.setup();
@@ -790,10 +820,9 @@ describe("SermonSourcesView", () => {
       sourcesHandler(CORNERSTONE),
       http.get("/api/v1/sermon-sources/videos", ({ request }) => {
         const offset = Number(new URL(request.url).searchParams.get("offset"));
-        return HttpResponse.json({
-          videos: [{ ...PENDING_VIDEO, id: offset + 1, title: `Sermon at ${offset}` }],
-          total: 2,
-        });
+        return HttpResponse.json(
+          ledgerPage([{ ...PENDING_VIDEO, id: offset + 1, title: `Sermon at ${offset}` }], 2),
+        );
       }),
     );
     const user = userEvent.setup();

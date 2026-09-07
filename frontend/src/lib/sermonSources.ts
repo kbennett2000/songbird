@@ -2,14 +2,17 @@ import { apiRequest } from "@/lib/api";
 import {
   type SermonCheckQueued,
   type SermonSource,
+  type SermonSourceVideo,
   type SermonSourceVideosPage,
   type SermonSourcesStatus,
   type SermonVideoStatus,
   sermonCheckQueuedSchema,
   sermonSourceSchema,
+  sermonSourceVideoSchema,
   sermonSourceVideosPageSchema,
   sermonSourcesListSchema,
   sermonSourcesStatusSchema,
+  sermonVideosDismissedSchema,
 } from "@/schemas";
 
 /**
@@ -102,25 +105,90 @@ export async function checkSource(id: number): Promise<SermonCheckQueued> {
   return sermonCheckQueuedSchema.parse(data);
 }
 
+/**
+ * Which rows a reader is looking at (spec §8).
+ *
+ * The same five things narrow the list and drive the bulk dismiss, which is why they are one type:
+ * "dismiss all N matching" means the filter on screen, and the two must be sent identically or the
+ * sweep would take rows nobody saw. `publishedBefore` / `publishedAfter` are `YYYY-MM-DD`, both
+ * ends inclusive, and the server compares them against the day the row SHOWS.
+ */
 export interface SermonVideoFilters {
   status?: SermonVideoStatus;
   sourceId?: number;
-  limit?: number;
-  offset?: number;
+  publishedAfter?: string;
+  publishedBefore?: string;
+  q?: string;
+}
+
+/** The filter as query parameters. One function, so the listing and the sweep cannot drift. */
+function filterParams(filters: SermonVideoFilters): URLSearchParams {
+  const params = new URLSearchParams();
+  if (filters.status) params.set("status", filters.status);
+  if (filters.sourceId !== undefined) params.set("source_id", String(filters.sourceId));
+  if (filters.publishedAfter) params.set("published_after", filters.publishedAfter);
+  if (filters.publishedBefore) params.set("published_before", filters.publishedBefore);
+  if (filters.q) params.set("q", filters.q);
+  return params;
+}
+
+/** The filter as a request body — the shape the bulk dismiss takes. */
+function filterBody(filters: SermonVideoFilters): Record<string, string | number> {
+  return Object.fromEntries(filterParams(filters));
 }
 
 /** One page of the ledger — everything a check has seen, newest sermon first. An absent filter
  * means "every state" / "every source". */
 export async function listSourceVideos(
   filters: SermonVideoFilters = {},
+  page: { limit?: number; offset?: number } = {},
 ): Promise<SermonSourceVideosPage> {
-  const params = new URLSearchParams();
-  if (filters.status) params.set("status", filters.status);
-  if (filters.sourceId !== undefined) params.set("source_id", String(filters.sourceId));
-  params.set("limit", String(filters.limit ?? 50));
-  params.set("offset", String(filters.offset ?? 0));
+  const params = filterParams(filters);
+  params.set("limit", String(page.limit ?? 50));
+  params.set("offset", String(page.offset ?? 0));
   const data = await apiRequest<unknown>("GET", `/sermon-sources/videos?${params.toString()}`);
   return sermonSourceVideosPageSchema.parse(data);
+}
+
+/** Write the sermon notes for a video — one per reference, all of them or none. */
+export async function placeVideo(
+  id: number,
+  references: string[],
+): Promise<SermonSourceVideo> {
+  const data = await apiRequest<unknown>("POST", `/sermon-sources/videos/${id}/place`, {
+    references,
+  });
+  return sermonSourceVideoSchema.parse(data);
+}
+
+/** Not a sermon, its undo, and the fix for a wrong passage. Each answers with the row's new shape,
+ * so the list redraws one row instead of refetching hundreds. */
+export async function dismissVideo(id: number): Promise<SermonSourceVideo> {
+  return sermonSourceVideoSchema.parse(
+    await apiRequest<unknown>("POST", `/sermon-sources/videos/${id}/dismiss`),
+  );
+}
+
+export async function restoreVideo(id: number): Promise<SermonSourceVideo> {
+  return sermonSourceVideoSchema.parse(
+    await apiRequest<unknown>("POST", `/sermon-sources/videos/${id}/restore`),
+  );
+}
+
+export async function reopenVideo(id: number): Promise<SermonSourceVideo> {
+  return sermonSourceVideoSchema.parse(
+    await apiRequest<unknown>("POST", `/sermon-sources/videos/${id}/reopen`),
+  );
+}
+
+/** Mark everything the filter selects as not a sermon. The server refuses an empty filter. */
+export async function dismissMatching(filters: SermonVideoFilters): Promise<number> {
+  const data = await apiRequest<unknown>(
+    "POST",
+    "/sermon-sources/videos/dismiss-matching",
+    filterBody(filters),
+  );
+  return sermonVideosDismissedSchema.parse(data).dismissed;
 }
 
 /**

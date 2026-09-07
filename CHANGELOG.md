@@ -26,10 +26,23 @@ This project follows [Keep a Changelog](https://keepachangelog.com/) and
   streamed in the morning and posted after midnight is still filed under the Sunday), tagged the way
   you tagged the source, and they show up in the reader and in Browse exactly like the notes you
   write yourself, on every translation. songbird asks Concord what each reference means rather than
-  guessing, so anything it can't be sure of it leaves alone. Sermons whose passage was never written
-  down anywhere wait in a **Needs a passage** list, with any references songbird did spot shown
-  beside them — the one-tap way to place those is coming next. A sermon you'd already noted by hand
-  is left as it is. This needs the same free YouTube key as the re-dating button below.
+  guessing, so anything it can't be sure of it leaves alone. A sermon you'd already noted by hand is
+  left as it is. This needs the same free YouTube key as the re-dating button below.
+- **And you can work through the sermons it couldn't place, a tap at a time.** Plenty of churches
+  title every service by its date and never write the passage down anywhere, so those sermons wait
+  in a **Needs a passage** list — which for one real channel was 351 of them after a single check.
+  The Sources page now lets you clear that list. Each sermon shows any passages songbird spotted in
+  the description as buttons: tap the right one — or several — and press **Place**, and you get the
+  same notes songbird would have made itself. You can type a passage instead if it isn't offered.
+  Anything that isn't a sermon at all — a concert, an announcement, a test stream — is one tap to
+  set aside, and one tap to bring back if you change your mind.
+  Narrow the list first by channel, by date, or by words in the title, and if a whole stretch is
+  worth setting aside — every livestream from before 2025, say — one button clears all of them,
+  telling you exactly how many and which ones before it does. It never touches a sermon that already
+  has notes.
+  If songbird did get a passage wrong, **Wrong passage** takes its notes back and puts the sermon
+  back in the list to be redone. Deleting the last note from a sermon on the Browse page does the
+  same thing, so a sermon can't end up marked done with nothing behind it.
 - **Your sermon notes can take their dates from YouTube.** A sermon note you made by hand carries
   whatever date you typed — usually the day you wrote the note, not the day the sermon was preached.
   On the Browse notes page there's now a **Re-date YouTube sermons** button: songbird looks up every

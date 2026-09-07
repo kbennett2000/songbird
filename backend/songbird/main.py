@@ -28,6 +28,7 @@ from songbird.api.read import router as read_router
 from songbird.api.search import router as search_router
 from songbird.api.sermon_notes import router as sermon_notes_router
 from songbird.api.sermon_redate import router as sermon_redate_router
+from songbird.api.sermon_review import router as sermon_review_router
 from songbird.api.sermon_sources import router as sermon_sources_router
 from songbird.api.strongs import router as strongs_router
 from songbird.api.tags import router as tags_router
@@ -168,6 +169,8 @@ def create_app() -> FastAPI:
     app.include_router(sermon_notes_router, dependencies=gated)
     app.include_router(sermon_redate_router, dependencies=gated)
     app.include_router(sermon_sources_router, dependencies=gated)
+    # After the catalogue router, whose `/videos` listing its action paths sit under.
+    app.include_router(sermon_review_router, dependencies=gated)
     app.include_router(search_router, dependencies=gated)
     app.include_router(import_export_router, dependencies=gated)
 
