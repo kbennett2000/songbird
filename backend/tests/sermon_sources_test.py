@@ -9,7 +9,9 @@ from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 
 import httpx
-from songbird.db.models import SermonNote, SermonSource, Tag, User
+from fastapi import FastAPI
+from songbird.api.deps import get_scan_runner_optional
+from songbird.db.models import SermonNote, SermonSource, SermonSourceVideo, Tag, User
 from songbird.youtube.client import YouTubeAuthError, YouTubeQuotaError, YouTubeUnreachableError
 from songbird.youtube.schemas import Channel, Playlist
 from sqlalchemy import select
@@ -465,9 +467,7 @@ async def test_a_null_minimum_restores_the_app_wide_default(
             "/api/v1/sermon-sources", json={"url": _HANDLE_URL, "min_minutes": 25}
         )
         source_id = created.json()["id"]
-        resp = await client.patch(
-            f"/api/v1/sermon-sources/{source_id}", json={"min_minutes": None}
-        )
+        resp = await client.patch(f"/api/v1/sermon-sources/{source_id}", json={"min_minutes": None})
 
     assert resp.json()["min_minutes"] is None
     assert (await _row(db_sessionmaker, source_id)).min_minutes is None
@@ -598,9 +598,7 @@ async def test_another_users_source_is_a_404_on_every_verb(
 
     async with client_for(FakeConcordClient()) as client:
         got = await client.get(f"/api/v1/sermon-sources/{theirs}")
-        patched = await client.patch(
-            f"/api/v1/sermon-sources/{theirs}", json={"enabled": False}
-        )
+        patched = await client.patch(f"/api/v1/sermon-sources/{theirs}", json={"enabled": False})
         deleted = await client.delete(f"/api/v1/sermon-sources/{theirs}")
 
     for resp in (got, patched, deleted):
@@ -656,3 +654,475 @@ async def test_status_is_not_read_as_a_source_id(
 
     assert resp.status_code == 200
     assert "configured" in resp.json()
+
+
+# ---- Checking, counts and the ledger (v1.7 slice 4a) -------------------------------------------
+
+_VIDEO_IDS = ["vid00000001", "vid00000002", "vid00000003"]
+
+
+async def _seed_ledger(
+    sessionmaker: async_sessionmaker[AsyncSession],
+    *,
+    source_id: int,
+    author_id: int = 1,
+    rows: tuple[tuple[str, str, str | None], ...] = (),
+    published: datetime | None = None,
+) -> None:
+    """Ledger rows as (video_id, status, skip_reason), newest first by default."""
+    base = published or datetime(2026, 3, 1, 12, 0, tzinfo=UTC)
+    async with sessionmaker() as session:
+        for index, (video_id, row_status, reason) in enumerate(rows):
+            session.add(
+                SermonSourceVideo(
+                    source_id=source_id,
+                    author_id=author_id,
+                    video_id=video_id,
+                    title=f"Sermon {video_id}",
+                    description="Main Scripture: Acts 7:33-35",
+                    published_at=base - timedelta(days=index),
+                    duration_seconds=3600,
+                    status=row_status,
+                    skip_reason=reason,
+                    seen_at=base,
+                )
+            )
+        await session.commit()
+
+
+async def _seed_source_row(
+    sessionmaker: async_sessionmaker[AsyncSession],
+    *,
+    source_id: int = 1,
+    author_id: int = 1,
+    enabled: bool = True,
+    youtube_id: str | None = None,
+) -> int:
+    async with sessionmaker() as session:
+        session.add(
+            SermonSource(
+                id=source_id,
+                kind="channel",
+                youtube_id=youtube_id or f"UC{source_id:022d}",
+                uploads_playlist_id=f"UU{source_id:022d}",
+                input_url="https://www.youtube.com/@achurch",
+                title=f"Church {source_id}",
+                enabled=enabled,
+                author_id=author_id,
+            )
+        )
+        await session.commit()
+    return source_id
+
+
+class _RecordingRunner:
+    """Stands in for the scan runner so a route test asserts what was ASKED for, not what a
+    background task then did. The real runner has its own suite."""
+
+    def __init__(self) -> None:
+        self.requests = 0
+        self.started_at: datetime | None = None
+        self.running = False
+
+    def request_scan(self) -> None:
+        self.requests += 1
+
+
+def _with_runner(app: object) -> _RecordingRunner:
+    runner = _RecordingRunner()
+    app.dependency_overrides[get_scan_runner_optional] = lambda: runner  # type: ignore[attr-defined]
+    return runner
+
+
+async def test_adding_a_source_queues_its_first_catalogue_scan(
+    app: FastAPI,
+    client_for: Callable[[FakeConcordClient], httpx.AsyncClient],
+    with_youtube: Callable[[FakeYouTubeClient], None],
+    db_sessionmaker: async_sessionmaker[AsyncSession],
+) -> None:
+    # Spec §5: adding a source scans the whole back catalogue. The request is written down and
+    # the response comes back straight away — 201, because a source really was created.
+    with_youtube(_youtube())
+    runner = _with_runner(app)
+    async with client_for(FakeConcordClient()) as client:
+        resp = await client.post("/api/v1/sermon-sources", json={"url": _HANDLE_URL})
+
+    assert resp.status_code == 201
+    assert (await _row(db_sessionmaker, resp.json()["id"])).check_requested_at is not None
+    assert runner.requests == 1
+
+
+async def test_check_all_queues_every_enabled_source(
+    app: FastAPI,
+    client_for: Callable[[FakeConcordClient], httpx.AsyncClient],
+    with_youtube: Callable[[FakeYouTubeClient], None],
+    db_sessionmaker: async_sessionmaker[AsyncSession],
+) -> None:
+    with_youtube(_youtube())
+    runner = _with_runner(app)
+    await _seed_source_row(db_sessionmaker, source_id=1)
+    await _seed_source_row(db_sessionmaker, source_id=2)
+    await _seed_source_row(db_sessionmaker, source_id=3, enabled=False)
+
+    async with client_for(FakeConcordClient()) as client:
+        resp = await client.post("/api/v1/sermon-sources/check")
+
+    # 202: accepted, not finished. The count is what went into the queue, not what was found.
+    assert resp.status_code == 202
+    assert resp.json() == {"queued": 2}
+    assert runner.requests == 1
+    # The paused one is left alone entirely — the runner would never pick it up, and a stamp it
+    # never serves would leave the row reading "waiting to be checked" for ever.
+    assert (await _row(db_sessionmaker, 3)).check_requested_at is None
+    assert (await _row(db_sessionmaker, 1)).check_requested_at is not None
+
+
+async def test_check_all_with_nothing_enabled_is_still_accepted(
+    app: FastAPI,
+    client_for: Callable[[FakeConcordClient], httpx.AsyncClient],
+    with_youtube: Callable[[FakeYouTubeClient], None],
+    db_sessionmaker: async_sessionmaker[AsyncSession],
+) -> None:
+    # Nothing failed — the request was accepted and there was nothing in it. The page says so in
+    # words rather than showing an error for a state the owner deliberately chose.
+    with_youtube(_youtube())
+    runner = _with_runner(app)
+    await _seed_source_row(db_sessionmaker, source_id=1, enabled=False)
+
+    async with client_for(FakeConcordClient()) as client:
+        resp = await client.post("/api/v1/sermon-sources/check")
+
+    assert resp.status_code == 202
+    assert resp.json() == {"queued": 0}
+    assert runner.requests == 0  # nothing to do, so the runner is not woken
+
+
+async def test_checking_one_source_queues_only_that_one(
+    app: FastAPI,
+    client_for: Callable[[FakeConcordClient], httpx.AsyncClient],
+    with_youtube: Callable[[FakeYouTubeClient], None],
+    db_sessionmaker: async_sessionmaker[AsyncSession],
+) -> None:
+    with_youtube(_youtube())
+    runner = _with_runner(app)
+    await _seed_source_row(db_sessionmaker, source_id=1)
+    await _seed_source_row(db_sessionmaker, source_id=2)
+
+    async with client_for(FakeConcordClient()) as client:
+        resp = await client.post("/api/v1/sermon-sources/1/check")
+
+    assert resp.status_code == 202
+    assert resp.json() == {"queued": 1}
+    assert runner.requests == 1
+    assert (await _row(db_sessionmaker, 1)).check_requested_at is not None
+    assert (await _row(db_sessionmaker, 2)).check_requested_at is None
+
+
+async def test_checking_a_paused_source_queues_nothing(
+    app: FastAPI,
+    client_for: Callable[[FakeConcordClient], httpx.AsyncClient],
+    with_youtube: Callable[[FakeYouTubeClient], None],
+    db_sessionmaker: async_sessionmaker[AsyncSession],
+) -> None:
+    with_youtube(_youtube())
+    runner = _with_runner(app)
+    await _seed_source_row(db_sessionmaker, source_id=1, enabled=False)
+
+    async with client_for(FakeConcordClient()) as client:
+        resp = await client.post("/api/v1/sermon-sources/1/check")
+
+    assert resp.status_code == 202
+    assert resp.json() == {"queued": 0}
+    assert runner.requests == 0
+    # Not stamped: the runner never picks up a paused source, so this would never be served.
+    assert (await _row(db_sessionmaker, 1)).check_requested_at is None
+
+
+async def test_checking_needs_a_key(
+    client_for: Callable[[FakeConcordClient], httpx.AsyncClient],
+    db_sessionmaker: async_sessionmaker[AsyncSession],
+) -> None:
+    # Queueing work that could never run would be a lie told in the friendliest possible way.
+    await _seed_source_row(db_sessionmaker, source_id=1)
+    async with client_for(FakeConcordClient()) as client:
+        both = (
+            await client.post("/api/v1/sermon-sources/check"),
+            await client.post("/api/v1/sermon-sources/1/check"),
+        )
+
+    for resp in both:
+        assert resp.status_code == 409
+        assert resp.json()["detail"]["code"] == "YOUTUBE_NOT_CONFIGURED"
+    assert (await _row(db_sessionmaker, 1)).check_requested_at is None
+
+
+async def test_checking_another_users_source_is_a_404(
+    app: FastAPI,
+    client_for: Callable[[FakeConcordClient], httpx.AsyncClient],
+    with_youtube: Callable[[FakeYouTubeClient], None],
+    db_sessionmaker: async_sessionmaker[AsyncSession],
+) -> None:
+    with_youtube(_youtube())
+    _with_runner(app)
+    await _add_other_user(db_sessionmaker)
+    await _seed_source_row(db_sessionmaker, source_id=9, author_id=2)
+
+    async with client_for(FakeConcordClient()) as client:
+        resp = await client.post("/api/v1/sermon-sources/9/check")
+
+    assert resp.status_code == 404
+    assert (await _row(db_sessionmaker, 9)).check_requested_at is None
+
+
+async def test_each_source_carries_its_own_ledger_counts(
+    client_for: Callable[[FakeConcordClient], httpx.AsyncClient],
+    db_sessionmaker: async_sessionmaker[AsyncSession],
+) -> None:
+    await _seed_source_row(db_sessionmaker, source_id=1)
+    await _seed_source_row(db_sessionmaker, source_id=2)
+    await _seed_ledger(
+        db_sessionmaker,
+        source_id=1,
+        rows=(
+            ("vid00000001", "pending", None),
+            ("vid00000002", "pending", None),
+            ("vid00000003", "skipped", "too_short"),
+            ("vid00000004", "already_noted", None),
+        ),
+    )
+    await _seed_ledger(db_sessionmaker, source_id=2, rows=(("vid00000005", "pending", None),))
+
+    async with client_for(FakeConcordClient()) as client:
+        resp = await client.get("/api/v1/sermon-sources")
+
+    by_id = {s["id"]: s["counts"] for s in resp.json()}
+    # Every key is always present and zero-filled, so the page never guards a missing one — and
+    # the two the placement slice fills are visibly waiting rather than absent.
+    assert by_id[1] == {
+        "pending": 2,
+        "needs_passage": 0,
+        "placed": 0,
+        "skipped": 1,
+        "already_noted": 1,
+    }
+    assert by_id[2]["pending"] == 1
+    assert by_id[2]["skipped"] == 0
+
+
+async def test_counts_are_on_a_single_source_too(
+    client_for: Callable[[FakeConcordClient], httpx.AsyncClient],
+    db_sessionmaker: async_sessionmaker[AsyncSession],
+) -> None:
+    # A documented field that reported zeros on three of the four routes carrying it would be
+    # worse than no field at all.
+    await _seed_source_row(db_sessionmaker, source_id=1)
+    await _seed_ledger(db_sessionmaker, source_id=1, rows=(("vid00000001", "pending", None),))
+
+    async with client_for(FakeConcordClient()) as client:
+        got = await client.get("/api/v1/sermon-sources/1")
+        patched = await client.patch("/api/v1/sermon-sources/1", json={"enabled": False})
+
+    assert got.json()["counts"]["pending"] == 1
+    assert patched.json()["counts"]["pending"] == 1
+
+
+async def test_counts_never_include_another_users_ledger(
+    client_for: Callable[[FakeConcordClient], httpx.AsyncClient],
+    db_sessionmaker: async_sessionmaker[AsyncSession],
+) -> None:
+    await _add_other_user(db_sessionmaker)
+    await _seed_source_row(db_sessionmaker, source_id=1, author_id=1)
+    await _seed_source_row(db_sessionmaker, source_id=2, author_id=2)
+    await _seed_ledger(db_sessionmaker, source_id=1, rows=(("vid00000001", "pending", None),))
+    await _seed_ledger(
+        db_sessionmaker, source_id=2, author_id=2, rows=(("vid00000002", "pending", None),)
+    )
+
+    async with client_for(FakeConcordClient()) as client:
+        resp = await client.get("/api/v1/sermon-sources")
+
+    listed = resp.json()
+    assert [s["id"] for s in listed] == [1]
+    assert listed[0]["counts"]["pending"] == 1
+
+
+async def test_the_ledger_lists_newest_sermon_first(
+    client_for: Callable[[FakeConcordClient], httpx.AsyncClient],
+    db_sessionmaker: async_sessionmaker[AsyncSession],
+) -> None:
+    await _seed_source_row(db_sessionmaker, source_id=1)
+    await _seed_ledger(
+        db_sessionmaker,
+        source_id=1,
+        rows=(
+            ("vid00000001", "pending", None),  # newest — _seed_ledger steps a day back per row
+            ("vid00000002", "pending", None),
+            ("vid00000003", "skipped", "too_short"),
+        ),
+    )
+
+    async with client_for(FakeConcordClient()) as client:
+        resp = await client.get("/api/v1/sermon-sources/videos")
+
+    body = resp.json()
+    assert body["total"] == 3
+    assert [v["video_id"] for v in body["videos"]] == _VIDEO_IDS
+    first = body["videos"][0]
+    # The source's name rides along, because the ledger reads as "title · source · date" and must
+    # be legible without a second request.
+    assert first["source_title"] == "Church 1"
+    # The description is bulk text the page never shows, and is deliberately not sent.
+    assert "description" not in first
+
+
+async def test_the_ledger_filters_by_state_and_by_source(
+    client_for: Callable[[FakeConcordClient], httpx.AsyncClient],
+    db_sessionmaker: async_sessionmaker[AsyncSession],
+) -> None:
+    await _seed_source_row(db_sessionmaker, source_id=1)
+    await _seed_source_row(db_sessionmaker, source_id=2)
+    await _seed_ledger(
+        db_sessionmaker,
+        source_id=1,
+        rows=(("vid00000001", "pending", None), ("vid00000002", "skipped", "too_short")),
+    )
+    await _seed_ledger(db_sessionmaker, source_id=2, rows=(("vid00000003", "pending", None),))
+
+    async with client_for(FakeConcordClient()) as client:
+        # No filter is EVERY state, not spec §9's needs_passage — nothing can be that yet, so
+        # that default would answer the first person who opens this view with an empty list.
+        everything = await client.get("/api/v1/sermon-sources/videos")
+        skipped = await client.get("/api/v1/sermon-sources/videos?status=skipped")
+        one_source = await client.get("/api/v1/sermon-sources/videos?source_id=2")
+        both = await client.get("/api/v1/sermon-sources/videos?source_id=1&status=pending")
+        nonsense = await client.get("/api/v1/sermon-sources/videos?status=banana")
+
+    assert everything.json()["total"] == 3
+    assert [v["video_id"] for v in skipped.json()["videos"]] == ["vid00000002"]
+    assert skipped.json()["videos"][0]["skip_reason"] == "too_short"
+    assert [v["video_id"] for v in one_source.json()["videos"]] == ["vid00000003"]
+    assert [v["video_id"] for v in both.json()["videos"]] == ["vid00000001"]
+    # The Literal does the validating, so an unknown state is a 422 naming what is allowed.
+    assert nonsense.status_code == 422
+
+
+async def test_the_ledger_pages(
+    client_for: Callable[[FakeConcordClient], httpx.AsyncClient],
+    db_sessionmaker: async_sessionmaker[AsyncSession],
+) -> None:
+    await _seed_source_row(db_sessionmaker, source_id=1)
+    await _seed_ledger(
+        db_sessionmaker,
+        source_id=1,
+        rows=tuple((f"vid{n:08d}", "pending", None) for n in range(5)),
+    )
+
+    async with client_for(FakeConcordClient()) as client:
+        first = await client.get("/api/v1/sermon-sources/videos?limit=2")
+        second = await client.get("/api/v1/sermon-sources/videos?limit=2&offset=2")
+        too_many = await client.get("/api/v1/sermon-sources/videos?limit=500")
+
+    # `total` is the whole set, not the page — it is what drives "Load more".
+    assert first.json()["total"] == 5
+    assert len(first.json()["videos"]) == 2
+    # The pages do not overlap, which is what the id tiebreak in the ordering is there for.
+    assert {v["video_id"] for v in first.json()["videos"]}.isdisjoint(
+        {v["video_id"] for v in second.json()["videos"]}
+    )
+    assert too_many.status_code == 422  # a page has an upper bound
+
+
+async def test_the_ledger_never_shows_another_users_videos(
+    client_for: Callable[[FakeConcordClient], httpx.AsyncClient],
+    db_sessionmaker: async_sessionmaker[AsyncSession],
+) -> None:
+    await _add_other_user(db_sessionmaker)
+    await _seed_source_row(db_sessionmaker, source_id=1, author_id=1)
+    await _seed_source_row(db_sessionmaker, source_id=9, author_id=2)
+    await _seed_ledger(db_sessionmaker, source_id=1, rows=(("vid00000001", "pending", None),))
+    await _seed_ledger(
+        db_sessionmaker, source_id=9, author_id=2, rows=(("vid00000002", "pending", None),)
+    )
+
+    async with client_for(FakeConcordClient()) as client:
+        mine = await client.get("/api/v1/sermon-sources/videos")
+        theirs = await client.get("/api/v1/sermon-sources/videos?source_id=9")
+
+    assert [v["video_id"] for v in mine.json()["videos"]] == ["vid00000001"]
+    # Filtering by someone else's source is a 404, not an empty page: an id that isn't yours must
+    # not read as "nothing found".
+    assert theirs.status_code == 404
+
+
+async def test_videos_is_not_read_as_a_source_id(
+    client_for: Callable[[FakeConcordClient], httpx.AsyncClient],
+) -> None:
+    # The same trap `/status` documents: FastAPI matches the path pattern BEFORE converting the
+    # int, so a `/videos` declared after `/{source_id}` would 422 on int("videos").
+    async with client_for(FakeConcordClient()) as client:
+        resp = await client.get("/api/v1/sermon-sources/videos")
+
+    assert resp.status_code == 200
+    assert resp.json() == {"videos": [], "total": 0}
+
+
+async def test_the_ledger_reads_without_a_youtube_key(
+    client_for: Callable[[FakeConcordClient], httpx.AsyncClient],
+    db_sessionmaker: async_sessionmaker[AsyncSession],
+) -> None:
+    # A key rotated out or revoked must not take away the record of what was already found
+    # (spec §2). No `with_youtube` here, which is how a test says "no key".
+    await _seed_source_row(db_sessionmaker, source_id=1)
+    await _seed_ledger(db_sessionmaker, source_id=1, rows=(("vid00000001", "pending", None),))
+
+    async with client_for(FakeConcordClient()) as client:
+        resp = await client.get("/api/v1/sermon-sources/videos")
+
+    assert resp.status_code == 200
+    assert resp.json()["total"] == 1
+
+
+async def test_deleting_a_source_takes_its_ledger_and_leaves_the_notes(
+    client_for: Callable[[FakeConcordClient], httpx.AsyncClient],
+    db_sessionmaker: async_sessionmaker[AsyncSession],
+) -> None:
+    """Spec §9, and the cascade SQLite will not do for us.
+
+    `ondelete="CASCADE"` never fires here: SQLite enforces foreign keys only when PRAGMA
+    foreign_keys is on and songbird never turns it on, so without an explicit delete the ledger
+    rows would simply be orphaned. Slice 3's tag cascade works only because SQLAlchemy manages
+    `secondary` join rows itself; a plain child table gets no such help.
+    """
+    await _seed_source_row(db_sessionmaker, source_id=1)
+    await _seed_source_row(db_sessionmaker, source_id=2)
+    await _seed_ledger(db_sessionmaker, source_id=1, rows=(("vid00000001", "pending", None),))
+    await _seed_ledger(db_sessionmaker, source_id=2, rows=(("vid00000002", "pending", None),))
+    async with db_sessionmaker() as session:
+        session.add(
+            SermonNote(
+                title="Written by hand",
+                sermon_url="https://www.youtube.com/watch?v=vid00000001",
+                reference="JHN 3:16",
+                book_usfm="JHN",
+                book_order_index=43,
+                start_chapter=3,
+                start_verse=16,
+                end_chapter=3,
+                end_verse=16,
+                author_id=1,
+            )
+        )
+        await session.commit()
+
+    async with client_for(FakeConcordClient()) as client:
+        deleted = await client.delete("/api/v1/sermon-sources/1")
+        notes = await client.get("/api/v1/sermon-notes")
+
+    assert deleted.status_code == 204
+    async with db_sessionmaker() as session:
+        remaining = (await session.execute(select(SermonSourceVideo.video_id))).scalars().all()
+    # Its ledger went with it; the other source's did not.
+    assert list(remaining) == ["vid00000002"]
+    # And the note about that very video is untouched — deleting where sermons came FROM must
+    # never delete what you wrote about them.
+    assert [n["title"] for n in notes.json()] == ["Written by hand"]
