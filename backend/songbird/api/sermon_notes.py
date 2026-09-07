@@ -7,47 +7,15 @@ from fastapi import APIRouter, Depends, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from songbird.api._anchors import resolve_anchor, resolve_book_order_index
 from songbird.api._tags import normalize_tags, resolve_tags
 from songbird.api.deps import get_concord_client, get_current_user, get_db
 from songbird.api.schemas import SermonNoteCreate, SermonNoteOut, SermonNoteUpdate
-from songbird.concord.client import ConcordClient, ConcordNotFoundError, ConcordUnreachableError
-from songbird.concord.schemas import ChapterVerse
+from songbird.concord.client import ConcordClient
 from songbird.core.errors import ErrorCode, raise_http
 from songbird.db.models import SermonNote, Tag, User
-from songbird.sermons.anchor import UnknownBookError, book_order_index, resolve_span
 
 router = APIRouter(prefix="/api/v1/sermon-notes", tags=["sermon-notes"])
-
-
-async def _resolve_anchor(
-    reference: str, concord: ConcordClient
-) -> tuple[ChapterVerse, ChapterVerse]:
-    """Resolve a human `reference` to its canonical span via Concord (songbird never parses
-    references itself — invariant 4). Returns the (first, last) verse of the range, so a ranged
-    reference like "Joshua 6:1-16" covers every verse in it. Unparseable / unknown reference →
-    404; Concord unreachable → 502 (it's a hard dependency, invariant 3).
-
-    The resolving itself lives in `songbird.sermons.anchor`, shared with the catalogue scan so a
-    note made by a check is anchored by the same code as a note made by hand. This is the HTTP
-    half: the same three answers, from a module that knows nothing about requests."""
-    try:
-        span = await resolve_span(reference, concord)
-    except ConcordNotFoundError as exc:
-        raise_http(404, ErrorCode.NOT_FOUND, f"Couldn't find reference '{reference}': {exc}")
-    except ConcordUnreachableError as exc:
-        raise_http(502, ErrorCode.CONCORD_UNREACHABLE, str(exc))
-    return span.first, span.last
-
-
-async def _resolve_book_order_index(book_usfm: str, concord: ConcordClient) -> int:
-    """Map a USFM book code → Concord's canonical_order. Raises 422 for an unknown code, 502 if
-    Concord can't be reached (it's a hard dependency — its absence is an error, invariant 3)."""
-    try:
-        return await book_order_index(book_usfm, concord)
-    except UnknownBookError:
-        raise_http(422, ErrorCode.INVALID_BOOK, f"unknown book '{book_usfm}'")
-    except ConcordUnreachableError as exc:
-        raise_http(502, ErrorCode.CONCORD_UNREACHABLE, str(exc))
 
 
 async def _get_or_404(db: AsyncSession, sermon_note_id: int, author_id: int) -> SermonNote:
@@ -94,8 +62,8 @@ async def create_sermon_note(
     concord: ConcordClient = Depends(get_concord_client),
     user: User = Depends(get_current_user),
 ) -> SermonNoteOut:
-    first, last = await _resolve_anchor(body.reference, concord)
-    book_order_index = await _resolve_book_order_index(first.book, concord)
+    first, last = await resolve_anchor(body.reference, concord)
+    book_order_index = await resolve_book_order_index(first.book, concord)
     note = SermonNote(
         title=body.title,
         sermon_url=body.sermon_url,
@@ -141,10 +109,10 @@ async def update_sermon_note(
     if body.reference is not None:
         # Changing the reference re-anchors the note: re-resolve the canonical span so the
         # stored coverage always matches the displayed reference.
-        first, last = await _resolve_anchor(body.reference, concord)
+        first, last = await resolve_anchor(body.reference, concord)
         note.reference = body.reference
         note.book_usfm = first.book.strip().upper()
-        note.book_order_index = await _resolve_book_order_index(first.book, concord)
+        note.book_order_index = await resolve_book_order_index(first.book, concord)
         note.start_chapter = first.chapter
         note.start_verse = first.verse
         note.end_chapter = last.chapter

@@ -214,12 +214,14 @@ class RedateResult(BaseModel):
 class SermonSourceCounts(BaseModel):
     """What a source's ledger holds, by state (spec §10 — the counts on each row).
 
-    Nested under the source rather than five more fields on it, because this is one idea that
-    grows: `needs_passage` and `placed` are always zero until the slice that places notes, and a
-    later one wants `dismissed`. Flat fields would also sit beside `enabled` and `min_minutes` and
-    read as properties of the SOURCE, which they are not — they describe its ledger.
+    Nested under the source rather than six more fields on it, because this is one idea that
+    grows. Flat fields would also sit beside `enabled` and `min_minutes` and read as properties of
+    the SOURCE, which they are not — they describe its ledger.
 
     Every key is always present and zero-filled, so the page never has to guard a missing one.
+
+    Also used for the per-state tallies behind the review list's filter bar (spec §8), which is the
+    same idea asked of a filter rather than of a source.
     """
 
     pending: int = 0
@@ -227,6 +229,7 @@ class SermonSourceCounts(BaseModel):
     placed: int = 0
     skipped: int = 0
     already_noted: int = 0
+    dismissed: int = 0
 
 
 class SermonSourceOut(BaseModel):
@@ -317,15 +320,21 @@ SermonVideoPlacedBy = Literal["scripture_line", "title", "first_line", "manual"]
 class PlacedNoteOut(BaseModel):
     """A sermon note a check created, as the ledger row that made it needs to show it.
 
-    Just the id and the display reference. The whole note is on the Browse page and in the
-    reader — these are ordinary sermon notes — so the ledger's job is only to say WHICH passages
-    this video ended up on, and give slice 5's actions something to name.
+    The display reference, and just enough of the anchor to open the passage. The whole note is
+    on the Browse page and in the reader — these are ordinary sermon notes — so the ledger's job is
+    only to say WHICH passages this video ended up on, name them for the review actions, and give
+    the reader's own link somewhere to point.
     """
 
     model_config = ConfigDict(from_attributes=True)
 
     id: int
     reference: str
+    # Where the note starts, so a placed row can link straight into the reader. The END is not
+    # sent: a link opens one chapter, and a note spanning sixteen of them (which is exactly the
+    # defect the review list exists to fix) still opens at the one it begins on.
+    book_usfm: str
+    start_chapter: int
 
 
 class SermonSourceVideoOut(BaseModel):
@@ -367,10 +376,74 @@ class SermonSourceVideoOut(BaseModel):
 
 class SermonSourceVideosPage(BaseModel):
     """One page of the ledger — `total` lets the client paginate ("Load more"). Mirrors the other
-    page-outs: no limit/offset echoed back, because the view tracks those itself."""
+    page-outs: no limit/offset echoed back, because the view tracks those itself.
+
+    `counts` tallies the SAME filter with the state clause removed, and it does two jobs at once:
+    it puts a number beside every state in the filter bar, and it is where "Dismiss all N matching"
+    gets its N. Deriving that N from anything else would let the button promise a number the server
+    would not deliver.
+    """
 
     videos: list[SermonSourceVideoOut]
     total: int
+    counts: SermonSourceCounts = SermonSourceCounts()
+
+
+class SermonVideoFilters(BaseModel):
+    """Which ledger rows a reader is looking at (spec §8).
+
+    Arrives twice over: as query parameters on the listing, and as the BODY of the bulk dismiss,
+    which is how "dismiss everything I can currently see" is expressed without the client having to
+    send hundreds of ids. One model, so the two can be read side by side and seen to agree.
+
+    Every field optional, and all of them absent means every row of every source — fine for a
+    listing, refused for the bulk dismiss (`has_any` is what that refusal asks).
+    """
+
+    source_id: int | None = Field(default=None, ge=1)
+    status: SermonVideoStatus | None = None
+    # Both inclusive, and both compared against the day the row SHOWS — when the stream started,
+    # or when it was published (spec §8). A filter that disagreed with the date on screen would
+    # make the bulk dismiss take rows the reader never saw.
+    published_after: date | None = None
+    published_before: date | None = None
+    # A plain substring of the title, case-insensitively. Not the description: the description is
+    # bulk text the review list never shows, and a search that matched invisible text would select
+    # rows for reasons the screen cannot explain.
+    q: str | None = Field(default=None, max_length=200)
+
+    @property
+    def has_any(self) -> bool:
+        """Is this a filter at all? A `q` of spaces is not one."""
+        return any(
+            (
+                self.source_id is not None,
+                self.status is not None,
+                self.published_after is not None,
+                self.published_before is not None,
+                bool(self.q and self.q.strip()),
+            )
+        )
+
+
+class SermonVideoPlace(BaseModel):
+    """The passages a person chose for one video (spec §8) — one note per reference.
+
+    A list because a sermon really can be on two passages, and because the review list offers
+    several suggestions at once. Capped: this is a person tapping chips, not an import, and an
+    unbounded list would be an unbounded number of Concord calls in one request.
+    """
+
+    references: list[Annotated[str, Field(min_length=1, max_length=128)]] = Field(
+        min_length=1, max_length=10
+    )
+
+
+class SermonVideosDismissed(BaseModel):
+    """How many rows the bulk dismiss actually marked — which can be fewer than the filter matched,
+    because it never touches a row that already has notes behind it (spec §8)."""
+
+    dismissed: int
 
 
 class SermonCheckQueued(BaseModel):

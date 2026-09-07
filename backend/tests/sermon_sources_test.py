@@ -905,6 +905,7 @@ async def test_each_source_carries_its_own_ledger_counts(
         "placed": 0,
         "skipped": 1,
         "already_noted": 1,
+        "dismissed": 0,
     }
     assert by_id[2]["pending"] == 1
     assert by_id[2]["skipped"] == 0
@@ -1064,7 +1065,20 @@ async def test_videos_is_not_read_as_a_source_id(
         resp = await client.get("/api/v1/sermon-sources/videos")
 
     assert resp.status_code == 200
-    assert resp.json() == {"videos": [], "total": 0}
+    assert resp.json() == {
+        "videos": [],
+        "total": 0,
+        # Zero-filled rather than absent, so the review list's filter bar can put a number beside
+        # every state without guarding each one (spec §8).
+        "counts": {
+            "pending": 0,
+            "needs_passage": 0,
+            "placed": 0,
+            "skipped": 0,
+            "already_noted": 0,
+            "dismissed": 0,
+        },
+    }
 
 
 async def test_the_ledger_reads_without_a_youtube_key(
