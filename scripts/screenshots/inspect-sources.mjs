@@ -25,8 +25,11 @@ import { mkdirSync } from "node:fs";
 const BASE = process.env.SONGBIRD_URL ?? "http://localhost:8077";
 const NOKEY_BASE = process.env.SONGBIRD_NOKEY_URL ?? "";
 const OUT = process.env.OUT_DIR ?? "/tmp/sources-pass";
-const USERNAME = "reader";
-const PASSWORD = "graceandpeace";
+// Overridable so the pass can be pointed at a scratch songbird that has already been scanned —
+// the ledger states below need real placed rows, and re-scanning four churches to see them costs
+// quota for nothing.
+const USERNAME = process.env.SONGBIRD_USER ?? "reader";
+const PASSWORD = process.env.SONGBIRD_PASS ?? "graceandpeace";
 
 // The real churches this feature exists for, plus one curated playlist — a channel-only page
 // would hide how a long playlist title behaves, and that is exactly the kind of thing this pass
@@ -146,8 +149,24 @@ async function captureLedger(page, label) {
   await ledger.scrollIntoViewIfNeeded();
   await shot(page, `${label}-ledger-skipped`, { fullPage: false });
 
-  // A filter combination with nothing in it — the empty state a reader will actually hit.
+  // Placed rows (v1.7 slice 4b): the rule that decided, and the passages it wrote notes on. A row
+  // that made several notes is the wide case — the references wrap on a phone or they don't.
   await page.getByLabel("Filter by state").selectOption("placed");
+  await page.waitForTimeout(600);
+  await ledger.scrollIntoViewIfNeeded();
+  await shot(page, `${label}-ledger-placed`, { fullPage: false });
+
+  // Rows waiting for a passage, with their suggestions as read-only chips. This is the longest
+  // row the ledger can produce — a long title, a date, a link and several chips under it — and
+  // it is the state most of a livestreaming church's catalogue sits in.
+  await page.getByLabel("Filter by state").selectOption("needs_passage");
+  await page.waitForTimeout(600);
+  await ledger.scrollIntoViewIfNeeded();
+  await shot(page, `${label}-ledger-needs-passage`, { fullPage: false });
+
+  // A filter combination with nothing in it — the empty state a reader will actually hit.
+  // (Not `placed` any more: since 4b that one has rows in it.)
+  await page.getByLabel("Filter by state").selectOption("already_noted");
   await page.waitForTimeout(600);
   await ledger.scrollIntoViewIfNeeded();
   await shot(page, `${label}-ledger-empty`, { fullPage: false });

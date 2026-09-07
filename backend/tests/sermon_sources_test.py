@@ -541,9 +541,10 @@ async def test_deleting_a_source_never_deletes_a_sermon_note(
 ) -> None:
     """Spec §9: the ledger goes with a deleted source; the notes it created stay.
 
-    Trivially true today, because nothing links the two yet — but slice 4 gives a sermon note a
-    foreign key back to the ledger row that made it, and that is exactly the change that could
-    turn this into a cascade nobody intended. The guard lands before the thing it guards.
+    Written in slice 3 while nothing linked the two, precisely because slice 4b was going to give
+    a sermon note a foreign key back to the ledger row that made it — the change that could turn
+    this into a cascade nobody intended. That link now exists, and the tests at the end of this
+    file hold the rest of it: the note survives, and its link is cleared rather than followed.
     """
     async with db_sessionmaker() as session:
         note = SermonNote(
@@ -1126,3 +1127,131 @@ async def test_deleting_a_source_takes_its_ledger_and_leaves_the_notes(
     # And the note about that very video is untouched — deleting where sermons came FROM must
     # never delete what you wrote about them.
     assert [n["title"] for n in notes.json()] == ["Written by hand"]
+
+
+async def _note_on(
+    sessionmaker: async_sessionmaker[AsyncSession],
+    *,
+    source_video_id: int | None,
+    reference: str = "John 3:16",
+    book_order_index: int = 43,
+    author_id: int = 1,
+) -> int:
+    async with sessionmaker() as session:
+        note = SermonNote(
+            title="Made by a check",
+            sermon_url="https://www.youtube.com/watch?v=vid00000001",
+            reference=reference,
+            book_usfm="JHN",
+            book_order_index=book_order_index,
+            start_chapter=3,
+            start_verse=16,
+            end_chapter=3,
+            end_verse=16,
+            author_id=author_id,
+            source_video_id=source_video_id,
+        )
+        session.add(note)
+        await session.commit()
+        return note.id
+
+
+async def test_a_placed_row_lists_the_notes_it_created(
+    db_sessionmaker: async_sessionmaker[AsyncSession],
+    client_for: Callable[[FakeConcordClient], httpx.AsyncClient],
+) -> None:
+    """Spec §8: a placed row links to the notes it made.
+
+    Ordered canonically rather than by the order the rules happened to find them, so a video
+    placed on Exodus and Acts reads the way every other sermon-note list in songbird reads.
+    """
+    await _seed_source_row(db_sessionmaker, source_id=1)
+    await _seed_ledger(db_sessionmaker, source_id=1, rows=(("vid00000001", "placed", None),))
+    async with db_sessionmaker() as session:
+        row_id = (await session.execute(select(SermonSourceVideo.id))).scalar_one()
+    acts = await _note_on(
+        db_sessionmaker, source_video_id=row_id, reference="Acts 7:33-35", book_order_index=44
+    )
+    exodus = await _note_on(
+        db_sessionmaker, source_video_id=row_id, reference="Exodus 3:5-10", book_order_index=2
+    )
+
+    async with client_for(FakeConcordClient()) as client:
+        page = await client.get("/api/v1/sermon-sources/videos")
+
+    video = page.json()["videos"][0]
+    assert [(n["id"], n["reference"]) for n in video["notes"]] == [
+        (exodus, "Exodus 3:5-10"),
+        (acts, "Acts 7:33-35"),
+    ]
+
+
+async def test_a_row_that_placed_nothing_lists_nothing(
+    db_sessionmaker: async_sessionmaker[AsyncSession],
+    client_for: Callable[[FakeConcordClient], httpx.AsyncClient],
+) -> None:
+    # A note made by hand has no ledger row behind it and must not attach itself to one.
+    await _seed_source_row(db_sessionmaker, source_id=1)
+    await _seed_ledger(db_sessionmaker, source_id=1, rows=(("vid00000001", "needs_passage", None),))
+    await _note_on(db_sessionmaker, source_video_id=None)
+
+    async with client_for(FakeConcordClient()) as client:
+        page = await client.get("/api/v1/sermon-sources/videos")
+
+    assert page.json()["videos"][0]["notes"] == []
+
+
+async def test_deleting_a_source_leaves_its_notes_with_no_link_back(
+    db_sessionmaker: async_sessionmaker[AsyncSession],
+    client_for: Callable[[FakeConcordClient], httpx.AsyncClient],
+) -> None:
+    """The `ON DELETE SET NULL` SQLite will not do for us — the twin of the cascade above.
+
+    A note outlives the source that made it (spec §9), so the link has to be cleared rather than
+    followed. Without the explicit UPDATE in the route the note would survive pointing at a ledger
+    row that no longer exists, and the ledger listing would then attach it to whatever row later
+    took that id.
+    """
+    await _seed_source_row(db_sessionmaker, source_id=1)
+    await _seed_ledger(db_sessionmaker, source_id=1, rows=(("vid00000001", "placed", None),))
+    async with db_sessionmaker() as session:
+        row_id = (await session.execute(select(SermonSourceVideo.id))).scalar_one()
+    note_id = await _note_on(db_sessionmaker, source_video_id=row_id)
+
+    async with client_for(FakeConcordClient()) as client:
+        deleted = await client.delete("/api/v1/sermon-sources/1")
+        notes = await client.get("/api/v1/sermon-notes")
+
+    assert deleted.status_code == 204
+    assert [n["id"] for n in notes.json()] == [note_id]
+    async with db_sessionmaker() as session:
+        note = await session.get(SermonNote, note_id)
+        assert note is not None
+        assert note.source_video_id is None
+        # The ledger row itself is gone, as it always was.
+        assert (await session.execute(select(SermonSourceVideo.id))).scalars().all() == []
+
+
+async def test_deleting_one_source_leaves_another_sources_links_alone(
+    db_sessionmaker: async_sessionmaker[AsyncSession],
+    client_for: Callable[[FakeConcordClient], httpx.AsyncClient],
+) -> None:
+    # The UPDATE is narrowed to the deleted source's rows; a blanket clear would quietly unlink
+    # every check-created note the user owns.
+    await _seed_source_row(db_sessionmaker, source_id=1)
+    await _seed_source_row(db_sessionmaker, source_id=2, youtube_id="UCzzzzzzzzzzzzzzzzzzzzz2")
+    await _seed_ledger(db_sessionmaker, source_id=1, rows=(("vid00000001", "placed", None),))
+    await _seed_ledger(db_sessionmaker, source_id=2, rows=(("vid00000002", "placed", None),))
+    async with db_sessionmaker() as session:
+        rows = dict(
+            (await session.execute(select(SermonSourceVideo.video_id, SermonSourceVideo.id))).all()
+        )
+    kept = await _note_on(db_sessionmaker, source_video_id=rows["vid00000002"])
+    await _note_on(db_sessionmaker, source_video_id=rows["vid00000001"])
+
+    async with client_for(FakeConcordClient()) as client:
+        assert (await client.delete("/api/v1/sermon-sources/1")).status_code == 204
+
+    async with db_sessionmaker() as session:
+        note = await session.get(SermonNote, kept)
+        assert note is not None and note.source_video_id == rows["vid00000002"]

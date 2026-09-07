@@ -1,15 +1,18 @@
-"""The catalogue scan (v1.7 sermon sources, spec §6) — slice 4a's half of it.
+"""The catalogue scan (v1.7 sermon sources, spec §6) — fetching and filtering, and the loop.
 
 A check reads a source's playlist, fetches the details of every video it has not seen, applies
-spec §6's filters, and writes a ledger row saying what it decided. It stops there. Working out
-which passage a sermon preaches on, and creating the note, is slice 4b's job and needs Concord;
-this needs only YouTube. The seam between them is the `pending` status: 4a writes it, 4b consumes
-it, and a scan is therefore resumable — either half can fail without losing the other's work.
+spec §6's filters, and writes a ledger row saying what it decided. Then it hands that source to
+`place.py`, which reads the passages out of those rows and creates the notes (spec §7).
+
+The two halves stay in two files because they fail for different reasons — this one needs only
+YouTube, that one only Concord — and the `pending` status between them is what makes a scan
+resumable: either can fail without losing the other's work. A Concord outage costs no quota and no
+re-walking; a YouTube outage leaves every passage already read.
 
 The file is in two parts, and the order is the point. The top is pure: given a video and a
 source's settings, what should happen? No database, no HTTP, no settings lookup — so every rule
 in spec §6 is one line of test. The bottom is `ScanRunner`, which is all the I/O: the paging, the
-batching, the commits, and the one background task.
+batching, the commits, the one background task, and the call into the placing half.
 """
 
 import asyncio
@@ -22,7 +25,9 @@ from typing import Final, Literal
 from sqlalchemy import or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from songbird.db.models import SermonNote, SermonSource, SermonSourceVideo
+from songbird.concord.client import ConcordClient, ConcordUnreachableError
+from songbird.db.models import SermonSource, SermonSourceVideo
+from songbird.sermons.place import STATUS_CONCORD_DOWN, Placer, RunState, already_noted_videos
 from songbird.youtube.client import (
     YouTubeAuthError,
     YouTubeClient,
@@ -222,16 +227,22 @@ class ScanProgress:
 
     pages_done: int = 0
     ledgered: int = 0
+    # Whether the CATALOGUE walk reached its natural stop. Separate from the check as a whole,
+    # because reading the passages happens afterwards and can fail on its own: an evaluation that
+    # blows up must not tell the next check that this source's paging is untrustworthy.
+    walk_complete: bool = False
 
     @property
     def complete_flag(self) -> bool | None:
         """What to write to `scan_complete` after a FAILED walk.
 
-        `False` if we got far enough to leave a gap; `None` — meaning leave the column alone — if
-        we never consumed a page at all. Without that second case every transient blip would
-        force a full re-walk of every catalogue on the next check, which is an expensive way to
-        record that nothing happened.
+        `True` if the walk finished, whatever went wrong afterwards. `False` if we got far enough
+        to leave a gap; `None` — meaning leave the column alone — if we never consumed a page at
+        all. Without that last case every transient blip would force a full re-walk of every
+        catalogue on the next check, which is an expensive way to record that nothing happened.
         """
+        if self.walk_complete:
+            return True
         return False if self.pages_done else None
 
 
@@ -252,11 +263,13 @@ class ScanRunner:
         self,
         sessionmaker: async_sessionmaker[AsyncSession],
         youtube: YouTubeClient,
+        concord: ConcordClient,
         *,
         default_min_minutes: int,
     ) -> None:
         self._sessionmaker = sessionmaker
         self._youtube = youtube
+        self._placer = Placer(sessionmaker, concord)
         self._default_min_minutes = default_min_minutes
         self._task: asyncio.Task[None] | None = None
         self._requested = False
@@ -334,6 +347,9 @@ class ScanRunner:
         skipped for the rest of this run.
         """
         attempted: set[tuple[int, datetime | None]] = set()
+        # One state for the whole run: the book map, the resolved-reference cache, and the flag
+        # that says Concord has gone. A run is the natural lifetime for all three.
+        state = RunState()
         while True:
             # Cleared BEFORE the query, so a request made while the query is in flight is seen.
             self._requested = False
@@ -344,7 +360,7 @@ class ScanRunner:
                 return
             for source in due:
                 attempted.add(source.key)
-                if not await self._scan_source(source):
+                if not await self._scan_source(source, state):
                     logger.warning("sermon scan stopped: YouTube's daily quota is spent")
                     return
 
@@ -403,13 +419,19 @@ class ScanRunner:
             rows = (await db.execute(stmt)).all()
         return [DueSource(id=row[0], requested_at=row[1]) for row in rows]
 
-    async def _scan_source(self, due: DueSource) -> bool:
+    async def _scan_source(self, due: DueSource, state: RunState) -> bool:
         """Check one source and record the outcome — always. False means the whole run stops.
 
-        The status write gets its OWN session, opened after the scanning session has closed. That
-        is not tidiness: an `AsyncSession` whose flush raised refuses every later statement until
-        it is rolled back, so writing `last_check_status` on the session that just failed is the
-        one path guaranteed to be broken exactly when it is needed.
+        Two halves, in two sessions. The walk asks YouTube what the church has published; the
+        evaluation asks Concord what those videos say. Each opens its own session and the status
+        write opens a third, which is not tidiness: an `AsyncSession` whose flush raised refuses
+        every later statement until it is rolled back, so writing `last_check_status` on the
+        session that just failed is the one path guaranteed to be broken exactly when it is needed.
+
+        **An unreachable Concord stops the reading, not the fetching.** Every source after this one
+        is still walked, so the quota is spent once and the ledger fills up; only the passages wait
+        for the next check. And it is recorded once per run rather than rediscovered per source,
+        because Concord being down is a fact about Concord.
         """
         started_at = datetime.now(UTC)
         progress = ScanProgress()
@@ -419,7 +441,19 @@ class ScanRunner:
                 if source is None or not source.enabled:
                     return True  # deleted or paused since the query — nothing to record
                 await self._walk(db, source, progress)
-            await self._record_check(due, started_at, STATUS_OK, True)
+            progress.walk_complete = True
+
+            status = STATUS_OK
+            if state.concord_down:
+                status = STATUS_CONCORD_DOWN
+            else:
+                try:
+                    await self._placer.evaluate_source(due.id, state)
+                except ConcordUnreachableError:
+                    logger.warning("sermon scan: Concord unreachable, passages left for next time")
+                    state.concord_down = True
+                    status = STATUS_CONCORD_DOWN
+            await self._record_check(due, started_at, status, True)
             return True
         except YouTubeQuotaError as exc:
             # Quota is not this source's fault, and retrying anything today is wasted: record it
@@ -536,22 +570,6 @@ class ScanRunner:
         )
         return set((await db.execute(stmt)).scalars().all())
 
-    async def _already_noted(
-        self, db: AsyncSession, author_id: int, ids: Sequence[str]
-    ) -> set[str]:
-        """Which of these videos this AUTHOR has already written a sermon note about (spec §6.4).
-
-        Scoped to the author, so another user's note about the same sermon does not make this
-        user's copy look already handled.
-        """
-        if not ids:
-            return set()
-        stmt = select(SermonNote.youtube_video_id).where(
-            SermonNote.author_id == author_id,
-            SermonNote.youtube_video_id.in_(ids),
-        )
-        return {v for v in (await db.execute(stmt)).scalars().all() if v is not None}
-
     async def _process(
         self,
         db: AsyncSession,
@@ -572,7 +590,7 @@ class ScanRunner:
         in the newest page.
         """
         videos = await self._youtube.get_videos(video_ids)
-        noted = await self._already_noted(db, source.author_id, [v.id for v in videos])
+        noted = await already_noted_videos(db, source.author_id, [v.id for v in videos])
         now = datetime.now(UTC)
         for video in videos:
             decision = decide(video, rule, already_noted=video.id in noted)

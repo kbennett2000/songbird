@@ -114,8 +114,20 @@ whether the last check paged the catalogue all the way to its natural stop; see 
 **`sermon_notes.youtube_video_id`** — new nullable indexed column. Set server-side on create/update
 whenever `sermon_url` is a YouTube link (`watch?v=`, `youtu.be/`, `/live/`, `/shorts/`, `/embed/`,
 share suffixes like `?si=` ignored), and back-filled for existing notes by §11. This is how a scan
-knows a video was already noted by hand. **`sermon_notes.source_video_id`** — nullable FK to the
+knows a video was already noted by hand. **`sermon_notes.source_video_id`** — nullable, indexed, pointing at the
 ledger row that created the note, so the review list can show "placed → note".
+
+*As built (slice 4b, migration `0013`):* the **model** declares the foreign key with
+`ON DELETE SET NULL`; the **migration adds a plain column with no `REFERENCES` clause**. SQLite
+cannot add a constraint to a table that already exists — `ALTER TABLE … ADD COLUMN … REFERENCES` is
+emitted by Alembic as a separate `ADD CONSTRAINT` that fails *after* the column has landed, leaving
+a half-applied migration; and `batch_alter_table`, which rebuilds the table instead, refuses because
+reflection finds an unnamed foreign key on `sermon_notes` (0006's link to `users`). The divergence
+is deliberate and checked: the migration's schema was diffed column-for-column and index-for-index
+against the model, and they match everywhere except that one line. It costs nothing at runtime,
+because SQLite does not enforce foreign keys anyway — `PRAGMA foreign_keys` defaults to off and
+songbird never turns it on, so **the delete route nulls the link explicitly** rather than trusting
+the schema, exactly as it already does for the ledger's `CASCADE`.
 
 ## 5. Adding a source
 
@@ -207,34 +219,86 @@ scheduled check or "Check now".
 ## 7. Finding the passage
 
 **Candidates.** A deliberately loose pattern over the text finds anything shaped like a reference —
-optional leading `1`/`2`/`3`, one or two capitalized words (a trailing `.` allowed, so `2 Cor.`
-works), a chapter, optional `:verse`, optional range using `-`, `–`, or `—`, optional `:verse` on the
-range end (so `2 Chronicles 30:1–31:7` is one candidate). Dashes are normalized to `-` and the
-abbreviation `.` dropped before the string goes to Concord. **Concord is the judge:** every candidate
-is resolved via `/v1/verses/{ref}`; whatever Concord rejects (`Episode 63`, `Sunday 9:00`,
-`Israel 24:03`) is discarded. songbird never decides what a book name means.
+optional leading `1`/`2`/`3` (or `I`/`II`/`III`, normalized to digits), one or two capitalized words
+(a trailing `.` allowed, so `2 Cor.` works), a chapter, optional `:verse`, optional range using `-`,
+`–`, or `—`, optional `:verse` on the range end (so `2 Chronicles 30:1–31:7` is one candidate).
+Dashes are normalized to `-`, the abbreviation `.` dropped and whitespace collapsed before the
+string goes to Concord — the normalizing matters less for resolution (Concord reads Roman numerals,
+trailing periods and shouted case perfectly well) than for **counting**, since the boilerplate rule
+below tallies strings and a template that writes `II Timothy 2:2` one week and `2 Timothy 2:2` the
+next must count once. **Concord is the judge:** every candidate is resolved via `/v1/verses/{ref}`;
+whatever Concord rejects (`Episode 63`, `Sunday 9:00`, `Israel 24:03` — all three confirmed live as
+a 404) is discarded. songbird never decides what a book name means.
 
-**Boilerplate.** A reference that appears in at least half of a source's ledgered videos (minimum
-five videos) is treated as part of the channel's template — a giving verse, a church-name verse —
-and is ignored everywhere for that source. (2819 Church is literally named after Matthew 28:19;
-Cornerstone's descriptions carry a giving verse.) Recomputed from the ledger at each scan; the full
+*As built (slice 4b):* **a two-word book name also offers its second word alone.** Two words are
+allowed because people write `First Corinthians 13`, but that also lets the pattern swallow a real
+reference behind any capitalized word in front of it: in `Sunday Service John 3:16` the book part
+matches `Service John`, Concord refuses it, and `John 3:16` is never offered at all — a sermon that
+plainly states its passage would go to the review list. So the second word is offered as well. It is
+safe because Concord refuses a bare ambiguous name (`Corinthians 13` and `Peter 1:6-7` are both a
+404, checked live), so the extra candidate can only resolve when the second word is a whole book
+name. It costs one lookup, answered from the run's cache after the first time.
+
+**Dates are not references.** The one thing the finder decides for itself, and it is a judgement
+about the shape of the surrounding text rather than about what a word means. A candidate whose book
+part is a bare month — full name or three-letter short form, period optional, any case — is dropped
+when it either carries no verse part or is followed immediately by a four-digit year (a comma and an
+ordinal suffix both optional). `Mark 15` and `Mar. 15:16-20` still go to Concord; `Mar. 15 2026`,
+`Mar. 15, 2026`, `Mar. 15th 2026` and a year-less `Sunday Service Mar. 15` do not.
+
+This exists because live acceptance found it the hard way. Majestic View titles every service by the
+day it happened, and **`Mar.` is an abbreviation Concord accepts for Mark** — so `Mar. 15 2026`
+became a note on Mark 15. Five notes in the first run were wrong that way, and three of them were
+the *only* note on their video, so those videos were confidently mis-placed instead of going to the
+review list where they belonged. Every other month is in the rule for uniformity, not necessity: no
+other month collides with a book, and dropping them only saves a lookup that came back 404 (all 36
+month strings the four real sources produce were checked against live Concord — every one refused).
+`Sept` is deliberately **not** in the set, because the short form here is three letters and nothing
+Concord knows answers to `Sept`; the cost of that is one wasted lookup, which is the safe direction.
+
+**Boilerplate.** A reference that appears in at least half of a source's ledgered videos — `ceil(n/2)`
+— is treated as part of the channel's template, a giving verse or a church-name verse, and is
+ignored everywhere for that source: excluded from the rules *and* from the suggestions. The rule is
+**switched off entirely below five ledgered videos**. Five is a sample-size floor, not an occurrence
+count: under it, "half" is two or three, and a two-part series on one passage would strike out its
+own passage. The failure this accepts instead is a short series landing in the review list, one tap
+each. Recomputed from the ledger at each scan over **all** of a source's rows — skipped and
+already-noted included, because a bigger denominator makes a template easier to see — and the full
 catalog scan fetches everything first, then computes this, then places.
 
-**Rules, first hit wins; every reference on the winning text becomes its own note:**
+*As built:* boilerplate matches **normalized candidate strings, not resolved anchors**, so a
+template that writes one reference two ways whose normalizations still differ can evade it. Listed
+in §13. And see §12: on all four real sources today the rule strikes nothing out at all.
+
+**Rules, first hit wins; every reference on the winning text becomes its own note.** A *hit* is at
+least one candidate on that rule's text which survives boilerplate **and** resolves through Concord —
+so a labelled line reading `Scripture: TBA` does not win by existing and shadow a real reference
+below it.
 1. **Labeled scripture line** — a description line whose label is one of `scripture`,
    `main scripture`, `scriptures`, `text`, `passage(s)`, `key verse(s)`, `bible reference(s)`,
-   `reference(s)`, `reading`, followed by `:`. Take every reference on that line.
+   `reference(s)`, `reading`, followed by `:`. Matched case-insensitively and through leading
+   decoration (`*`, `#`, `-`, `•`, an emoji). Take every reference on that line.
    *Celebration Church:* `Main Scripture: Acts 7:33–35 (with reference to Exodus 3:5–10)` → two notes.
-2. **Title.** *2819 Church* titles appear to carry the passage in parentheses.
-3. **First line of the description** (first non-empty line). *Cornerstone Chapel:*
-   `7/22/2026 An in-depth study of 2 Chronicles 29.` → one note spanning the chapter.
-4. Nothing → `needs_passage`, with every non-boilerplate reference found anywhere else in the
-   description saved as `suggestions` for the review list. (Cornerstone's timestamp lines and
-   *Majestic View*'s dated livestreams land here.)
+   **The heading extension:** when the text after the colon yields no candidate — the
+   `Scripture References:` heading with a list beneath it — the following lines are taken instead,
+   stopping at a blank line or at the first line carrying no candidate. That stop rule is textual: it
+   asks whether a line *has* something reference-shaped on it, never whether Concord likes it, so
+   where the block ends does not depend on a network call.
+2. **Title.**
+3. **First line of the description** (first non-empty line).
+4. Nothing → `needs_passage`, with every non-boilerplate reference that resolves anywhere else in
+   the **description** saved as `suggestions` for the review list, deduplicated and in order of
+   appearance.
 
 A placed note records `placed_by` on its ledger row, so a wrong placement can be traced to the rule
-that made it. The note's `reference` is the normalized candidate string; the anchor is whatever
-Concord resolved it to (a chapter-only reference spans the chapter — the existing resolve behavior).
+that made it. The note's `reference` is **Concord's own string** for the resolved span, not the text
+the church typed: Concord normalizes as it resolves, so `2 Cor 5:17` comes back `2 Corinthians 5:17`
+and a shouted `MATTHEW 28:19` comes back `Matthew 28:19` (both checked live). That is what gives
+scan-created notes one consistent spelling. `suggestions` store the same strings, so slice 5's
+one-tap place re-resolves exactly what the reader was shown. The anchor is whatever Concord resolved
+the reference to — a chapter-only reference spans the chapter, the existing resolve behavior.
+Resolved references are collapsed by **anchor**, not by string, so `2 Cor. 5` and `2 Corinthians 5`
+on one line make one note rather than two.
 
 **One note per passage.** Same title (the video's title), same link, same date, same tags — one row
 per reference on the winning line. A comma-continued list (`Romans 8:28, 31-39`) yields only the first
@@ -335,16 +399,35 @@ same rule: every text layer keeps its own contrast.
 
 ## 12. Cross-check against the product owner's real sources
 
-- **@CelebrationChurch_org** — labeled `Main Scripture:` line → rule 1, often two notes per sermon.
-- **@cornerstonechpl** — the edited uploads open with `An in-depth study of <passage>.` → rule 3.
-  The same sermon is also streamed three times each Sunday plus Wednesday, with no passage in the
-  stream's text; with `include_live` **off** for this source those are skipped, not queued. Their short
-  daily devotionals fall under the length rule.
-- **@2819Church** — titles appear to carry the passage → rule 2; `Matthew 28:19` in the channel's
-  template is caught by the boilerplate rule.
-- **@majesticviewchurchlive407** — sermons are livestreams (`include_live` on, the default) titled by
-  date with no passage in the text; they will land in **Needs a passage** every week. That is the
-  honest outcome: one tap with the reference, not a guess.
+**Rewritten after slice 4b's live acceptance.** Everything below the table was a guess before the
+scan ran, and three of the guesses were wrong. What the four real sources actually do, over 2,671
+videos and 1,082 notes:
+
+| source | videos | scripture line | title | first line | needs a passage | skipped |
+|---|---|---|---|---|---|---|
+| @CelebrationChurch_org | 445 | 51 | 0 | 13 | 261 | 120 |
+| @cornerstonechpl | 1,273 | 0 | 691 | 0 | 149 | 433 |
+| @2819Church | 582 | 0 | 299 | 7 | 216 | 60 |
+| @majesticviewchurchlive407 | 371 | 0 | 11 | 2 | 351 | 7 |
+
+- **@CelebrationChurch_org** — as predicted: a labelled `Main Scripture:` line, rule 1, often two
+  notes per sermon.
+- **@cornerstonechpl** — **places by title, not by rule 3.** The prediction that its edited uploads
+  open with `An in-depth study of <passage>.` was wrong about which text wins: the passage is in the
+  title (`… | Mark 12:41-44 | Gary Hamrick`), the title is tried first, and rule 3 fires zero times
+  on 1,273 videos. The `include_live` **off** guidance stands — that is what sends its three Sunday
+  streams and the Wednesday one to `skipped` rather than the review list, and it is most of the 433.
+- **@2819Church** — places by title, as predicted. But **its descriptions contain no `28:19` at
+  all**, so the boilerplate rule catches nothing there. Its most repeated reference is
+  `Acts 2:42-47`, in 9 videos of 582 — nowhere near half.
+- **@majesticviewchurchlive407** — as predicted, almost the whole catalogue lands in **Needs a
+  passage**: sermons are date-titled livestreams with no passage written down. That is the honest
+  outcome, one tap each. It is also the source whose date-titling produced §7's date rule.
+
+**The boilerplate rule fires on none of the four sources today.** It stays — it is unit-tested, it
+costs nothing when it does not fire, and a channel that adds a template verse tomorrow needs it —
+but nothing in the current data exercises it, and this section should not be read as saying
+otherwise.
 
 ## 13. Deferred (not this feature)
 
@@ -366,6 +449,21 @@ same rule: every text layer keeps its own contrast.
   video that may yet air — would be worse.
 - **A video YouTube declines to return** (private, deleted, age-gated) is likewise never ledgered,
   with the same small recurring cost and the same reasoning.
+- **A chapter-to-chapter range with a verse on one end is refused.** Cornerstone writes
+  `Judges 13-14:11`; Concord will not resolve that shape, so those videos go to the review list —
+  8 of them across 1,273. (A plain cross-chapter range with verses on both ends, `2 Chronicles
+  30:1-31:7`, resolves fine.) Fixing it would mean songbird interpreting a reference rather than
+  asking, which invariant 4 keeps out; a miss into the review list is the safe direction.
+- **A numeric date behind a book's name still resolves.** The date rule in §7 catches a month
+  *name*; it does not catch `MM-DD-YYYY`. Majestic View has one video titled
+  `MVC - Talking About Respect with Pastor John 06-25-2020`, and `John 06-25` is a reference Concord
+  reads as John 6-25 — a note spanning sixteen chapters on a video whose subject is respect. **One
+  wrong note in 1,082** across the four sources; the only one that survived the by-eye audit, and
+  the same family of defect the month rule fixed. The same guard extended to a bare `N-N` span
+  followed by `-NNNN` would catch it.
+- **A source's boilerplate can be evaded by spelling.** The tally counts normalized candidate
+  strings, so a template writing one reference two ways that normalize differently is counted twice
+  and may clear neither half. Not observed live — no source currently has boilerplate at all (§12).
 - **A video is ledgered by the first of an author's sources that sees it.** The ledger is unique per
   (author, video), so a church's curated playlist repeating its own uploads produces one row, not
   two — which is the point. The consequence is that the second source's own filter settings get no
@@ -404,9 +502,10 @@ Smallest reviewable, load-bearing unit; branch `slice/N-…`, PR per slice, Plan
    different fixtures, and together make a diff nobody can review:
    - **4a — Fetch.** The ledger (`0012`), the playlist pager, the §6 filters, the background runner,
      "Check now", per-source counts and a read-only ledger view. Candidates land as `pending`.
-   - **4b — Place.** The candidate finder, the §7 rules, boilerplate exclusion, note creation, and
-     `sermon_notes.source_video_id`. Consumes `pending`. Fixture-driven tests on the real
-     description shapes.
+   - **4b — Place.** ✅ The candidate finder, the §7 rules, boilerplate exclusion, note creation,
+     and `sermon_notes.source_video_id` (`0013`). Consumes `pending`. Fixture-driven tests on the
+     real description shapes, and a by-eye audit against the real channels that caught the date
+     collision §7 now guards against.
 5. **Review list** (§8) — place / dismiss / restore / note-it-anyway, UI.
 6. **Schedule + docs** — the in-process timer with boot catch-up, status endpoint, compose lines,
    User's Guide walkthrough, CHANGELOG, SECURITY note, Dockerfile comment.

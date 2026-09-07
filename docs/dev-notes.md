@@ -4,6 +4,115 @@ A running log of per-slice decisions, gotchas, and how each slice was verified. 
 
 ---
 
+## Sermon sources slice 4b — place (the scan's second half)
+
+- **Date:** 2026-09-07
+- **Branch:** `slice/sermon-sources-4b-place`
+
+### Why
+
+4a taught songbird to fetch: it pages a church's catalogue, applies §6's filters, and leaves every
+survivor at `pending`, doing nothing. 4b reads them. For each pending row it finds the strings in the
+video's own text that are *shaped* like a reference, asks Concord what they mean, and creates
+ordinary sermon notes when a rule hits. When none hits, the row becomes `needs_passage` with its
+resolved references saved as suggestions, and slice 5 turns those into one-tap buttons.
+
+This is the riskiest logic in the feature, and the risk is asymmetric: **a sermon pinned to the wrong
+passage is worse than one left for a tap.** Every choice leans that way — the rules are ordered and
+stop at the first hit, Concord is the only judge of what a string means, a channel's template verse
+is excluded before anything is resolved, and anything short of a stated passage goes to review.
+
+### What landed
+
+- **`sermon_notes.source_video_id`** (migration `0013`) — the link from a note back to the row that
+  made it, and the explicit null-out in the delete route.
+- **`songbird/sermons/references.py`** — the pure candidate finder. No I/O, no opinions about book
+  names, one exception for dates (below).
+- **`songbird/sermons/anchor.py`** — `_resolve_anchor` and `_resolve_book_order_index` moved out of
+  the API router so a scan-created note is built by the same code as a hand-made one, with the book
+  map fetched once per run instead of once per note. **`songbird/sermons/dates.py`** — §7's date
+  rule, which §11's re-date action now shares rather than duplicates.
+- **`songbird/sermons/passages.py`** — the three rule texts and the boilerplate tally, both pure.
+- **`songbird/sermons/place.py`** — the I/O edge: boilerplate over the whole ledger in chunks, the
+  already-noted re-check, the rules per video, and one commit per video.
+- **The ledger row now says why**: `placed_by` in the reader's words, the passages it noted, and
+  read-only suggestion chips for rows waiting on a passage.
+
+### Gotchas
+
+- **SQLite cannot add a foreign key to an existing table.** `op.add_column` with an inline
+  `sa.ForeignKey` emits a separate `ADD CONSTRAINT` that fails *after* the column has landed — a
+  half-applied migration. `batch_alter_table` rebuilds the table instead, and refuses here because
+  reflection finds an **unnamed** FK on `sermon_notes` (0006's link to `users`). So the migration
+  adds a plain column and the model alone carries the FK; the two were diffed column-for-column and
+  index-for-index to prove that is the only difference. It costs nothing, because SQLite does not
+  enforce foreign keys anyway — which is why the delete route nulls the link by hand.
+- **`resolve_tags` adds `Tag` rows without flushing.** Calling it once per note in one uncommitted
+  session creates duplicate rows for the same new name and fails the unique constraint at flush.
+  A source's tags are resolved **once** per evaluation and the objects reused.
+- **`pkill -f <pattern>` matches its own shell** and killed the session — third time this has cost
+  something, so: find the listener instead, `ss -lptnH "sport = :8099" | grep -oP 'pid=\K[0-9]+'`.
+- **Mutation testing found five tautologies** the first time and three more after the date fix.
+  One was `assert {n.source_video_id for n in notes} == {notes[0].source_video_id}`, which passes
+  happily when every value is `None`. Another: a "nothing pending" early return that was pinned only
+  on Concord calls, which the boilerplate pass never makes — it needed a query counter.
+
+### How it was verified
+
+`make check` 474 passed, Ruff and Pyright-strict clean; `make check-frontend` 288 passed, ESLint,
+tsc and build clean. 10/10 mutants killed on the date guard, on top of 30/30 on the rest.
+`alembic upgrade head → downgrade -1 → upgrade head` on a scratch database.
+
+**Live acceptance** ran against the four real channels with a real key and a dockerised Concord:
+2,671 videos, 1,082 notes, 114 quota units, about 25 seconds. Every logged URL read `key=REDACTED`
+and no key-shaped string appears anywhere in the logs. The per-source table is in §12 of the spec.
+Deleting a source removed its 371 ledger rows, left every note intact with `source_video_id` null,
+and left zero dangling links.
+
+**The by-eye audit tripped its gate, and that is the most useful thing in this entry.** Ten placed
+notes per source, sampled with a fixed seed and the list written down *before* any was opened,
+checked against their YouTube pages. Majestic View had two wrong anchors in its ten — the agreed
+trip-wire was more than one in any single source — so the slice stopped and reported rather than
+tuning anything.
+
+The cause: Majestic View titles every service by date, and **`Mar.` is an abbreviation Concord
+accepts for Mark.** `Livestream Sunday Worship Service - Mar. 15 2026 …` became a note on Mark 15.
+Five notes in 1,087 were wrong that way (0.46%), all one source, all rule 2. Three of the five were
+the *only* note on their video — those were not merely mis-anchored, they were confidently placed
+when they should have gone to review. `Mar. 22` and `Mar. 29` escaped only because Mark has 16
+chapters. Rule 3, audited separately because it is the loosest, made 22 placements corpus-wide with
+zero wrong anchors.
+
+The fix went into the finder, not the rules: a bare month with no verse part, or followed by a
+four-digit year, is not offered. Before re-running, the old finder and the new one were diffed over
+every stored title and description of the other three sources — 4,600 fields of real published text.
+42 differed, all of them a month candidate; all 36 distinct dropped strings were then asked of live
+Concord and **every one was a 404**, so those sources could not have changed. Celebration was
+re-scanned anyway and reproduced its numbers exactly.
+
+Majestic View re-ran end to end and hit every predicted number: 13 placed (down from 16), 351 needs
+a passage (up from 348), 15 notes (down from 20), **zero anchored to Mark**. The three sole-note
+videos went to review, one of them now suggesting the passage its description actually names.
+
+**All 13 placed rows were then audited — the whole population, not a sample of ten.** One wrong
+anchor: `MVC - Talking About Respect with Pastor John 06-25-2020` → **John 6-25**, sixteen chapters,
+because `06-25-2020` is a numeric date sitting behind a pastor's name that is also a book. One wrong
+note in 1,082 corpus-wide; the gate needs more than one in a source's ten, so it did not trip, and
+the finding is recorded in §13 rather than fixed on my own judgement.
+
+**Browser pass** (Playwright, live Concord, both themes, 1440px and 390px): the ledger's placed rows
+with the rule and their passages, `needs_passage` rows with suggestion chips, the widest cases from
+Celebration (three chips, three notes on one row), Browse, and the reader on Acts 1 — a chapter a
+scan-created note spans whole, so **every verse in it carries a marker**. Looked at and judged
+acceptable: it is the honest state of the data and identical to what a hand-made chapter note does,
+but it is noisier than a chapter with three marked verses, and if it ever becomes a problem the fix
+belongs to the reader, not to the scan. Contrast measured, not eyeballed: every text layer this
+slice adds is 4.83:1 in light and 5.78:1 in dark, the suggestion chips 9.37:1 and 8.33:1.
+
+Test data deleted afterwards, both containers removed.
+
+---
+
 ## Sermon sources slice 4a — fetch (the scan's first half)
 
 - **Date:** 2026-09-07

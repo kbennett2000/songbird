@@ -15,9 +15,6 @@ lookup first and writes in a single commit, so a failure part-way through leaves
 as they were. Re-running is a no-op that reports zero changed.
 """
 
-from datetime import date
-from typing import Literal
-
 from fastapi import APIRouter, Depends
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -26,6 +23,7 @@ from songbird.api.deps import get_current_user, get_db, get_youtube_client
 from songbird.api.schemas import RedateItem, RedateNotFound, RedateResult
 from songbird.core.errors import ErrorCode, raise_http
 from songbird.db.models import SermonNote, User
+from songbird.sermons.dates import sermon_date
 from songbird.youtube.client import (
     YouTubeAuthError,
     YouTubeClient,
@@ -44,20 +42,6 @@ _KEY_REJECTED = (
     "wrong, restricted to other APIs or referrers, or the YouTube Data API may not be enabled "
     "for it."
 )
-
-
-def sermon_date(video: Video) -> tuple[date, Literal["stream_start", "published"]]:
-    """The day a sermon went up, by spec §7.
-
-    A livestreamed service' actual start IS the service, so it wins whenever YouTube recorded
-    one; an ordinary upload only has the day it was published. Both timestamps are already
-    normalized to UTC when the video is parsed, so `.date()` is the UTC calendar day and not a
-    local one — which matters: a Sunday-morning stream is routinely published after midnight UTC
-    and would otherwise be dated to the Monday.
-    """
-    if video.actual_start_time is not None:
-        return video.actual_start_time.date(), "stream_start"
-    return video.published_at.date(), "published"
 
 
 @router.post("/redate", response_model=RedateResult)

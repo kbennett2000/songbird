@@ -29,6 +29,7 @@ from songbird.api.deps import (
     get_youtube_client_optional,
 )
 from songbird.api.schemas import (
+    PlacedNoteOut,
     SermonCheckQueued,
     SermonSourceCounts,
     SermonSourceCreate,
@@ -41,7 +42,7 @@ from songbird.api.schemas import (
 )
 from songbird.config import get_settings
 from songbird.core.errors import ErrorCode, raise_http
-from songbird.db.models import SermonSource, SermonSourceVideo, User
+from songbird.db.models import SermonNote, SermonSource, SermonSourceVideo, User
 from songbird.sermons.scan import ScanRunner
 from songbird.youtube.client import (
     YouTubeAuthError,
@@ -109,6 +110,38 @@ async def _counts_for(db: AsyncSession, source_ids: Sequence[int]) -> dict[int, 
     # A status word this model does not know is ignored rather than fatal: the ledger's vocabulary
     # grows over two more slices, and a stale API shape must not 500 the page.
     return {sid: SermonSourceCounts.model_validate(tallies.get(sid, {})) for sid in source_ids}
+
+
+async def _notes_for(db: AsyncSession, video_ids: Sequence[int]) -> dict[int, list[PlacedNoteOut]]:
+    """The notes each of these ledger rows created, in ONE query for the whole page.
+
+    A relationship would be a query per row, or — with `selectin` — every note behind every ledger
+    listing whether the page shows them or not. This is the same trade `_counts_for` makes just
+    above, for the same reason.
+
+    Author scoping is inherited rather than repeated: `video_ids` only ever comes from rows already
+    filtered to one author, and a note can only point at a row belonging to the person who owns it.
+
+    Ordered canonically, so a video placed on Acts and Exodus lists them in the order the rest of
+    songbird lists sermon notes in, rather than in whichever order the rules happened to find them.
+    """
+    if not video_ids:
+        return {}
+    stmt = (
+        select(SermonNote)
+        .where(SermonNote.source_video_id.in_(video_ids))
+        .order_by(
+            SermonNote.book_order_index,
+            SermonNote.start_chapter,
+            SermonNote.start_verse,
+            SermonNote.id,
+        )
+    )
+    notes: dict[int, list[PlacedNoteOut]] = {}
+    for note in (await db.execute(stmt)).scalars():
+        assert note.source_video_id is not None  # the WHERE guarantees it; this tells pyright
+        notes.setdefault(note.source_video_id, []).append(PlacedNoteOut.model_validate(note))
+    return notes
 
 
 async def _one_out(db: AsyncSession, source: SermonSource) -> SermonSourceOut:
@@ -234,6 +267,9 @@ async def list_sermon_source_videos(
         item = SermonSourceVideoOut.model_validate(video)
         item.source_title = source_title
         videos.append(item)
+    notes = await _notes_for(db, [v.id for v in videos])
+    for item in videos:
+        item.notes = notes.get(item.id, [])
     return SermonSourceVideosPage(videos=videos, total=total)
 
 
@@ -414,16 +450,29 @@ async def delete_sermon_source(
     user: User = Depends(get_current_user),
 ) -> None:
     """Forget a source and everything a check recorded about it. Sermon notes are never touched —
-    deleting where sermons came FROM must not delete the notes you wrote about them (spec §9), and
-    that stays true when slice 4b gives notes a link back to the ledger row that made them.
+    deleting where sermons came FROM must not delete the notes you wrote about them (spec §9).
 
-    The ledger is cleared HERE rather than by the `ondelete="CASCADE"` in the migration, because
-    SQLite only enforces foreign keys when `PRAGMA foreign_keys` is on and songbird never turns it
-    on — so that clause never fires and the rows would simply be orphaned. One bulk DELETE rather
-    than an ORM relationship: a `selectin` one would drag every scanned video behind the sources
-    LIST, and a lazy one would issue a DELETE per row.
+    Both cleanups happen HERE rather than through the `ondelete=` clauses in the migrations,
+    because SQLite only enforces foreign keys when `PRAGMA foreign_keys` is on and songbird never
+    turns it on — so those clauses never fire. Without the first statement a check-created note
+    would be left pointing at a ledger row that no longer exists; without the second the ledger
+    rows would simply be orphaned.
+
+    Order matters: unlink the notes, THEN drop the rows they pointed at.
+
+    Bulk statements rather than ORM relationships: a `selectin` relationship would drag every
+    scanned video behind the sources LIST, and a lazy one would issue a statement per row.
     """
     source = await _get_or_404(db, source_id, user.id)
+    await db.execute(
+        update(SermonNote)
+        .where(
+            SermonNote.source_video_id.in_(
+                select(SermonSourceVideo.id).where(SermonSourceVideo.source_id == source.id)
+            )
+        )
+        .values(source_video_id=None)
+    )
     await db.execute(delete(SermonSourceVideo).where(SermonSourceVideo.source_id == source.id))
     await db.delete(source)
     await db.commit()

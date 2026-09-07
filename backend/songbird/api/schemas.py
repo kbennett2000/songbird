@@ -314,6 +314,20 @@ SermonVideoSkipReason = Literal["too_short", "live_excluded"]
 SermonVideoPlacedBy = Literal["scripture_line", "title", "first_line", "manual"]
 
 
+class PlacedNoteOut(BaseModel):
+    """A sermon note a check created, as the ledger row that made it needs to show it.
+
+    Just the id and the display reference. The whole note is on the Browse page and in the
+    reader — these are ordinary sermon notes — so the ledger's job is only to say WHICH passages
+    this video ended up on, and give slice 5's actions something to name.
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    reference: str
+
+
 class SermonSourceVideoOut(BaseModel):
     """One row of the ledger — a video a check has seen, and what songbird decided about it.
 
@@ -343,6 +357,10 @@ class SermonSourceVideoOut(BaseModel):
     skip_reason: SermonVideoSkipReason | None
     placed_by: SermonVideoPlacedBy | None
     suggestions: list[str]
+    # The notes this row's placement created, empty for every row that placed nothing. Defaulted
+    # so `model_validate` works straight off the ORM row; the route fills it from one grouped
+    # query per page rather than a lazy relationship, which would be a query per row.
+    notes: list[PlacedNoteOut] = []
     seen_at: datetime
     decided_at: datetime | None
 
