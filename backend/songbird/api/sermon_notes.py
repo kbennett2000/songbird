@@ -11,6 +11,7 @@ from songbird.api._anchors import resolve_anchor, resolve_book_order_index
 from songbird.api._tags import normalize_tags, resolve_tags
 from songbird.api.deps import get_concord_client, get_current_user, get_db
 from songbird.api.schemas import SermonNoteCreate, SermonNoteOut, SermonNoteUpdate
+from songbird.api.sermon_review import reopen_if_last_note
 from songbird.concord.client import ConcordClient
 from songbird.core.errors import ErrorCode, raise_http
 from songbird.db.models import SermonNote, Tag, User
@@ -62,7 +63,8 @@ async def create_sermon_note(
     concord: ConcordClient = Depends(get_concord_client),
     user: User = Depends(get_current_user),
 ) -> SermonNoteOut:
-    first, last = await resolve_anchor(body.reference, concord)
+    span = await resolve_anchor(body.reference, concord)
+    first, last = span.first, span.last
     book_order_index = await resolve_book_order_index(first.book, concord)
     note = SermonNote(
         title=body.title,
@@ -109,7 +111,8 @@ async def update_sermon_note(
     if body.reference is not None:
         # Changing the reference re-anchors the note: re-resolve the canonical span so the
         # stored coverage always matches the displayed reference.
-        first, last = await resolve_anchor(body.reference, concord)
+        span = await resolve_anchor(body.reference, concord)
+        first, last = span.first, span.last
         note.reference = body.reference
         note.book_usfm = first.book.strip().upper()
         note.book_order_index = await resolve_book_order_index(first.book, concord)
@@ -132,5 +135,8 @@ async def delete_sermon_note(
     user: User = Depends(get_current_user),
 ) -> None:
     note = await _get_or_404(db, sermon_note_id, user.id)
+    # Before the delete, because it has to count the notes that are NOT this one, and because a
+    # video left marked `placed` with nothing behind it would be invisible in the review list.
+    await reopen_if_last_note(db, note)
     await db.delete(note)
     await db.commit()

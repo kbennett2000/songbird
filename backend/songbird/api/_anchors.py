@@ -10,14 +10,16 @@ use it too.
 """
 
 from songbird.concord.client import ConcordClient, ConcordNotFoundError, ConcordUnreachableError
-from songbird.concord.schemas import ChapterVerse
 from songbird.core.errors import ErrorCode, raise_http
-from songbird.sermons.anchor import UnknownBookError, book_order_index, resolve_span
+from songbird.sermons.anchor import (
+    ResolvedSpan,
+    UnknownBookError,
+    book_order_index,
+    resolve_span,
+)
 
 
-async def resolve_anchor(
-    reference: str, concord: ConcordClient
-) -> tuple[ChapterVerse, ChapterVerse]:
+async def resolve_anchor(reference: str, concord: ConcordClient) -> ResolvedSpan:
     """Resolve a human `reference` to its canonical span via Concord (songbird never parses
     references itself — invariant 4). Returns the (first, last) verse of the range, so a ranged
     reference like "Joshua 6:1-16" covers every verse in it. Unparseable / unknown reference →
@@ -25,6 +27,11 @@ async def resolve_anchor(
 
     The 404 carries the reference itself, which is what lets a multi-reference place action say
     WHICH one it could not find (spec §8 — all-or-nothing, and the failing one is named).
+
+    Returns the whole `ResolvedSpan`, **Concord's own spelling included**. The sermon-note form
+    keeps the words a person typed, which is the right answer for a note somebody wrote; the review
+    list stores Concord's, which is the right answer for a note built from a suggestion, so that
+    "Psalm 23" tapped on one video and "Psalms 23" read off another are one reference.
     """
     try:
         span = await resolve_span(reference, concord)
@@ -32,7 +39,7 @@ async def resolve_anchor(
         raise_http(404, ErrorCode.NOT_FOUND, f"Couldn't find reference '{reference}': {exc}")
     except ConcordUnreachableError as exc:
         raise_http(502, ErrorCode.CONCORD_UNREACHABLE, str(exc))
-    return span.first, span.last
+    return span
 
 
 async def resolve_book_order_index(book_usfm: str, concord: ConcordClient) -> int:

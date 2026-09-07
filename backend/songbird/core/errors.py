@@ -24,6 +24,12 @@ class ErrorCode(StrEnum):
     SOURCE_NOT_FOUND = "SOURCE_NOT_FOUND"
     INVALID_SOURCE_URL = "INVALID_SOURCE_URL"
     SOURCE_EXISTS = "SOURCE_EXISTS"
+    # The review list (v1.7 slice 5). VIDEO_STATE is a 409: the row exists and is yours, but what
+    # you asked cannot be done from the state it is in — usually because somebody (or another tab)
+    # already decided it. EMPTY_FILTER guards the bulk dismiss, which must never mean "everything".
+    VIDEO_NOT_FOUND = "VIDEO_NOT_FOUND"
+    VIDEO_STATE = "VIDEO_STATE"
+    EMPTY_FILTER = "EMPTY_FILTER"
     INVALID_SCOPE = "INVALID_SCOPE"
     INVALID_BOOK = "INVALID_BOOK"
     INVALID_TRANSLATION = "INVALID_TRANSLATION"
