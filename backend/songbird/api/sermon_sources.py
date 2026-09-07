@@ -14,7 +14,7 @@ a setup message, and it can only know to do that if something answers.
 """
 
 from fastapi import APIRouter, Depends, status
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from songbird.api._tags import resolve_tags
@@ -32,7 +32,7 @@ from songbird.api.schemas import (
 )
 from songbird.config import get_settings
 from songbird.core.errors import ErrorCode, raise_http
-from songbird.db.models import SermonSource, User
+from songbird.db.models import SermonSource, SermonSourceVideo, User
 from songbird.youtube.client import (
     YouTubeAuthError,
     YouTubeClient,
@@ -225,9 +225,17 @@ async def delete_sermon_source(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> None:
-    """Forget a source. Sermon notes are never touched — deleting where sermons came FROM must
-    not delete the notes you wrote about them (spec §9), and that stays true when slice 4 gives
-    notes a link back to the ledger row that made them."""
+    """Forget a source and everything a check recorded about it. Sermon notes are never touched —
+    deleting where sermons came FROM must not delete the notes you wrote about them (spec §9), and
+    that stays true when slice 4b gives notes a link back to the ledger row that made them.
+
+    The ledger is cleared HERE rather than by the `ondelete="CASCADE"` in the migration, because
+    SQLite only enforces foreign keys when `PRAGMA foreign_keys` is on and songbird never turns it
+    on — so that clause never fires and the rows would simply be orphaned. One bulk DELETE rather
+    than an ORM relationship: a `selectin` one would drag every scanned video behind the sources
+    LIST, and a lazy one would issue a DELETE per row.
+    """
     source = await _get_or_404(db, source_id, user.id)
+    await db.execute(delete(SermonSourceVideo).where(SermonSourceVideo.source_id == source.id))
     await db.delete(source)
     await db.commit()
