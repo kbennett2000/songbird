@@ -29,6 +29,7 @@ from songbird.api.deps import (
     get_youtube_client_optional,
 )
 from songbird.api.schemas import (
+    PlacedNoteOut,
     SermonCheckQueued,
     SermonSourceCounts,
     SermonSourceCreate,
@@ -109,6 +110,38 @@ async def _counts_for(db: AsyncSession, source_ids: Sequence[int]) -> dict[int, 
     # A status word this model does not know is ignored rather than fatal: the ledger's vocabulary
     # grows over two more slices, and a stale API shape must not 500 the page.
     return {sid: SermonSourceCounts.model_validate(tallies.get(sid, {})) for sid in source_ids}
+
+
+async def _notes_for(db: AsyncSession, video_ids: Sequence[int]) -> dict[int, list[PlacedNoteOut]]:
+    """The notes each of these ledger rows created, in ONE query for the whole page.
+
+    A relationship would be a query per row, or — with `selectin` — every note behind every ledger
+    listing whether the page shows them or not. This is the same trade `_counts_for` makes just
+    above, for the same reason.
+
+    Author scoping is inherited rather than repeated: `video_ids` only ever comes from rows already
+    filtered to one author, and a note can only point at a row belonging to the person who owns it.
+
+    Ordered canonically, so a video placed on Acts and Exodus lists them in the order the rest of
+    songbird lists sermon notes in, rather than in whichever order the rules happened to find them.
+    """
+    if not video_ids:
+        return {}
+    stmt = (
+        select(SermonNote)
+        .where(SermonNote.source_video_id.in_(video_ids))
+        .order_by(
+            SermonNote.book_order_index,
+            SermonNote.start_chapter,
+            SermonNote.start_verse,
+            SermonNote.id,
+        )
+    )
+    notes: dict[int, list[PlacedNoteOut]] = {}
+    for note in (await db.execute(stmt)).scalars():
+        assert note.source_video_id is not None  # the WHERE guarantees it; this tells pyright
+        notes.setdefault(note.source_video_id, []).append(PlacedNoteOut.model_validate(note))
+    return notes
 
 
 async def _one_out(db: AsyncSession, source: SermonSource) -> SermonSourceOut:
@@ -234,6 +267,9 @@ async def list_sermon_source_videos(
         item = SermonSourceVideoOut.model_validate(video)
         item.source_title = source_title
         videos.append(item)
+    notes = await _notes_for(db, [v.id for v in videos])
+    for item in videos:
+        item.notes = notes.get(item.id, [])
     return SermonSourceVideosPage(videos=videos, total=total)
 
 
