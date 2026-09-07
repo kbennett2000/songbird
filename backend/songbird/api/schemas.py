@@ -333,6 +333,10 @@ class SermonSourceVideoOut(BaseModel):
     video_id: str
     title: str
     published_at: datetime
+    # When a stream began, or null for an upload. Sent because the ledger's date must agree with
+    # what a reader sees on YouTube, and for a streamed service those two timestamps differ by a
+    # day more often than not (spec §7).
+    actual_start_time: datetime | None
     duration_seconds: int | None  # null = unknown length, NOT zero (spec §6)
     is_live: bool
     status: SermonVideoStatus

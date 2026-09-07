@@ -183,6 +183,8 @@ export const sermonSourceVideoSchema = z.object({
   video_id: z.string(),
   title: z.string(),
   published_at: z.string(),
+  // When a stream began, or null for an upload. The two disagree for most streamed services.
+  actual_start_time: z.string().nullable(),
   duration_seconds: z.number().nullable(), // null = unknown length, NOT zero
   is_live: z.boolean(),
   status: sermonVideoStatusSchema,

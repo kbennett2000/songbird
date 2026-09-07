@@ -74,6 +74,11 @@ def upgrade() -> None:
         # The text the passage rules read (spec §7). Bulk, and never sent to the browser.
         sa.Column("description", sa.Text(), nullable=False),
         sa.Column("published_at", sa.DateTime(timezone=True), nullable=False),
+        # When a livestream actually began, which for a streamed service IS the service. Null for
+        # an ordinary upload. Kept beside `published_at` because the two genuinely disagree — a
+        # Sunday service streamed at 14:55 UTC and published at 04:32 the next morning is filed
+        # under Monday by `publishedAt` alone (spec §7).
+        sa.Column("actual_start_time", sa.DateTime(timezone=True), nullable=True),
         sa.Column("duration_seconds", sa.Integer(), nullable=True),  # null = unknown, not zero
         sa.Column("is_live", sa.Boolean(), nullable=False, server_default="0"),
         sa.Column("status", sa.String(length=24), nullable=False, server_default="pending"),

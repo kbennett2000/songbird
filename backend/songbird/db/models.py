@@ -388,6 +388,12 @@ class SermonSourceVideo(Base):
     # The text the passage rules read (spec §7). Bulk, and never sent to the browser.
     description: Mapped[str] = mapped_column(Text, nullable=False)
     published_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    # When a livestream actually began — for a streamed service, that IS the service. Null for an
+    # ordinary upload. The two timestamps genuinely disagree (spec §7): a service streamed at
+    # 14:55 UTC and published at 04:32 the next morning reads as Monday by `published_at` alone.
+    actual_start_time: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     duration_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)  # null = unknown
     is_live: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default="0"

@@ -51,7 +51,10 @@ function ledgerVideo(overrides: Record<string, unknown> = {}) {
     source_title: "Cornerstone Chapel",
     video_id: "dQw4w9WgXcQ",
     title: "An in-depth study of 2 Chronicles 29",
-    published_at: "2026-09-06T14:55:12Z",
+    // The shape nearly every real livestreamed service has: streamed on the Sunday, published in
+    // the small hours of the Monday. The row must read Sunday.
+    published_at: "2026-09-07T04:32:29Z",
+    actual_start_time: "2026-09-06T14:55:12Z",
     duration_seconds: 5040,
     is_live: false,
     status: "pending",
@@ -70,6 +73,7 @@ const SKIPPED_VIDEO = ledgerVideo({
   video_id: "abcdefghijk",
   title: "A two-minute welcome",
   published_at: "2026-08-30T14:55:12Z",
+  actual_start_time: null, // an ordinary upload has only the one timestamp
   duration_seconds: 120,
   status: "skipped",
   skip_reason: "too_short",
@@ -646,7 +650,11 @@ describe("SermonSourcesView", () => {
     renderPage();
 
     expect(await screen.findByText("An in-depth study of 2 Chronicles 29")).toBeInTheDocument();
+    // Sunday the 6th, when the stream ran — NOT Monday the 7th, when the video went up. That is
+    // the date the church's own page shows, and dating it by `published_at` alone would file a
+    // Sunday sermon under Monday.
     expect(screen.getByText("Sep 6, 2026")).toBeInTheDocument();
+    // An upload has only the one timestamp, so that is the day.
     expect(screen.getByText("Aug 30, 2026")).toBeInTheDocument();
     expect(screen.getByText("1 hr 24 min")).toBeInTheDocument();
     expect(ledgerRows().getByText("Waiting")).toBeInTheDocument();

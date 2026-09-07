@@ -122,3 +122,18 @@ export async function listSourceVideos(
   const data = await apiRequest<unknown>("GET", `/sermon-sources/videos?${params.toString()}`);
   return sermonSourceVideosPageSchema.parse(data);
 }
+
+/**
+ * The day a sermon happened, as the church's own page shows it (spec §7).
+ *
+ * A livestreamed service is dated by when the stream STARTED, not when the video went up: those
+ * two genuinely differ, and usually by a day — a service streamed at 14:55 UTC on the Sunday is
+ * routinely published at 04:32 on the Monday. Dating it by the publish time would put a Sunday
+ * sermon under Monday and disagree with the "Streamed live on…" line a reader can see on YouTube.
+ */
+export function sermonDay(video: {
+  actual_start_time: string | null;
+  published_at: string;
+}): string {
+  return (video.actual_start_time ?? video.published_at).slice(0, 10);
+}

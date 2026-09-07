@@ -2,7 +2,7 @@ import { useInfiniteQuery } from "@tanstack/react-query";
 import { useState } from "react";
 
 import { formatEventDate } from "@/lib/notes";
-import { formatVideoLength, listSourceVideos, watchUrl } from "@/lib/sermonSources";
+import { formatVideoLength, listSourceVideos, sermonDay, watchUrl } from "@/lib/sermonSources";
 import type { SermonSource, SermonSourceVideo, SermonVideoStatus } from "@/schemas";
 
 const PAGE_SIZE = 50;
@@ -34,10 +34,11 @@ function LedgerRow({ video }: { video: SermonSourceVideo }): JSX.Element {
       {/* Each fact is its own span so a phone has somewhere to break the line, and the separators
           are aria-hidden so a screen reader doesn't read "middle dot" four times a row. */}
       <p className="mt-0.5 flex flex-wrap items-baseline gap-x-2 text-sm text-gray-500 dark:text-gray-400">
-        {/* Sliced to the calendar day and parsed part by part, never through `new Date()`: these
-            timestamps arrive without a timezone, so the browser would read them as local and show
-            the day before to anyone west of UTC. */}
-        <span>{formatEventDate(video.published_at.slice(0, 10))}</span>
+        {/* The day the sermon happened, which for a stream is when it STARTED — that is what the
+            church's own page says, and what `published_at` alone gets wrong by a day. Parsed part
+            by part, never through `new Date()`: these timestamps arrive without a timezone, so
+            the browser would read them as local and show the day before to anyone west of UTC. */}
+        <span>{formatEventDate(sermonDay(video))}</span>
         <span aria-hidden="true">·</span>
         <span>{formatVideoLength(video.duration_seconds)}</span>
         <span aria-hidden="true">·</span>

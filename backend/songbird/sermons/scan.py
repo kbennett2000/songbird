@@ -586,6 +586,7 @@ class ScanRunner:
                     title=video.title,
                     description=video.description,
                     published_at=video.published_at,
+                    actual_start_time=video.actual_start_time,
                     duration_seconds=video.duration_seconds,
                     is_live=video.is_livestream,
                     status=decision.status,

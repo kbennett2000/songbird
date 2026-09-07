@@ -990,3 +990,43 @@ async def test_a_scan_killed_after_a_batch_leaves_the_catalogue_marked_incomplet
     # which is exactly why the flag cannot be written there.
     assert source.last_check_status == STATUS_OK
     assert source.last_checked_at == datetime(2026, 1, 1)
+
+
+async def test_a_streams_own_start_time_is_kept_beside_its_publish_date(
+    db_sessionmaker: async_sessionmaker[AsyncSession],
+) -> None:
+    """The two timestamps disagree, and the ledger has to carry both (spec §7).
+
+    A Sunday service streamed at 14:55 UTC is routinely published at 04:32 the NEXT morning, so
+    `published_at` alone files a Sunday sermon under Monday — which is what a reader compares
+    against the church's own page and finds wrong. Confirmed live: this is the shape of nearly
+    every row Majestic View produces.
+    """
+    streamed, uploaded = _ids(2)
+    started = datetime(2026, 9, 6, 14, 55, 12, tzinfo=UTC)
+    published_next_day = datetime(2026, 9, 7, 4, 32, 29, tzinfo=UTC)
+    youtube = FakeYouTubeClient(
+        videos=[
+            _video(streamed, stream=True, published=published_next_day),
+            _video(uploaded, published=published_next_day),
+        ],
+        pages={_UPLOADS: [[streamed, uploaded]]},
+    )
+    # `_video` derives actual_start_time from `published`, so set the stream's start explicitly.
+    youtube._videos[0] = _video(  # noqa: SLF001
+        streamed, stream=True, published=published_next_day
+    ).model_copy(update={"actual_start_time": started})
+    await _seed_source(db_sessionmaker)
+
+    await _runner(db_sessionmaker, youtube).run()
+
+    rows = {row.video_id: row for row in await _ledger(db_sessionmaker)}
+    # Compared without a timezone because SQLite hands these back naive — the same trap the
+    # runner's own comparisons avoid by staying in SQL.
+    assert rows[streamed].actual_start_time == started.replace(tzinfo=None)
+    assert rows[streamed].published_at == published_next_day.replace(tzinfo=None)
+    # The pair is the point: the stream STARTED on the Sunday and was PUBLISHED on the Monday, so
+    # a ledger carrying only the second would show the wrong day for the service.
+    assert rows[streamed].actual_start_time.date() != rows[streamed].published_at.date()
+    # An ordinary upload has no start time, so the publish date is all there is — and is right.
+    assert rows[uploaded].actual_start_time is None
