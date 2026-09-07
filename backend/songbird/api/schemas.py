@@ -211,6 +211,24 @@ class RedateResult(BaseModel):
 # --- Sermon sources (v1.7 sermon sources, spec §4-5, §9) ---
 
 
+class SermonSourceCounts(BaseModel):
+    """What a source's ledger holds, by state (spec §10 — the counts on each row).
+
+    Nested under the source rather than five more fields on it, because this is one idea that
+    grows: `needs_passage` and `placed` are always zero until the slice that places notes, and a
+    later one wants `dismissed`. Flat fields would also sit beside `enabled` and `min_minutes` and
+    read as properties of the SOURCE, which they are not — they describe its ledger.
+
+    Every key is always present and zero-filled, so the page never has to guard a missing one.
+    """
+
+    pending: int = 0
+    needs_passage: int = 0
+    placed: int = 0
+    skipped: int = 0
+    already_noted: int = 0
+
+
 class SermonSourceOut(BaseModel):
     """A registered channel or playlist. The address of a catalogue plus how the owner wants it
     filtered — never any video or Scripture text.
@@ -233,9 +251,17 @@ class SermonSourceOut(BaseModel):
     min_minutes: int | None
     last_checked_at: datetime | None
     last_check_status: str | None
+    # Set the moment a check is asked for and cleared when it has been served, so a card can say
+    # "waiting to be checked" rather than pretending five queued sources are all being read at
+    # once.
+    check_requested_at: datetime | None
     tags: list[str]
     created_at: datetime
     updated_at: datetime
+    # Defaulted so `model_validate` works straight off the ORM row; every route that returns this
+    # model fills it in before answering, because a documented field that reports zeros for a
+    # source with a full ledger is worse than no field at all.
+    counts: SermonSourceCounts = SermonSourceCounts()
 
     @field_validator("tags", mode="before")
     @classmethod
@@ -274,6 +300,71 @@ class SermonSourcesStatus(BaseModel):
 
     configured: bool
     min_minutes_default: int
+    # The one thing on the Sources page that changes without the reader doing anything, and so
+    # the one thing the page polls for.
+    scan_running: bool
+    # Non-null exactly when `scan_running` is true.
+    scan_started_at: datetime | None
+
+
+SermonVideoStatus = Literal[
+    "pending", "needs_passage", "placed", "skipped", "dismissed", "already_noted"
+]
+SermonVideoSkipReason = Literal["too_short", "live_excluded"]
+SermonVideoPlacedBy = Literal["scripture_line", "title", "first_line", "manual"]
+
+
+class SermonSourceVideoOut(BaseModel):
+    """One row of the ledger — a video a check has seen, and what songbird decided about it.
+
+    The video's DESCRIPTION is deliberately absent. It is bulk text the page never shows, and
+    fifty of them at five thousand characters each is a quarter of a megabyte a page for nothing.
+    `suggestions` is here, because the review list turns each string into a one-tap button.
+
+    `source_title` comes from a join rather than the row: the ledger reads as "title · source ·
+    date" (spec §8), so it has to be legible without a second request.
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    source_id: int
+    source_title: str = ""  # filled from the join before the response is built
+    video_id: str
+    title: str
+    published_at: datetime
+    # When a stream began, or null for an upload. Sent because the ledger's date must agree with
+    # what a reader sees on YouTube, and for a streamed service those two timestamps differ by a
+    # day more often than not (spec §7).
+    actual_start_time: datetime | None
+    duration_seconds: int | None  # null = unknown length, NOT zero (spec §6)
+    is_live: bool
+    status: SermonVideoStatus
+    skip_reason: SermonVideoSkipReason | None
+    placed_by: SermonVideoPlacedBy | None
+    suggestions: list[str]
+    seen_at: datetime
+    decided_at: datetime | None
+
+
+class SermonSourceVideosPage(BaseModel):
+    """One page of the ledger — `total` lets the client paginate ("Load more"). Mirrors the other
+    page-outs: no limit/offset echoed back, because the view tracks those itself."""
+
+    videos: list[SermonSourceVideoOut]
+    total: int
+
+
+class SermonCheckQueued(BaseModel):
+    """The answer to "check now": how many sources went into the queue, not what was found.
+
+    A catalogue scan is dozens of Google calls and runs in the background, so the request cannot
+    report results — it reports that the work was accepted and how much of it there is. The page
+    then watches `/status` until the scan finishes. (Spec §9 wrote this as a `{seen, placed, …}`
+    summary; that predates the scan being a background job, and the spec is corrected in this PR.)
+    """
+
+    queued: int
 
 
 # --- Import / Export (issue #41) ---

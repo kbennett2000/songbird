@@ -13,26 +13,36 @@ The one route that does NOT demand a YouTube key is `/status`: with no key the S
 a setup message, and it can only know to do that if something answers.
 """
 
-from fastapi import APIRouter, Depends, status
-from sqlalchemy import select
+from collections.abc import Sequence
+from datetime import UTC, datetime
+
+from fastapi import APIRouter, Depends, Query, status
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from songbird.api._tags import resolve_tags
 from songbird.api.deps import (
     get_current_user,
     get_db,
+    get_scan_runner_optional,
     get_youtube_client,
     get_youtube_client_optional,
 )
 from songbird.api.schemas import (
+    SermonCheckQueued,
+    SermonSourceCounts,
     SermonSourceCreate,
     SermonSourceOut,
     SermonSourcesStatus,
     SermonSourceUpdate,
+    SermonSourceVideoOut,
+    SermonSourceVideosPage,
+    SermonVideoStatus,
 )
 from songbird.config import get_settings
 from songbird.core.errors import ErrorCode, raise_http
-from songbird.db.models import SermonSource, User
+from songbird.db.models import SermonSource, SermonSourceVideo, User
+from songbird.sermons.scan import ScanRunner
 from songbird.youtube.client import (
     YouTubeAuthError,
     YouTubeClient,
@@ -72,6 +82,41 @@ async def _get_or_404(db: AsyncSession, source_id: int, author_id: int) -> Sermo
     if source is None:
         raise_http(404, ErrorCode.SOURCE_NOT_FOUND, f"No sermon source {source_id}")
     return source
+
+
+async def _counts_for(db: AsyncSession, source_ids: Sequence[int]) -> dict[int, SermonSourceCounts]:
+    """Every source's ledger tally, in ONE query rather than one per source.
+
+    The Sources page puts a handful of numbers on each row, and fetching them per source would
+    turn a list of ten into eleven round trips. This groups the whole ledger by (source, status)
+    once and hands back a dict the routes index into, so the cost is constant however many
+    sources there are.
+
+    Author scoping is inherited rather than repeated: `source_ids` only ever comes from a query
+    already filtered to one author, and a second predicate here would add a term the
+    (source_id, status) index would rather not see.
+    """
+    if not source_ids:
+        return {}
+    stmt = (
+        select(SermonSourceVideo.source_id, SermonSourceVideo.status, func.count())
+        .where(SermonSourceVideo.source_id.in_(source_ids))
+        .group_by(SermonSourceVideo.source_id, SermonSourceVideo.status)
+    )
+    tallies: dict[int, dict[str, int]] = {}
+    for source_id, status_value, total in (await db.execute(stmt)).all():
+        tallies.setdefault(source_id, {})[status_value] = total
+    # A status word this model does not know is ignored rather than fatal: the ledger's vocabulary
+    # grows over two more slices, and a stale API shape must not 500 the page.
+    return {sid: SermonSourceCounts.model_validate(tallies.get(sid, {})) for sid in source_ids}
+
+
+async def _one_out(db: AsyncSession, source: SermonSource) -> SermonSourceOut:
+    """One source as the API returns it, counts included — so no route ever answers with the
+    zeros the `counts` field would otherwise default to."""
+    out = SermonSourceOut.model_validate(source)
+    out.counts = (await _counts_for(db, [source.id])).get(source.id, SermonSourceCounts())
+    return out
 
 
 async def _resolve(url: str, youtube: YouTubeClient) -> tuple[str, str, str | None, str]:
@@ -115,22 +160,81 @@ async def _resolve(url: str, youtube: YouTubeClient) -> tuple[str, str, str | No
         raise_http(502, ErrorCode.YOUTUBE_UNREACHABLE, str(exc))
 
 
-# `/status` is declared BEFORE `/{source_id}`: FastAPI matches routes in the order they were
-# added, so the other way round "status" would be read as a source id and 422 on the int parse.
+# `/status` and `/videos` are declared BEFORE `/{source_id}`: FastAPI matches routes in the order
+# they were added, and the path pattern matches before the int conversion — so the other way round
+# "status" and "videos" would both be read as source ids and 422. There is a test for each.
 @router.get("/status", response_model=SermonSourcesStatus)
 async def sermon_sources_status(
     youtube: YouTubeClient | None = Depends(get_youtube_client_optional),
+    runner: ScanRunner | None = Depends(get_scan_runner_optional),
     user: User = Depends(get_current_user),
 ) -> SermonSourcesStatus:
-    """Whether the feature is switched on, and the default the add form hints at.
+    """Whether the feature is switched on, the default the add form hints at, and whether a check
+    is running right now — which the page polls for while one is.
 
-    Uses the OPTIONAL client dependency: with no key this must answer `configured: false`, not
-    409 — the page's setup message is the answer.
+    Uses the OPTIONAL dependencies for both: with no key this must answer `configured: false`
+    rather than 409 (the page's setup message IS the answer), and with no runner it must answer
+    "nothing is running", which is true. `scan_started_at` is read only when a scan really is
+    running, so the two fields can never disagree with each other.
     """
+    running = runner is not None and runner.running
     return SermonSourcesStatus(
         configured=youtube is not None,
         min_minutes_default=get_settings().sermon_min_minutes,
+        scan_running=running,
+        scan_started_at=runner.started_at if running and runner is not None else None,
     )
+
+
+@router.get("/videos", response_model=SermonSourceVideosPage)
+async def list_sermon_source_videos(
+    status_filter: SermonVideoStatus | None = Query(default=None, alias="status"),
+    source_id: int | None = Query(default=None, ge=1),
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> SermonSourceVideosPage:
+    """The ledger: what every check has seen, newest sermon first.
+
+    No YouTube key required — this reads songbird's own table. A key rotated out or revoked must
+    not take away the record of what was already found (spec §2: YouTube's absence is a recorded
+    condition, not a fatal one), and the other read routes on this router don't demand one either.
+
+    No `status` means every state, rather than spec §9's `needs_passage` default: nothing can BE
+    `needs_passage` until the slice that reads passages, so that default would answer the first
+    person who ever opens this view with an empty list. The spec is corrected in this PR.
+
+    The `id` tiebreak in the ordering is required, not decoration. A church that posts a series in
+    one sitting gives several videos the same `publishedAt` to the second, and without a total
+    order the offsets behind "Load more" would repeat some rows and drop others.
+    """
+    where = [SermonSourceVideo.author_id == user.id]
+    if source_id is not None:
+        # A 404 rather than an empty page: an id that isn't yours must not read as "nothing
+        # found", which is the no-existence-leak answer everywhere else on this router.
+        await _get_or_404(db, source_id, user.id)
+        where.append(SermonSourceVideo.source_id == source_id)
+    if status_filter is not None:
+        where.append(SermonSourceVideo.status == status_filter)
+
+    total = (
+        await db.execute(select(func.count()).select_from(SermonSourceVideo).where(*where))
+    ).scalar_one()
+    stmt = (
+        select(SermonSourceVideo, SermonSource.title)
+        .join(SermonSource, SermonSource.id == SermonSourceVideo.source_id)
+        .where(*where)
+        .order_by(SermonSourceVideo.published_at.desc(), SermonSourceVideo.id.desc())
+        .limit(limit)
+        .offset(offset)
+    )
+    videos: list[SermonSourceVideoOut] = []
+    for video, source_title in (await db.execute(stmt)).all():
+        item = SermonSourceVideoOut.model_validate(video)
+        item.source_title = source_title
+        videos.append(item)
+    return SermonSourceVideosPage(videos=videos, total=total)
 
 
 @router.get("", response_model=list[SermonSourceOut])
@@ -146,7 +250,13 @@ async def list_sermon_sources(
         .order_by(SermonSource.created_at.desc(), SermonSource.id.desc())
     )
     sources = (await db.execute(stmt)).scalars().unique().all()
-    return [SermonSourceOut.model_validate(s) for s in sources]
+    counts = await _counts_for(db, [s.id for s in sources])
+    out: list[SermonSourceOut] = []
+    for source in sources:
+        item = SermonSourceOut.model_validate(source)
+        item.counts = counts.get(source.id, SermonSourceCounts())
+        out.append(item)
+    return out
 
 
 @router.post("", response_model=SermonSourceOut, status_code=status.HTTP_201_CREATED)
@@ -154,6 +264,7 @@ async def create_sermon_source(
     body: SermonSourceCreate,
     db: AsyncSession = Depends(get_db),
     youtube: YouTubeClient = Depends(get_youtube_client),
+    runner: ScanRunner | None = Depends(get_scan_runner_optional),
     user: User = Depends(get_current_user),
 ) -> SermonSourceOut:
     kind, youtube_id, uploads_playlist_id, title = await _resolve(body.url, youtube)
@@ -180,10 +291,60 @@ async def create_sermon_source(
         min_minutes=body.min_minutes,
         author_id=user.id,
         tags=await resolve_tags(db, body.tags),
+        # Spec §5: adding a source scans its whole back catalogue, starting now. Written down
+        # rather than acted on here — a catalogue scan is dozens of Google calls and must not sit
+        # inside this request.
+        check_requested_at=datetime.now(UTC),
     )
     db.add(source)
     await db.commit()  # expire_on_commit=False keeps the in-memory tags
-    return SermonSourceOut.model_validate(source)
+    # After the commit, never before: the runner reads its own session, and a request it cannot
+    # see is a request that never happened.
+    if runner is not None:
+        runner.request_scan()
+    # Still 201, not 202 — a source really was created; the scan is a consequence of creating it.
+    return await _one_out(db, source)
+
+
+@router.post("/check", status_code=status.HTTP_202_ACCEPTED, response_model=SermonCheckQueued)
+async def check_all_sermon_sources(
+    db: AsyncSession = Depends(get_db),
+    youtube: YouTubeClient = Depends(get_youtube_client),
+    runner: ScanRunner | None = Depends(get_scan_runner_optional),
+    user: User = Depends(get_current_user),
+) -> SermonCheckQueued:
+    """Check every enabled source now. 202: accepted, not finished.
+
+    Demands a YouTube client even though it never touches one. Queueing work that could never run
+    would be a lie told in the friendliest possible way — and the Sources page already knows what
+    to say about `YOUTUBE_NOT_CONFIGURED`.
+
+    Paused sources are left out here rather than in the runner, so the decision is made once, in
+    the place where the person pressing the button can see the count that comes back.
+    """
+    ids = (
+        (
+            await db.execute(
+                select(SermonSource.id).where(
+                    SermonSource.author_id == user.id, SermonSource.enabled.is_(True)
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    if ids:
+        await db.execute(
+            update(SermonSource)
+            .where(SermonSource.id.in_(ids))
+            .values(check_requested_at=datetime.now(UTC))
+        )
+        await db.commit()  # before the runner is told: it reads its own session
+        if runner is not None:
+            runner.request_scan()
+    # Nothing enabled is still 202 with a count of zero. Nothing failed — the request was
+    # accepted and there was nothing in it, which the page says in words.
+    return SermonCheckQueued(queued=len(ids))
 
 
 @router.get("/{source_id}", response_model=SermonSourceOut)
@@ -192,7 +353,7 @@ async def get_sermon_source(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> SermonSourceOut:
-    return SermonSourceOut.model_validate(await _get_or_404(db, source_id, user.id))
+    return await _one_out(db, await _get_or_404(db, source_id, user.id))
 
 
 @router.patch("/{source_id}", response_model=SermonSourceOut)
@@ -216,7 +377,34 @@ async def update_sermon_source(
     if body.tags is not None:
         source.tags = await resolve_tags(db, body.tags)
     await db.commit()
-    return SermonSourceOut.model_validate(source)
+    return await _one_out(db, source)
+
+
+@router.post(
+    "/{source_id}/check", status_code=status.HTTP_202_ACCEPTED, response_model=SermonCheckQueued
+)
+async def check_sermon_source(
+    source_id: int,
+    db: AsyncSession = Depends(get_db),
+    youtube: YouTubeClient = Depends(get_youtube_client),
+    runner: ScanRunner | None = Depends(get_scan_runner_optional),
+    user: User = Depends(get_current_user),
+) -> SermonCheckQueued:
+    """Check this one source now.
+
+    A paused source queues nothing and is NOT stamped: the runner only ever picks up enabled
+    sources, so a request left on a paused one would sit there unserved and the row would read
+    "waiting to be checked" forever. The page doesn't offer the button on a paused source; this
+    is the answer if something asks anyway.
+    """
+    source = await _get_or_404(db, source_id, user.id)
+    if not source.enabled:
+        return SermonCheckQueued(queued=0)
+    source.check_requested_at = datetime.now(UTC)
+    await db.commit()
+    if runner is not None:
+        runner.request_scan()
+    return SermonCheckQueued(queued=1)
 
 
 @router.delete("/{source_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -225,9 +413,17 @@ async def delete_sermon_source(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> None:
-    """Forget a source. Sermon notes are never touched — deleting where sermons came FROM must
-    not delete the notes you wrote about them (spec §9), and that stays true when slice 4 gives
-    notes a link back to the ledger row that made them."""
+    """Forget a source and everything a check recorded about it. Sermon notes are never touched —
+    deleting where sermons came FROM must not delete the notes you wrote about them (spec §9), and
+    that stays true when slice 4b gives notes a link back to the ledger row that made them.
+
+    The ledger is cleared HERE rather than by the `ondelete="CASCADE"` in the migration, because
+    SQLite only enforces foreign keys when `PRAGMA foreign_keys` is on and songbird never turns it
+    on — so that clause never fires and the rows would simply be orphaned. One bulk DELETE rather
+    than an ORM relationship: a `selectin` one would drag every scanned video behind the sources
+    LIST, and a lazy one would issue a DELETE per row.
+    """
     source = await _get_or_404(db, source_id, user.id)
+    await db.execute(delete(SermonSourceVideo).where(SermonSourceVideo.source_id == source.id))
     await db.delete(source)
     await db.commit()

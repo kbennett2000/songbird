@@ -9,6 +9,7 @@ from songbird.core.errors import ErrorCode, raise_http
 from songbird.core.sessions import extend_session, get_session
 from songbird.db.models import User
 from songbird.db.session import get_db
+from songbird.sermons.scan import ScanRunner
 from songbird.youtube.client import YouTubeClient
 
 __all__ = [
@@ -16,6 +17,7 @@ __all__ = [
     "get_current_user",
     "get_current_user_optional",
     "get_db",
+    "get_scan_runner_optional",
     "get_youtube_client",
     "get_youtube_client_optional",
 ]
@@ -40,6 +42,21 @@ def get_youtube_client_optional(request: Request) -> YouTubeClient | None:
     """
     client: YouTubeClient | None = getattr(request.app.state, "youtube", None)
     return client
+
+
+def get_scan_runner_optional(request: Request) -> ScanRunner | None:
+    """The process-wide sermon scan runner built in the app lifespan, or None if there isn't one.
+
+    `getattr` for exactly the reason the YouTube seam above uses it: the fast test suite never
+    runs the lifespan, so `app.state.sermon_scan` may not exist at all — and `/status` has to
+    ANSWER ("nothing is running", which is true) rather than 500.
+
+    There is deliberately no demanding variant. A missing runner is a test-shaped condition, not a
+    user-facing one, and the routes that queue work still write `check_requested_at` — so nothing
+    is lost when there is nobody to start; the request is simply picked up after the next boot.
+    """
+    runner: ScanRunner | None = getattr(request.app.state, "sermon_scan", None)
+    return runner
 
 
 def get_youtube_client(

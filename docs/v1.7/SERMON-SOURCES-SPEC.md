@@ -90,12 +90,26 @@ annotations and sermon notes (v1.2 §4), not a parallel set.
 
 **`sermon_source_videos`** — the ledger: every video a scan has seen, and the review queue.
 `id`, `source_id`, `author_id`, `video_id` (unique per author), `title`, `description`, `published_at`
-(UTC), `duration_seconds`, `is_live` (was a livestream), `status`
-(`placed` | `needs_passage` | `skipped` | `dismissed` | `already_noted`), `skip_reason` (nullable:
-`too_short` | `live_excluded`), `placed_by` (nullable: `scripture_line` | `title` | `first_line` |
-`manual`), `suggestions` (JSON list of reference strings found deeper in the text, §7), `seen_at`,
-`decided_at`. Index on (`author_id`, `status`) for the review list and on (`author_id`, `video_id`)
-for the "have we seen this" check.
+(UTC), `actual_start_time` (UTC, nullable — when a stream began), `duration_seconds`, `is_live` (was
+a livestream), `status` (**`pending`** | `placed` | `needs_passage` | `skipped` | `dismissed` |
+`already_noted`), `skip_reason` (nullable: `too_short` | `live_excluded`), `placed_by` (nullable:
+`scripture_line` | `title` | `first_line` | `manual`), `suggestions` (JSON list of reference strings
+found deeper in the text, §7), `seen_at`, `decided_at`. Index on (`author_id`, `status`) for the
+review list and on (`author_id`, `video_id`) for the "have we seen this" check — the latter is the
+uniqueness constraint itself, which in SQLite *is* an index.
+
+*As built (slice 4a):* **`pending`** is the entry state — fetched and filtered, but not yet read for
+a passage. It is the seam between 4a and 4b (§15), and it is what makes a scan resumable: fetching
+depends only on YouTube, evaluation only on Concord, and either can fail without losing the other's
+work. **`actual_start_time` is stored beside `published_at`** because the two genuinely disagree and
+the ledger has to show the day a reader sees on YouTube: a service streamed at 14:55 UTC on the
+Sunday is routinely published at 04:32 on the Monday, so `published_at` alone dates it a day late —
+which is the §7 rule applied to the ledger as well as to the note.
+
+Two columns on **`sermon_sources`** drive the checking: **`check_requested_at`** (nullable) is the
+durable half of "Check now" — the button writes it down and the background runner clears it when
+that source's check finishes, so a restart mid-scan loses nothing. **`scan_complete`** (bool) says
+whether the last check paged the catalogue all the way to its natural stop; see §6.
 
 **`sermon_notes.youtube_video_id`** — new nullable indexed column. Set server-side on create/update
 whenever `sermon_url` is a YouTube link (`watch?v=`, `youtu.be/`, `/live/`, `/shorts/`, `/embed/`,
@@ -129,9 +143,36 @@ weekly interval survives restarts. One scan at a time (a process-wide lock); the
 "checking…" while it runs. songbird is one process, so an in-process timer is enough — no sidecar, no
 cron.
 
+*As built (slice 4a): the trigger and the work are separate.* A catalogue scan is dozens of Google
+calls, so it cannot sit inside a request. **"Check now" — and adding a source — only write
+`check_requested_at` down and answer `202`**; one background `asyncio` task then processes every
+source that is *due* (a request pending, or never checked at all) and ends when nothing is left. The
+page polls `/status` while it runs. Three consequences worth stating:
+
+- **"One scan at a time" needs no lock.** The trigger is a plain synchronous function, so on a
+  single-threaded event loop nothing can run between "is one going?" and "start one" — and a lock's
+  own `acquire()` would reintroduce exactly the interleaving it was reached for. A separate flag
+  covers the one gap a liveness check cannot: a run that has just asked "anything left?" is not yet
+  finished, so a request arriving in that instant would otherwise be dropped in silence.
+- **A request made *during* a source's own check survives it.** The clear is conditional on the
+  request being older than the check that served it, so pressing "Check now" three minutes into a
+  back-catalogue scan is honoured on the next pass rather than vanishing.
+- **The scheduled check (c) needs no scan logic of its own.** Slice 6's timer sets
+  `check_requested_at` on every enabled source when the interval elapses; this runner does the rest.
+
 **What.** List the source's playlist newest-first (`playlistItems.list`, 50 per page, 1 unit each);
 stop at the first page where every video is already in the ledger (a curated playlist is paged fully —
-its order isn't chronological). Fetch the unseen videos' details in batches of 50
+its order isn't chronological).
+
+*As built:* **the stop rule is only safe after a check that finished.** It assumes every page above
+the stop is complete, so a scan that committed page one and then failed on page two would leave page
+one entirely known — and every later check would stop there, putting the rest of the catalogue
+permanently out of reach with no error anywhere. So a source pages its whole catalogue unless
+`scan_complete` says its last check ran to its natural stop. That flag is written `false` as part of
+the first batch's commit rather than in a cleanup step, which is what also covers a container restart
+or a power cut; a failure that never consumed a page leaves it alone, so a transient blip does not
+cost every source a full re-walk. Re-walking is cheap in any case: paging an already-scanned channel
+spends one unit per page and **no** detail calls, because there is nothing unseen to ask about. Fetch the unseen videos' details in batches of 50
 (`videos.list?part=snippet,contentDetails,liveStreamingDetails`, 1 unit per batch): title,
 description, `publishedAt`, `liveBroadcastContent`, `duration`, `actualStartTime`.
 
@@ -153,6 +194,11 @@ silently hidden):
 **Then** the passage rules (§7). Each video is processed and committed on its own, so a failure
 part-way (Concord down, quota out) leaves the finished ones finished and the rest untouched — the
 ledger is the checkpoint, and a re-run is safe.
+
+*As built:* the fetch half commits **per batch of fifty** rather than per video. Fifty is one quota
+unit and about a second of work, and 4a creates no notes, so that is the natural checkpoint; the
+placement half, which calls Concord once per video, keeps the per-video commit this paragraph
+describes.
 
 **Failure.** A YouTube error records on the source and stops that source's scan; the next source
 still runs. Quota exhaustion (`403 quotaExceeded`) stops the whole run; it resumes at the next
@@ -225,13 +271,26 @@ Auth-gated and author-scoped, under `/api/v1/sermon-sources`:
 | `GET` | `/api/v1/sermon-sources` | List the user's sources with counts (placed / needs passage / skipped) |
 | `POST` | `/api/v1/sermon-sources` | Add: `url`, `tags`, `include_live`, `min_minutes` → resolves via YouTube, then starts the catalog scan |
 | `GET` / `PATCH` / `DELETE` | `/api/v1/sermon-sources/{id}` | Fetch / edit (`tags`, `enabled`, `include_live`, `min_minutes`) / delete (the ledger goes with it; created notes stay) |
-| `POST` | `/api/v1/sermon-sources/{id}/check` | Check this source now → summary `{seen, placed, needs_passage, skipped}` |
-| `POST` | `/api/v1/sermon-sources/check` | Check all enabled sources now |
+| `POST` | `/api/v1/sermon-sources/{id}/check` | Check this source now → `202 {queued}` |
+| `POST` | `/api/v1/sermon-sources/check` | Check all enabled sources now → `202 {queued}` |
 | `GET` | `/api/v1/sermon-sources/status` | Key configured? interval, running?, last/next scheduled run |
-| `GET` | `/api/v1/sermon-sources/videos?status=…` | The ledger, filtered (`needs_passage` default) |
+| `GET` | `/api/v1/sermon-sources/videos?status=…&source_id=…` | The ledger, filtered (no filter = every state) |
 | `POST` | `/api/v1/sermon-sources/videos/{id}/place` | Body `{references: [...]}` → one note per reference; row → `placed`/`manual` |
 | `POST` | `/api/v1/sermon-sources/videos/{id}/dismiss` · `/restore` | Dismiss / undo |
 | `POST` | `/api/v1/sermon-notes/redate` | §11: `?dry_run=true` returns the preview; without it, applies |
+
+*As built (slice 4a), two corrections this table needed:*
+
+- **The check endpoints answer `202 {queued: n}`, not a summary.** They were written when the scan
+  was going to happen inside the request; it does not (§6), so there are no results to report yet —
+  only how many sources were accepted into the queue. A paused source queues nothing and is not
+  stamped, because the runner would never pick it up and the row would then say "waiting to be
+  checked" for ever. Both endpoints still require a key: queueing work that could never run is a lie
+  told in the friendliest possible way. **`GET /videos` does not** — it reads songbird's own table,
+  and a key rotated out must not take away the record of what was already found.
+- **The ledger's default filter is every state, not `needs_passage`.** Nothing can *be*
+  `needs_passage` until the placement slice, so that default would answer the first person who ever
+  opens the view with an empty list. Which state to show first is the client's business.
 
 ## 10. UI
 
@@ -296,6 +355,22 @@ same rule: every text layer keeps its own contrast.
 - Other platforms (Vimeo, podcast feeds). The source `kind` column leaves the door open.
 - Per-source custom placement patterns (regex). The three built-in rules cover all four real sources.
 
+**Known limitations, found live in slice 4a:**
+
+- **A broadcast that never airs is re-read on every check.** §6's first filter deliberately leaves an
+  `upcoming` or `live` video unledgered, because it should be re-seen once it has finished. A stream
+  that was scheduled and then abandoned never finishes, so it stays unledgered for ever — and while
+  it sits on the newest page, the stop rule cannot fire there and that source pays two extra quota
+  units per check. Majestic View has exactly one, a service scheduled for 19 July 2026 that still
+  reads `upcoming`. Two units a week is not worth a special case, and the alternative — ledgering a
+  video that may yet air — would be worse.
+- **A video YouTube declines to return** (private, deleted, age-gated) is likewise never ledgered,
+  with the same small recurring cost and the same reasoning.
+- **A video is ledgered by the first of an author's sources that sees it.** The ledger is unique per
+  (author, video), so a church's curated playlist repeating its own uploads produces one row, not
+  two — which is the point. The consequence is that the second source's own filter settings get no
+  say over a video the first already decided.
+
 ## 14. Definition of done (feature)
 
 - One YouTube client, key never logged or served; feature cleanly off without a key. "Never
@@ -325,11 +400,16 @@ Smallest reviewable, load-bearing unit; branch `slice/N-…`, PR per slice, Plan
    soon as it merges; the interval and minimum-minutes lines stay in slice 6 with the walkthrough.
 3. **Sources CRUD** (§4–5, no scanning) — tables + join (`0011`), API, the Sources page with add /
    list / edit / delete; adding a source resolves it through YouTube.
-4. **The scan** (§6–7) — the ledger (`0012`), filters, candidate finder, rules, boilerplate, note
-   creation, "Check now". Fixture-driven tests on the real description shapes.
+4. **The scan** (§6–7), split in two because fetching and placing fail for different reasons, need
+   different fixtures, and together make a diff nobody can review:
+   - **4a — Fetch.** The ledger (`0012`), the playlist pager, the §6 filters, the background runner,
+     "Check now", per-source counts and a read-only ledger view. Candidates land as `pending`.
+   - **4b — Place.** The candidate finder, the §7 rules, boilerplate exclusion, note creation, and
+     `sermon_notes.source_video_id`. Consumes `pending`. Fixture-driven tests on the real
+     description shapes.
 5. **Review list** (§8) — place / dismiss / restore / note-it-anyway, UI.
 6. **Schedule + docs** — the in-process timer with boot catch-up, status endpoint, compose lines,
    User's Guide walkthrough, CHANGELOG, SECURITY note, Dockerfile comment.
 
 Slices 3 and 4 could merge if the CRUD alone feels too thin to review; the default is to keep them
-apart so the scan lands as one focused diff.
+apart so the scan lands as one focused diff. In the event 4 split again, for the same reason.

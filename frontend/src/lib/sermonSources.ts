@@ -1,8 +1,13 @@
 import { apiRequest } from "@/lib/api";
 import {
+  type SermonCheckQueued,
   type SermonSource,
+  type SermonSourceVideosPage,
   type SermonSourcesStatus,
+  type SermonVideoStatus,
+  sermonCheckQueuedSchema,
   sermonSourceSchema,
+  sermonSourceVideosPageSchema,
   sermonSourcesListSchema,
   sermonSourcesStatusSchema,
 } from "@/schemas";
@@ -60,4 +65,75 @@ export async function updateSource(id: number, edit: SermonSourceEdit): Promise<
 
 export async function deleteSource(id: number): Promise<void> {
   await apiRequest<void>("DELETE", `/sermon-sources/${id}`);
+}
+
+/** The YouTube page for a ledger row. songbird stores the id and never the link, so exactly one
+ * place builds it. */
+export function watchUrl(videoId: string): string {
+  return `https://www.youtube.com/watch?v=${videoId}`;
+}
+
+/**
+ * A video's length in words: "18 min", "1 hr 24 min", or "length unknown".
+ *
+ * Null is genuinely unknown, not zero. A video YouTube gave no duration for was never filtered on
+ * length at all, and showing "0 min" would claim the opposite of what songbird decided.
+ */
+export function formatVideoLength(seconds: number | null): string {
+  if (seconds === null) return "length unknown";
+  if (seconds < 60) return "under a minute";
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 60) return `${minutes} min`;
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  return rest === 0 ? `${hours} hr` : `${hours} hr ${rest} min`;
+}
+
+/** Ask songbird to check every enabled source. It answers as soon as the request is written
+ * down — the scan itself runs in the background. */
+export async function checkAllSources(): Promise<SermonCheckQueued> {
+  const data = await apiRequest<unknown>("POST", "/sermon-sources/check");
+  return sermonCheckQueuedSchema.parse(data);
+}
+
+/** Ask songbird to check one source now. */
+export async function checkSource(id: number): Promise<SermonCheckQueued> {
+  const data = await apiRequest<unknown>("POST", `/sermon-sources/${id}/check`);
+  return sermonCheckQueuedSchema.parse(data);
+}
+
+export interface SermonVideoFilters {
+  status?: SermonVideoStatus;
+  sourceId?: number;
+  limit?: number;
+  offset?: number;
+}
+
+/** One page of the ledger — everything a check has seen, newest sermon first. An absent filter
+ * means "every state" / "every source". */
+export async function listSourceVideos(
+  filters: SermonVideoFilters = {},
+): Promise<SermonSourceVideosPage> {
+  const params = new URLSearchParams();
+  if (filters.status) params.set("status", filters.status);
+  if (filters.sourceId !== undefined) params.set("source_id", String(filters.sourceId));
+  params.set("limit", String(filters.limit ?? 50));
+  params.set("offset", String(filters.offset ?? 0));
+  const data = await apiRequest<unknown>("GET", `/sermon-sources/videos?${params.toString()}`);
+  return sermonSourceVideosPageSchema.parse(data);
+}
+
+/**
+ * The day a sermon happened, as the church's own page shows it (spec §7).
+ *
+ * A livestreamed service is dated by when the stream STARTED, not when the video went up: those
+ * two genuinely differ, and usually by a day — a service streamed at 14:55 UTC on the Sunday is
+ * routinely published at 04:32 on the Monday. Dating it by the publish time would put a Sunday
+ * sermon under Monday and disagree with the "Streamed live on…" line a reader can see on YouTube.
+ */
+export function sermonDay(video: {
+  actual_start_time: string | null;
+  published_at: string;
+}): string {
+  return (video.actual_start_time ?? video.published_at).slice(0, 10);
 }

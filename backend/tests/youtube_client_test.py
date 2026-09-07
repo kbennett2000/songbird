@@ -7,6 +7,7 @@ tested here, because two of them are invisible in ordinary use and would rot unn
 
 import logging
 import traceback
+from datetime import UTC, datetime
 
 import httpx
 import pytest
@@ -33,6 +34,7 @@ def _video_json(
     duration: str | None = "PT1H23M4S",
     started: str | None = None,
     live: str = "none",
+    stream: bool = False,
 ) -> dict[str, object]:
     """One `videos.list` item in YouTube's real (camelCase, deeply nested) shape."""
     item: dict[str, object] = {
@@ -47,8 +49,10 @@ def _video_json(
         },
         "contentDetails": {} if duration is None else {"duration": duration},
     }
-    if started is not None:
-        item["liveStreamingDetails"] = {"actualStartTime": started}
+    # `started` implies a stream; `stream` alone gives the block WITHOUT a start time, which is
+    # the shape that separates "was streamed" from "we know when it began".
+    if started is not None or stream:
+        item["liveStreamingDetails"] = {} if started is None else {"actualStartTime": started}
     return item
 
 
@@ -158,6 +162,44 @@ async def test_videos_come_back_in_the_order_asked_for() -> None:
     videos = await client.get_videos([_ID, _ID2])
     await client.aclose()
     assert [v.id for v in videos] == [_ID, _ID2]
+
+
+async def test_a_stream_is_marked_even_when_its_start_time_is_missing() -> None:
+    """The distinction spec §6's `live_excluded` filter actually turns on.
+
+    The filter asks whether YouTube sent a `liveStreamingDetails` block at all — was this
+    streamed? — and a block can arrive with no `actualStartTime` in it. Reading the flag off the
+    start time instead would let such a video through a source that has livestreams switched off.
+    """
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json=_ok(
+                _video_json(_ID, stream=True),  # streamed, no start time recorded
+                _video_json(_ID2, started="2026-09-06T14:55:12Z"),  # streamed, start recorded
+            ),
+        )
+
+    client = _client(handler)
+    videos = await client.get_videos([_ID, _ID2])
+    await client.aclose()
+    assert [v.is_livestream for v in videos] == [True, True]
+    # …and the two are genuinely different states, which is why one flag cannot stand for both.
+    assert videos[0].actual_start_time is None
+    assert videos[1].actual_start_time == datetime(2026, 9, 6, 14, 55, 12, tzinfo=UTC)
+
+
+async def test_an_ordinary_upload_is_not_a_stream() -> None:
+    # The other half of the pair: no block at all means it was uploaded, and a source with
+    # livestreams off must still collect it.
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=_ok(_video_json(_ID)))
+
+    client = _client(handler)
+    videos = await client.get_videos([_ID])
+    await client.aclose()
+    assert videos[0].is_livestream is False
 
 
 async def test_ids_youtube_does_not_return_are_simply_absent() -> None:
@@ -674,3 +716,151 @@ async def test_the_key_never_appears_in_a_channel_lookup_failure() -> None:
     await client.aclose()
     assert _KEY not in str(caught.value)
     assert _KEY not in "".join(traceback.format_exception(caught.value))
+
+
+# ---- 7. Reading what is IN a playlist (v1.7 slice 4a) --------------------------------------
+
+_UPLOADS = "UUa1b2c3d4e5f6g7h8i9j0k1"
+
+
+def _playlist_item(
+    video_id: str, published: str | None = "2026-01-05T14:00:00Z"
+) -> dict[str, object]:
+    """One `playlistItems.list` entry, contentDetails only — which is all songbird asks for."""
+    details: dict[str, object] = {"videoId": video_id}
+    if published is not None:
+        details["videoPublishedAt"] = published
+    return {"contentDetails": details}
+
+
+def _playlist_page(*items: dict[str, object], next_token: str | None = None) -> dict[str, object]:
+    body: dict[str, object] = {"kind": "youtube#playlistItemListResponse", "items": list(items)}
+    if next_token is not None:
+        body["nextPageToken"] = next_token
+    return body
+
+
+async def test_a_playlist_page_asks_for_ids_only_fifty_at_a_time() -> None:
+    # The part matters as much as the path: asking for `snippet` here would double the response
+    # size for fields songbird deliberately ignores (they describe the ENTRY, not the video).
+    seen: dict[str, str] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["path"] = request.url.path
+        for k in ("key", "part", "playlistId", "maxResults"):
+            seen[k] = request.url.params.get(k, "<absent>")
+        # No cursor on the first page — sending an empty one is not the same as sending none.
+        seen["pageToken"] = request.url.params.get("pageToken", "<absent>")
+        return httpx.Response(200, json=_playlist_page(_playlist_item(_ID)))
+
+    client = _client(handler)
+    await client.list_playlist_page(_UPLOADS)
+    await client.aclose()
+    assert seen == {
+        "path": "/youtube/v3/playlistItems",
+        "key": _KEY,
+        "part": "contentDetails",
+        "playlistId": _UPLOADS,
+        "maxResults": "50",
+        "pageToken": "<absent>",
+    }
+
+
+async def test_a_page_reads_its_ids_in_the_order_youtube_listed_them() -> None:
+    # Order is the whole basis of the incremental stop rule: an uploads playlist is newest-first,
+    # so a caller that reordered these would stop in the wrong place.
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json=_playlist_page(
+                _playlist_item(_ID, "2026-01-05T14:00:00Z"),
+                _playlist_item(_ID2, "2025-12-29T14:00:00Z"),
+            ),
+        )
+
+    client = _client(handler)
+    page = await client.list_playlist_page(_UPLOADS)
+    await client.aclose()
+    assert page.video_ids == [_ID, _ID2]
+    assert page.items[0].published_at == datetime(2026, 1, 5, 14, 0, tzinfo=UTC)
+    assert page.next_page_token is None  # a page with no cursor is the last one
+
+
+async def test_the_page_token_is_handed_straight_back() -> None:
+    tokens: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        tokens.append(request.url.params.get("pageToken", "<absent>"))
+        return httpx.Response(200, json=_playlist_page(_playlist_item(_ID), next_token="PAGE2"))
+
+    client = _client(handler)
+    first = await client.list_playlist_page(_UPLOADS)
+    assert first.next_page_token == "PAGE2"
+    await client.list_playlist_page(_UPLOADS, first.next_page_token)
+    await client.aclose()
+    # YouTube's cursor is opaque, so the only correct thing to do with it is give it back.
+    assert tokens == ["<absent>", "PAGE2"]
+
+
+async def test_an_entry_whose_video_is_gone_has_no_date() -> None:
+    # A private or deleted video leaves its playlist ENTRY behind with no videoPublishedAt. That
+    # must parse, not raise: a real back catalogue has these in it.
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=_playlist_page(_playlist_item(_ID, published=None)))
+
+    client = _client(handler)
+    page = await client.list_playlist_page(_UPLOADS)
+    await client.aclose()
+    assert page.video_ids == [_ID]
+    assert page.items[0].published_at is None
+
+
+async def test_an_empty_page_is_a_normal_answer_not_a_not_found() -> None:
+    # Unlike channels.list, "no items" here is not a missing playlist — an empty playlist and a
+    # channel that has posted nothing are both real. `get_playlist` is what says it exists.
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"kind": "youtube#playlistItemListResponse", "items": []})
+
+    client = _client(handler)
+    page = await client.list_playlist_page(_UPLOADS)
+    await client.aclose()
+    assert page.video_ids == []
+    assert page.next_page_token is None
+
+
+async def test_the_pager_maps_errors_the_way_every_other_call_does() -> None:
+    # It goes through the same `_get`, and this is what proves it rather than assuming it.
+    cases: tuple[tuple[int, str, type[YouTubeError]], ...] = (
+        (403, "quotaExceeded", YouTubeQuotaError),
+        (400, "badRequest", YouTubeAuthError),
+        (404, "playlistNotFound", YouTubeNotFoundError),
+        (503, "backendError", YouTubeUnreachableError),
+    )
+    for status, reason, expected in cases:
+
+        def handler(request: httpx.Request, _s: int = status, _r: str = reason) -> httpx.Response:
+            return httpx.Response(_s, json=_error_body(_r, _s))
+
+        client = _client(handler)
+        with pytest.raises(expected):
+            await client.list_playlist_page(_UPLOADS)
+        await client.aclose()
+
+
+async def test_the_pager_never_leaks_the_key(caplog: pytest.LogCaptureFixture) -> None:
+    # The redaction is installed by the client, not by each method — but a new method is a new
+    # chance to bypass `_get`, and that is exactly what this catches.
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(500, text="boom")
+
+    client = _client(handler)
+    with caplog.at_level(logging.DEBUG):
+        with pytest.raises(YouTubeError) as caught:
+            await client.list_playlist_page(_UPLOADS)
+    await client.aclose()
+
+    rendered = "".join(traceback.format_exception(caught.value))
+    assert _KEY not in rendered
+    assert "AIza" not in rendered
+    assert _KEY not in caplog.text
+    assert "key=REDACTED" in caplog.text

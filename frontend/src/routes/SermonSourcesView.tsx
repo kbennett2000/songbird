@@ -1,23 +1,29 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { RedateSermonsModal } from "@/components/RedateSermonsModal";
-import {
-  SermonSourceForm,
-  type SermonSourceFormValues,
-} from "@/components/SermonSourceForm";
+import { SermonSourceForm, type SermonSourceFormValues } from "@/components/SermonSourceForm";
+import { SermonVideoLedger } from "@/components/SermonVideoLedger";
 import { TopNav } from "@/components/TopNav";
 import { ApiError } from "@/lib/api";
+import { formatEventDate } from "@/lib/notes";
 import { fetchTags } from "@/lib/reader";
 import { applyRedate, previewRedate } from "@/lib/redate";
 import {
+  checkAllSources,
+  checkSource,
   createSource,
   deleteSource,
   fetchSourcesStatus,
   listSources,
   updateSource,
 } from "@/lib/sermonSources";
-import type { RedateResult, SermonSource } from "@/schemas";
+import type { RedateResult, SermonSource, SermonSourceCounts } from "@/schemas";
+
+/** How often the page asks whether the check is still going, while one is. Short enough that
+ * finishing feels immediate, long enough that a back-catalogue scan isn't answering the door
+ * twenty times a minute. */
+const SCAN_POLL_MS = 3000;
 
 /** The tag chips every list in songbird uses. */
 function TagChips({ tags }: { tags: string[] }): JSX.Element | null {
@@ -50,8 +56,14 @@ function SourceFacts({
     source.min_minutes === null
       ? `${minMinutesDefault} minutes or longer`
       : `${source.min_minutes} minutes or longer`,
-    // Nothing has scanned yet — slice 4 fills this in.
-    source.last_checked_at === null ? "never checked" : `checked ${source.last_checked_at}`,
+    source.check_requested_at !== null
+      ? "waiting to be checked"
+      : source.last_checked_at === null
+        ? "never checked"
+        : // Sliced to the calendar day and parsed part by part rather than through `new Date()`:
+          // these timestamps arrive without a timezone, so the browser would read them as local
+          // and show the day before to anyone west of UTC.
+          `checked ${formatEventDate(source.last_checked_at.slice(0, 10))}`,
   ];
   return (
     <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">
@@ -61,6 +73,31 @@ function SourceFacts({
           Paused
         </span>
       )}
+    </p>
+  );
+}
+
+/** The states a count can be in, in the order a reader meets them, in the reader's words. */
+const COUNT_LABELS: [keyof SermonSourceCounts, string][] = [
+  ["pending", "waiting"],
+  ["needs_passage", "needs a passage"],
+  ["placed", "placed"],
+  ["skipped", "skipped"],
+  ["already_noted", "already noted"],
+];
+
+/** What a source's checks have found so far — only the numbers that aren't zero, so a source that
+ * has only ever skipped things doesn't show four noughts to say so. */
+function SourceCounts({ counts }: { counts: SermonSourceCounts }): JSX.Element | null {
+  const shown = COUNT_LABELS.filter(([key]) => counts[key] > 0);
+  if (shown.length === 0) return null;
+  return (
+    <p className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-sm text-gray-600 dark:text-gray-300">
+      {shown.map(([key, label]) => (
+        <span key={key}>
+          <span className="font-semibold">{counts[key]}</span> {label}
+        </span>
+      ))}
     </p>
   );
 }
@@ -88,8 +125,18 @@ export function SermonSourcesView(): JSX.Element {
   const statusQuery = useQuery({
     queryKey: ["sermon-sources-status"],
     queryFn: fetchSourcesStatus,
+    // songbird's only polling query, and it polls only while there is something to watch, so the
+    // page costs nothing at rest. Returning false is what stops the timer, so the moment the
+    // server says the check is done the page goes quiet again.
+    //
+    // The `error === null` guard is not decoration: a query keeps its last successful data
+    // through a failure, so without it a songbird that had gone away would be asked every three
+    // seconds for as long as the tab stayed open.
+    refetchInterval: (query) =>
+      query.state.error === null && query.state.data?.scan_running ? SCAN_POLL_MS : false,
   });
   const configured = statusQuery.data?.configured ?? false;
+  const scanning = statusQuery.data?.scan_running ?? false;
   const minMinutesDefault = statusQuery.data?.min_minutes_default ?? 10;
 
   // Both wait for the status: with no key there is nothing to list and asking would only fail.
@@ -145,6 +192,43 @@ export function SermonSourcesView(): JSX.Element {
       setActionMsg({ kind: "ok", text: `Saved ${source.title}.` });
     },
     onError: (err) => fail(err, "Couldn't save that source."),
+  });
+
+  // A check FINISHING is a transition, not a state — no single answer from the server says "just
+  // finished" — so the page remembers what the last one said and acts on the change. The counts,
+  // the last-checked line and the ledger are all stale the instant a scan stops, and nothing else
+  // would tell them.
+  const wasScanning = useRef(false);
+  useEffect(() => {
+    if (wasScanning.current && !scanning) {
+      void queryClient.invalidateQueries({ queryKey: ["sermon-sources"] });
+      void queryClient.invalidateQueries({ queryKey: ["sermon-source-videos"] });
+      setActionMsg({ kind: "ok", text: "Finished checking. Each source shows how it went." });
+    }
+    wasScanning.current = scanning;
+  }, [scanning, queryClient]);
+
+  // "Check now" doesn't wait for the check: the server writes the request down, wakes the runner
+  // and answers straight away. Everything after that is the poll's job.
+  const checkMutation = useMutation({
+    mutationFn: (source: SermonSource | null) =>
+      source === null ? checkAllSources() : checkSource(source.id),
+    onSuccess: async (result) => {
+      // Refetching the status is what STARTS the poll — until the page has seen `scan_running`
+      // true there is no timer. The server sets that flag before it answers, so one refetch is
+      // enough. The sources refetch is for `check_requested_at`, which is how a row says it is
+      // waiting its turn.
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["sermon-sources-status"] }),
+        queryClient.invalidateQueries({ queryKey: ["sermon-sources"] }),
+      ]);
+      // Nothing in the banner when work was queued: the indicator below is the live region for
+      // scan state, and saying it in both places puts the same sentence on screen twice.
+      if (result.queued === 0) {
+        setActionMsg({ kind: "ok", text: "Nothing to check — every source is paused." });
+      }
+    },
+    onError: (err) => fail(err, "Couldn't start a check."),
   });
 
   const removeMutation = useMutation({
@@ -220,7 +304,11 @@ export function SermonSourcesView(): JSX.Element {
         {actionMsg && (
           <p
             className={`mb-4 text-sm ${
-              actionMsg.kind === "ok" ? "text-emerald-700" : "text-red-600 dark:text-red-400"
+              actionMsg.kind === "ok"
+                ? // A dark variant it was missing: emerald-700 on the dark page is 3.24:1, under
+                  // the 4.5:1 a reader needs. Same class of mistake as #122, found the same way.
+                  "text-emerald-700 dark:text-emerald-400"
+                : "text-red-600 dark:text-red-400"
             }`}
             role="status"
           >
@@ -234,8 +322,8 @@ export function SermonSourcesView(): JSX.Element {
           <p className="text-gray-700 dark:text-gray-200">
             songbird needs a free YouTube API key before it can find your sermons. Put it in the{" "}
             <code className="rounded bg-gray-100 dark:bg-gray-800 px-1">.env</code> file next to{" "}
-            <code className="rounded bg-gray-100 dark:bg-gray-800 px-1">docker-compose.yml</code>{" "}
-            on a line reading{" "}
+            <code className="rounded bg-gray-100 dark:bg-gray-800 px-1">docker-compose.yml</code> on
+            a line reading{" "}
             <code className="rounded bg-gray-100 dark:bg-gray-800 px-1">
               YOUTUBE_API_KEY=your-key-here
             </code>
@@ -276,16 +364,44 @@ export function SermonSourcesView(): JSX.Element {
                   />
                 </div>
               ) : (
-                <button
-                  type="button"
-                  className="rounded bg-emerald-700 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-800"
-                  onClick={() => {
-                    setActionMsg(null);
-                    setAdding(true);
-                  }}
-                >
-                  Add source
-                </button>
+                <div className="flex flex-wrap items-center gap-3">
+                  <button
+                    type="button"
+                    className="rounded bg-emerald-700 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-800"
+                    onClick={() => {
+                      setActionMsg(null);
+                      setAdding(true);
+                    }}
+                  >
+                    Add source
+                  </button>
+                  {/* In the body rather than the nav's actions slot: that row already wraps eight
+                      links plus the user and theme controls at phone width, and a third action is
+                      where it breaks. */}
+                  <button
+                    type="button"
+                    className="rounded border border-gray-300 dark:border-gray-600 px-3 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50"
+                    onClick={() => {
+                      setActionMsg(null);
+                      checkMutation.mutate(null);
+                    }}
+                    disabled={scanning || checkMutation.isPending}
+                  >
+                    Check all now
+                  </button>
+                  {scanning && (
+                    // The live region for scan state, and the only place it is said: a check
+                    // starting is news, and it belongs beside the control that caused it. The
+                    // banner stays quiet for a queued check so the same sentence does not appear
+                    // twice on screen.
+                    //
+                    // Status, not a dimmed control — its own text in its own colour, never an
+                    // opacity on something else.
+                    <span role="status" className="text-sm text-gray-600 dark:text-gray-300">
+                      Checking your sources…
+                    </span>
+                  )}
+                </div>
               )}
             </section>
 
@@ -295,8 +411,8 @@ export function SermonSourcesView(): JSX.Element {
               )}
               {sourcesQuery.data && sources.length === 0 && (
                 <p className="text-gray-500 dark:text-gray-400">
-                  No sources yet. Add the church whose sermons you take notes on, and songbird
-                  will know where to look.
+                  No sources yet. Add the church whose sermons you take notes on, and songbird will
+                  know where to look.
                 </p>
               )}
               <ul className="flex flex-col gap-3">
@@ -317,6 +433,14 @@ export function SermonSourcesView(): JSX.Element {
                       </a>
                     </div>
                     <SourceFacts source={source} minMinutesDefault={minMinutesDefault} />
+                    {source.last_check_status !== null && source.last_check_status !== "ok" && (
+                      // Its own line, not squeezed into the ·-joined facts: a plain-English
+                      // failure reason is a sentence, and it needs room to read as one.
+                      <p className="mt-1 text-sm text-amber-800 dark:text-amber-300">
+                        Last check: {source.last_check_status}
+                      </p>
+                    )}
+                    <SourceCounts counts={source.counts} />
                     <TagChips tags={source.tags} />
 
                     {editingId === source.id ? (
@@ -365,7 +489,26 @@ export function SermonSourcesView(): JSX.Element {
                         </button>
                       </div>
                     ) : (
-                      <div className="mt-3 flex gap-3">
+                      <div className="mt-3 flex flex-wrap gap-3">
+                        {/* Absent on a paused source rather than disabled: the runner only ever
+                            picks up enabled sources, so the button would have nothing to do. */}
+                        {source.enabled && (
+                          <button
+                            type="button"
+                            className="text-sm text-blue-700 dark:text-blue-400 hover:underline disabled:opacity-50"
+                            onClick={() => {
+                              setActionMsg(null);
+                              checkMutation.mutate(source);
+                            }}
+                            disabled={
+                              scanning ||
+                              checkMutation.isPending ||
+                              source.check_requested_at !== null
+                            }
+                          >
+                            Check now
+                          </button>
+                        )}
                         <button
                           type="button"
                           className="text-sm text-blue-700 dark:text-blue-400 hover:underline"
@@ -394,6 +537,8 @@ export function SermonSourcesView(): JSX.Element {
                 ))}
               </ul>
             </section>
+
+            {sources.length > 0 && <SermonVideoLedger sources={sources} />}
           </>
         )}
       </main>

@@ -11,6 +11,7 @@ import os
 os.environ.setdefault("DATA_DIR", "/tmp/songbird-test-data")
 
 from collections.abc import AsyncIterator, Callable
+from datetime import UTC, datetime
 
 import httpx
 import pytest
@@ -20,6 +21,7 @@ from songbird.api.deps import (
     get_concord_client,
     get_current_user,
     get_db,
+    get_scan_runner_optional,
     get_youtube_client_optional,
 )
 from songbird.concord.schemas import (
@@ -53,8 +55,9 @@ from songbird.db import models  # noqa: F401  (register models on Base.metadata)
 from songbird.db.base import Base
 from songbird.db.models import User
 from songbird.main import create_app
+from songbird.sermons.scan import ScanRunner
 from songbird.youtube.client import YouTubeNotFoundError
-from songbird.youtube.schemas import Channel, Playlist, Video
+from songbird.youtube.schemas import Channel, Playlist, PlaylistItem, PlaylistPage, Video
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
 
@@ -408,7 +411,10 @@ class FakeYouTubeClient:
         videos: list[Video] | None = None,
         channels: dict[str, Channel] | None = None,
         playlists: dict[str, Playlist] | None = None,
+        pages: dict[str, list[list[str]]] | None = None,
         error: Exception | None = None,
+        page_error: Exception | None = None,
+        error_after_pages: int | None = None,
     ) -> None:
         self._videos = videos or []
         # Keyed by whatever a test wants to look one up BY — a handle or an id — because the
@@ -417,19 +423,59 @@ class FakeYouTubeClient:
         # YouTube's "200 with no items".
         self._channels = channels or {}
         self._playlists = playlists or {}
+        # A playlist's contents as PAGES of ids, keyed by the playlist id the scan will ask for
+        # (an uploads UU… list, or a PL… list for a playlist source). A list of lists rather than
+        # a flat list because paging is the behaviour under test: where the page boundaries fall
+        # is what decides whether an incremental scan stops in the right place.
+        self._pages = pages or {}
         self._error = error
+        # Raised by `list_playlist_page` alone, so a test can fail the PAGER without also failing
+        # the detail fetch — they are different failures at different points in a walk.
+        self._page_error = page_error
+        # Raise `error` only once this many detail batches have already succeeded, which is how a
+        # test makes a source fail PART WAY through and check that the committed batches survive.
+        self._error_after_pages = error_after_pages
         # Records the ids of every get_videos call so tests can assert batching/passthrough.
         self.get_videos_calls: list[list[str]] = []
+        # Every (playlist_id, page_token) the scan asked for, in order — how a test proves an
+        # incremental walk stopped early rather than merely produced the right rows.
+        self.page_calls: list[tuple[str, str | None]] = []
         # Records every channel/playlist lookup as (kind, value), so a test can assert songbird
         # asked the right question — resolving a handle is a different call from fetching an id.
         self.lookups: list[tuple[str, str]] = []
 
     async def get_videos(self, ids: list[str]) -> list[Video]:
         self.get_videos_calls.append(list(ids))
-        if self._error is not None:
+        if self._error is not None and (
+            self._error_after_pages is None
+            or len(self.get_videos_calls) > self._error_after_pages
+        ):
             raise self._error
-        wanted = set(ids)
-        return [v for v in self._videos if v.id in wanted]
+        # Ordered by the REQUEST, like the real client, so a test that seeds videos in a
+        # different order than it pages them still gets a deterministic answer.
+        by_id = {v.id: v for v in self._videos}
+        return [by_id[i] for i in ids if i in by_id]
+
+    async def list_playlist_page(
+        self, playlist_id: str, page_token: str | None = None
+    ) -> PlaylistPage:
+        self.page_calls.append((playlist_id, page_token))
+        if self._page_error is not None:
+            raise self._page_error
+        pages = self._pages.get(playlist_id, [])
+        index = 0 if page_token is None else int(page_token)
+        if index >= len(pages):
+            return PlaylistPage(items=[], next_page_token=None)
+        # The token is just the next index — opaque to the caller, which is the only thing the
+        # real cursor guarantees about itself.
+        nxt = str(index + 1) if index + 1 < len(pages) else None
+        return PlaylistPage(
+            items=[
+                PlaylistItem(video_id=v, published_at=datetime(2026, 1, 1, tzinfo=UTC))
+                for v in pages[index]
+            ],
+            next_page_token=nxt,
+        )
 
     def _channel(self, key: str) -> Channel:
         if self._error is not None:
@@ -509,6 +555,29 @@ def with_youtube(app: FastAPI) -> Callable[[FakeYouTubeClient], None]:
 
     def _install(youtube: FakeYouTubeClient) -> None:
         app.dependency_overrides[get_youtube_client_optional] = lambda: youtube
+
+    return _install
+
+
+@pytest.fixture
+def with_scan_runner(
+    app: FastAPI, db_sessionmaker: async_sessionmaker[AsyncSession]
+) -> Callable[[FakeYouTubeClient], ScanRunner]:
+    """Install a scan runner over the in-memory DB, and hand it back so the test can drive it.
+
+    Tests `await runner.run()` rather than calling `request_scan()`: the loop is the behaviour,
+    the asyncio task is the plumbing, and awaiting it means no test ever sleeps or polls.
+
+    Not installing this is how a test says "no runner" — which is also the state the whole fast
+    suite is in by default, since the app fixture never runs the lifespan. That is what keeps
+    slice 3's tests honest: they POST a source, the request is recorded on the row, and nothing
+    starts.
+    """
+
+    def _install(youtube: FakeYouTubeClient) -> ScanRunner:
+        runner = ScanRunner(db_sessionmaker, youtube, default_min_minutes=10)  # type: ignore[arg-type]
+        app.dependency_overrides[get_scan_runner_optional] = lambda: runner
+        return runner
 
     return _install
 

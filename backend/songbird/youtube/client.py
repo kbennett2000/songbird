@@ -24,7 +24,7 @@ from typing import Any
 
 import httpx
 
-from songbird.youtube.schemas import Channel, Playlist, Video
+from songbird.youtube.schemas import Channel, Playlist, PlaylistPage, Video
 from songbird.youtube.urls import is_video_id
 
 YOUTUBE_API_BASE_URL = "https://www.googleapis.com/youtube/v3"
@@ -37,6 +37,11 @@ _VIDEO_PARTS = "snippet,contentDetails,liveStreamingDetails"
 # is its own catalogue, so its name is all there is to fetch.
 _CHANNEL_PARTS = "snippet,contentDetails"
 _PLAYLIST_PARTS = "snippet"
+# A playlist's CONTENTS are read for ids alone (see `PlaylistPage`), so this asks for the one part
+# that carries them. 50 is both the maximum and the whole point: a page costs one unit however
+# many it holds, which is what makes a 1,000-video back catalogue affordable (spec §2).
+_PLAYLIST_ITEM_PARTS = "contentDetails"
+_PLAYLIST_ITEM_PAGE_SIZE = "50"
 
 # Google's two ways of saying "you're out of quota for today".
 _QUOTA_REASONS = frozenset({"quotaExceeded", "dailyLimitExceeded"})
@@ -273,3 +278,30 @@ class YouTubeClient:
         if not playlists:
             raise YouTubeNotFoundError(f"YouTube has no playlist {playlist_id}")
         return playlists[0]
+
+    async def list_playlist_page(
+        self, playlist_id: str, page_token: str | None = None
+    ) -> PlaylistPage:
+        """One page of what is IN a playlist — the ids a scan then fetches details for (spec §6).
+
+        Paged rather than exhaustive because a channel's uploads playlist can hold thousands of
+        videos and an incremental check usually wants only the first page: the caller stops as
+        soon as a page holds nothing new, and pages it has not asked for cost nothing.
+
+        `page_token` is YouTube's opaque cursor, passed straight back from the previous page's
+        `next_page_token`. It is deliberately not stored anywhere between runs — Google makes no
+        promise that a token stays meaningful once the underlying list has shifted, and a stale
+        one could silently skip entries rather than fail.
+
+        An empty page is a normal answer here, not a not-found: an empty playlist and a channel
+        that has posted nothing are both real. `get_playlist` is what says a playlist exists.
+        """
+        params = {
+            "part": _PLAYLIST_ITEM_PARTS,
+            "playlistId": playlist_id,
+            "maxResults": _PLAYLIST_ITEM_PAGE_SIZE,
+        }
+        if page_token is not None:
+            params["pageToken"] = page_token
+        response = await self._get("/playlistItems", params)
+        return PlaylistPage.parse_youtube(response.json())

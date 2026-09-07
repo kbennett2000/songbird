@@ -4,6 +4,143 @@ A running log of per-slice decisions, gotchas, and how each slice was verified. 
 
 ---
 
+## Sermon sources slice 4a — fetch (the scan's first half)
+
+- **Date:** 2026-09-07
+- **Branch:** `slice/sermon-sources-4a-fetch`
+
+### Why
+
+Slice 3 taught songbird where sermons come from. Nothing read those catalogues yet.
+
+Spec §15's "slice 4 — the scan" is two jobs wearing one name: fetch every video and decide whether
+it is a candidate, and read the passage out of its text and create the note. They fail for different
+reasons (YouTube vs Concord), need different fixtures, and together make a diff nobody can review.
+So it split, and the seam is a new ledger status, **`pending`**: 4a writes it, 4b consumes it. That
+makes a scan resumable — fetching depends only on YouTube, evaluation only on Concord, and either
+can fail without losing the other's work.
+
+The second decision was **where a scan runs**. A full catalogue scan of a real church is 17-19
+Google calls; that cannot sit inside a POST. So "Check now" — and adding a source — only write
+`check_requested_at` down and answer 202, and one background task processes whatever is due. Slice
+6's timer then needs no scan logic of its own: it sets the same column and this runner does the rest.
+
+### What landed
+
+- **`sermon_source_videos`** (migration `0012`) — spec §4's ledger, shipped whole including the
+  columns 4b fills. Plus `check_requested_at` and `scan_complete` on `sermon_sources`.
+- **`list_playlist_page`** on the YouTube client, and **`Video.is_livestream`**.
+- **`songbird/sermons/scan.py`** — the §6 filters as pure functions, and the runner as the I/O edge.
+- **`/check`, `/{id}/check`, `/videos`**, per-source counts, and `scan_running` on `/status`.
+- **The Sources page**: Check all now, per-source Check now, a polling "checking…" indicator, the
+  counts, last-checked and its failure reason, and a read-only ledger view in its own component
+  (slice 5 attaches place/dismiss/restore to a row there).
+- **WAL and a busy timeout on the engine**, because this slice gives songbird its first writer
+  outside a request. Note for backups: WAL keeps `songbird.db-wal` and `-shm` beside the database,
+  so a backup has to copy the directory rather than the one file.
+
+### Gotchas
+
+- **SQLite does not enforce foreign keys.** The pragma defaults to off and songbird never sets it,
+  so `ondelete="CASCADE"` on the ledger is decorative — deleting a source would have orphaned every
+  row. Slice 3's tag cascade works only because SQLAlchemy manages `secondary` join rows itself; a
+  plain child table gets nothing. The DELETE route clears the ledger explicitly, and a test holds it.
+- **The incremental stop rule needed a second column.** "Stop at the first page where everything is
+  known" assumes every page above the stop is complete. A scan that committed page one and then
+  failed on page two would leave page one entirely known — so every later check would stop there and
+  the rest of the catalogue would be permanently unreachable, with no error anywhere. Hence
+  `scan_complete`, written false as part of the first batch's commit (which also covers a kill -9).
+  Deliberately **not** derived from `last_check_status`: that is a sentence shown to a person, and a
+  copy edit must not change how a scan pages.
+- **`Video` could not answer the question filter 3 asks.** §6 excludes a livestream by testing
+  whether `liveStreamingDetails` is *present*; the model kept only `actualStartTime`. A completed
+  stream with no start time would have slipped past a source with livestreams switched off.
+- **SQLite returns naive datetimes** from `DateTime(timezone=True)`. Every comparison the runner
+  makes happens in SQL for that reason; a test of mine compared an aware value to a stored one and
+  failed exactly as production would have.
+- **The `ASYNC` ruleset earns its keep.** Ruff rejected a `timeout` parameter on an async `aclose`;
+  the shutdown budget is uvicorn's, not a caller's, so it became a constant.
+- **Committing before mutating is not optional.** Twice in this slice a `git checkout --` after a
+  mutation test threw away the real fix along with the mutation, because the source was not yet
+  committed. It is the same lesson slice 2 recorded, and it cost time again.
+
+### What the live calls showed
+
+Two real churches, full back-catalogue scans, on the real key.
+
+| | videos | pending | skipped | quota units | wall clock |
+|---|---|---|---|---|---|
+| MajesticViewChurchLive | 371 | 364 | 7 | 17 | ~1 s |
+| Celebration Church | 445 | 325 | 120 | 19 | ~5 s |
+
+- **The uploads playlist DOES include completed livestreams.** This was the question the slice was
+  told to stop on if the answer was no: 199 of the first 200 Majestic View rows are `is_live` true
+  and are its Sunday services. No `search.list`, no undocumented `UULV` trick, no design decision to
+  escalate.
+- **A finished stream reads `liveBroadcastContent: "none"` with a real duration** — 86 to 110 minutes
+  for those services — so §6's first filter does not touch them.
+- **Quota matches spec §2's estimate.** 17 units for 371 videos and 19 for 445 (one channel lookup,
+  one unit per page of 50, one per detail batch of 50). §2 predicts "roughly 40" for a 1,000-video
+  channel; this is that rate.
+- **An incremental re-check of both channels cost 4 units** — the cheapest a check can be.
+- **A broadcast that never aired is re-read on every check.** Majestic View has a service scheduled
+  for 19 July 2026 that still reads `upcoming` and has a duration of 0. §6's first filter leaves it
+  unledgered on purpose (it should be re-seen once it finishes) but it never will finish, so it looks
+  unseen for ever and the stop rule cannot fire on the page holding it. Two extra quota units per
+  check, permanently. Recorded in spec §13 rather than special-cased: ledgering a video that may yet
+  air would be worse.
+- **The key stayed out of the logs**: every outbound line reads `key=REDACTED`, and no key-shaped
+  string appears anywhere in them.
+
+### The browser pass — three defects, one of them mine, and two runs that looked at nothing
+
+Every state at 1440px and 390px in both themes, against live Concord and two songbird instances (one
+keyed, one not): populated, mid-scan, after a scan, the ledger in three filter states, add, edit,
+delete-confirm, the re-date dialog, and no-key. 48 shots.
+
+1. **The ledger dated every livestreamed service a day late.** Majestic View's rows read "Sep 7,
+   2026" beside titles saying "Sep. 06 2026" — because a service streamed on the Sunday afternoon is
+   published in the small hours of the Monday. That is precisely the disagreement spec §7's date rule
+   exists to settle, and §7's own words are that the rule "makes songbird agree with what a reader
+   sees on YouTube". The ledger disagreed with it, on 199 of 200 rows. The ledger now stores
+   `actual_start_time` beside `published_at` and dates a row by the first of the two — which slice 4b
+   needs anyway.
+2. **Two `role="status"` elements, and a misdiagnosis.** The harness's `getByRole("status")` matched
+   the indicator, then matched the banner after the scan ended, so its wait never resolved. I read
+   that as two simultaneous live regions and moved the announcement to the banner — which put the
+   same sentence on screen twice, caught by the next pass's phone shots. They were never
+   simultaneous. The indicator keeps the role; the banner stays quiet for a queued check; the harness
+   waits by text, which is unambiguous either way.
+3. **The harness could not sign in to a fresh instance.** Its helper clicked "Sign in" whenever that
+   button existed, which is always — so the no-key instance, whose database is always new, never got
+   past the login page and the phone and no-key states were silently never looked at. It now falls
+   back to registering.
+
+### How it was verified
+
+- `make check` — **405 passed** (342 on `main`), Ruff and format clean, Pyright strict 0 errors.
+- `make check-frontend` — **285 passed** (269 on `main`), ESLint, tsc and build clean.
+- `alembic upgrade head` → `downgrade -1` → `upgrade head` on a scratch database, and the migration's
+  schema checked column-for-column against the models — tests build from the models, production
+  builds from the migration, and nothing else compares them.
+- **Mutation-tested**: 42 deliberate breaks — 7 on the client, 14 on the runner, 10 on the API, 11 on
+  the page. **Seven survived**, and six of them were real gaps now covered: the ledger's author scope,
+  the due query's `enabled` filter, the cross-page duplicate guard, the mid-scan `scan_complete`
+  write, the polling lifecycle, and the poll's "stop asking when the server stops answering" guard.
+  The seventh is recorded rather than fixed — swapping the commit and the runner call in `POST ""`
+  leaves everything green, because the stand-in runner does no I/O and the real consequence is a race
+  the fast suite cannot force deterministically. That ordering is held by the comment at the call
+  site, not by a test.
+- The live acceptance and browser pass above.
+
+### Still open
+
+- **The 429 quota path has still never been seen for real**, only faked. It needs an exhausted key.
+- **`needs_passage` and `placed` are always zero**, and the ledger's `pending` rows do nothing yet.
+  Slice 4b reads them.
+
+---
+
 ## Sermon sources slice 3 — sources CRUD (and the browser pass slice 2 skipped)
 
 - **Date:** 2026-09-07
