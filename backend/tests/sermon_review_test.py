@@ -837,7 +837,11 @@ async def test_searching_a_title_ignores_case_and_treats_a_wildcard_as_text(
     await _seed_source(db_sessionmaker)
     await _seed_row(db_sessionmaker, video_id="vid00000001", title="Christmas CONCERT")
     await _seed_row(db_sessionmaker, video_id="vid00000002", title="Giving 100% on Sunday")
-    await _seed_row(db_sessionmaker, video_id="vid00000003", title="An ordinary sermon")
+    # The row that tells an escaped percent sign from a wildcard: "100%" unescaped is LIKE
+    # '%100%%', which reaches this title too. Without it the escaping could be deleted and every
+    # test would still pass.
+    await _seed_row(db_sessionmaker, video_id="vid00000003", title="Sunday 1000 Reasons")
+    await _seed_row(db_sessionmaker, video_id="vid00000004", title="An ordinary sermon")
 
     async with client_for(_concord()) as client:
         cased = await client.get("/api/v1/sermon-sources/videos", params={"q": "concert"})
