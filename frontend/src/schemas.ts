@@ -127,6 +127,35 @@ export const redateResultSchema = z.object({
   applied: z.number(),
 });
 
+// A registered YouTube channel or playlist to collect sermons from (v1.7 sermon sources). The
+// address of a catalogue plus how it's filtered — never any video. `min_minutes` is null when the
+// source follows the app-wide default; `uploads_playlist_id` is null for a playlist, which is its
+// own catalogue. The scan's counts arrive with the scan.
+export const sermonSourceSchema = z.object({
+  id: z.number(),
+  kind: z.enum(["channel", "playlist"]),
+  youtube_id: z.string(),
+  uploads_playlist_id: z.string().nullable(),
+  input_url: z.string(),
+  title: z.string(),
+  enabled: z.boolean(),
+  include_live: z.boolean(),
+  min_minutes: z.number().nullable(),
+  last_checked_at: z.string().nullable(),
+  last_check_status: z.string().nullable(),
+  tags: z.array(z.string()),
+  created_at: z.string(),
+  updated_at: z.string(),
+});
+export const sermonSourcesListSchema = z.array(sermonSourceSchema);
+
+// What the Sources page needs before it can render anything: whether a key is configured at all
+// (no key → the page is one setup sentence), and the default the add form hints at.
+export const sermonSourcesStatusSchema = z.object({
+  configured: z.boolean(),
+  min_minutes_default: z.number(),
+});
+
 export const readVerseSchema = z.object({
   book: z.string(),
   chapter: z.number(),
@@ -358,6 +387,8 @@ export type SermonNote = z.infer<typeof sermonNoteSchema>;
 export type RedateItem = z.infer<typeof redateItemSchema>;
 export type RedateNotFound = z.infer<typeof redateNotFoundSchema>;
 export type RedateResult = z.infer<typeof redateResultSchema>;
+export type SermonSource = z.infer<typeof sermonSourceSchema>;
+export type SermonSourcesStatus = z.infer<typeof sermonSourcesStatusSchema>;
 export type ReadVerse = z.infer<typeof readVerseSchema>;
 export type ReadChapter = z.infer<typeof readChapterSchema>;
 export type ResolvedReference = z.infer<typeof resolvedReferenceSchema>;

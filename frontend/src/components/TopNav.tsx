@@ -18,6 +18,9 @@ interface TopNavProps {
 const LINKS = [
   { to: "/read", label: "Reader" },
   { to: "/browse", label: "Browse notes" },
+  // "Sources", not "Sermon sources": this is the eighth link in a row that has to wrap onto a
+  // phone, and the page's own heading says the long name.
+  { to: "/sermon-sources", label: "Sources" },
   { to: "/search", label: "Search" },
   { to: "/topics", label: "Topics" },
   { to: "/places", label: "Places" },
