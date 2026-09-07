@@ -82,6 +82,9 @@ export const sermonNoteSchema = z.object({
   end_chapter: z.number(),
   end_verse: z.number(),
   event_date: z.string().nullable(),
+  // The YouTube video the sermon_url points at, if it points at one. Server-derived — the
+  // client never sends it (v1.7 sermon sources).
+  youtube_video_id: z.string().nullable(),
   tags: z.array(z.string()),
   author_id: z.number(),
   created_at: z.string(),
