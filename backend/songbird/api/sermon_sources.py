@@ -41,7 +41,7 @@ from songbird.api.schemas import (
 )
 from songbird.config import get_settings
 from songbird.core.errors import ErrorCode, raise_http
-from songbird.db.models import SermonSource, SermonSourceVideo, User
+from songbird.db.models import SermonNote, SermonSource, SermonSourceVideo, User
 from songbird.sermons.scan import ScanRunner
 from songbird.youtube.client import (
     YouTubeAuthError,
@@ -414,16 +414,29 @@ async def delete_sermon_source(
     user: User = Depends(get_current_user),
 ) -> None:
     """Forget a source and everything a check recorded about it. Sermon notes are never touched —
-    deleting where sermons came FROM must not delete the notes you wrote about them (spec §9), and
-    that stays true when slice 4b gives notes a link back to the ledger row that made them.
+    deleting where sermons came FROM must not delete the notes you wrote about them (spec §9).
 
-    The ledger is cleared HERE rather than by the `ondelete="CASCADE"` in the migration, because
-    SQLite only enforces foreign keys when `PRAGMA foreign_keys` is on and songbird never turns it
-    on — so that clause never fires and the rows would simply be orphaned. One bulk DELETE rather
-    than an ORM relationship: a `selectin` one would drag every scanned video behind the sources
-    LIST, and a lazy one would issue a DELETE per row.
+    Both cleanups happen HERE rather than through the `ondelete=` clauses in the migrations,
+    because SQLite only enforces foreign keys when `PRAGMA foreign_keys` is on and songbird never
+    turns it on — so those clauses never fire. Without the first statement a check-created note
+    would be left pointing at a ledger row that no longer exists; without the second the ledger
+    rows would simply be orphaned.
+
+    Order matters: unlink the notes, THEN drop the rows they pointed at.
+
+    Bulk statements rather than ORM relationships: a `selectin` relationship would drag every
+    scanned video behind the sources LIST, and a lazy one would issue a statement per row.
     """
     source = await _get_or_404(db, source_id, user.id)
+    await db.execute(
+        update(SermonNote)
+        .where(
+            SermonNote.source_video_id.in_(
+                select(SermonSourceVideo.id).where(SermonSourceVideo.source_id == source.id)
+            )
+        )
+        .values(source_video_id=None)
+    )
     await db.execute(delete(SermonSourceVideo).where(SermonSourceVideo.source_id == source.id))
     await db.delete(source)
     await db.commit()

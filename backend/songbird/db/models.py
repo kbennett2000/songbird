@@ -216,6 +216,8 @@ class SermonNote(Base):
         Index("ix_sermon_notes_order", "book_order_index"),
         # "have we already noted this video?" — the scan's dedupe check (v1.7 sermon sources).
         Index("ix_sermon_notes_youtube_video_id", "youtube_video_id"),
+        # "which notes did these ledger rows create?" — asked for every page of the ledger.
+        Index("ix_sermon_notes_source_video_id", "source_video_id"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -240,6 +242,15 @@ class SermonNote(Base):
     # sources). Derived, never client-supplied — see the validator below.
     youtube_video_id: Mapped[str | None] = mapped_column(String(16), nullable=True)
 
+    # The ledger row whose passage rules created this note (v1.7 slice 4b), or null for the
+    # ordinary case of a note made by hand. A note OUTLIVES both the row and the source behind it:
+    # deleting where sermons came from must not delete the notes you wrote about them (spec §9), so
+    # this link is cleared rather than followed. SQLite does not enforce the `ON DELETE SET NULL`
+    # in the migration — `delete_sermon_source` clears it explicitly.
+    source_video_id: Mapped[int | None] = mapped_column(
+        ForeignKey("sermon_source_videos.id", ondelete="SET NULL"), nullable=True
+    )
+
     author_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
 
     created_at: Mapped[datetime] = mapped_column(
@@ -262,7 +273,8 @@ class SermonNote(Base):
 
         SQLAlchemy does not fire validators when loading a row, so a value written directly to
         the column (the re-date back-fill) survives being read back. A bulk `update()` WOULD
-        bypass this; nothing in songbird issues one.
+        bypass this; the only one songbird issues against this table clears `source_video_id`
+        when a source is deleted, and it touches neither the URL nor the id derived from it.
         """
         self.youtube_video_id = extract_youtube_video_id(value)
         return value
