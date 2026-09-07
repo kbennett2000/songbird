@@ -82,7 +82,7 @@ git clone https://github.com/kbennett2000/songbird.git
 **3. Start it with one command:**
 
 ```bash
-docker compose up
+docker compose --profile bundled-concord up
 ```
 
 The first time, this downloads the Scripture engine and builds songbird. **It takes a few minutes — that’s completely normal.** You’ll see a lot of text scroll by; you don’t need to read it. Wait until it settles down and stops scrolling.
@@ -102,7 +102,7 @@ The first time, this downloads the Scripture engine and builds songbird. **It ta
 
 <br>
 
-In the terminal, press **Ctrl + C**, then run `docker compose down`. Your notes are saved and will be waiting next time. To start it again later, just run `docker compose up` from the songbird folder.
+In the terminal, press **Ctrl + C**, then run `docker compose down`. Your notes are saved and will be waiting next time. To start it again later, run the same command from step 3 in the songbird folder.
 </details>
 
 <br>
@@ -110,6 +110,24 @@ In the terminal, press **Ctrl + C**, then run `docker compose down`. Your notes 
 ## How it works (for the curious)
 
 songbird is the app you use; **[Concord](https://github.com/kbennett2000/concord)** is the Scripture engine it’s built on — the text, the search, the places, and the cross-references all come from Concord over the network, and the single command above starts both for you. songbird keeps only *your* notes; Concord provides the Bible.
+
+Because the Scripture comes from Concord, **the translations you get are whichever ones your Concord carries.** The one that comes with songbird carries the public-domain translations — the KJV, the ASV, the WEB, the Berean Standard Bible and a dozen more. That’s what a public download is allowed to include; translations like the ESV or the NKJV are licensed, so no public download can ship them.
+
+That `--profile bundled-concord` in the start command is what asks for the included engine. Already running your own Concord — on this machine or anywhere on your network? Then you don’t need it. Point songbird at yours instead: make a file called `.env` next to `docker-compose.yml` with one line naming its address:
+
+```bash
+CONCORD_BASE_URL=http://192.168.1.62:8000
+```
+
+Then start songbird by itself, leaving the flag off:
+
+```bash
+docker compose up
+```
+
+Whatever translations your Concord serves are the ones songbird will show.
+
+Either way, the app’s **Status** page names the exact Concord it is reading and lists every translation it found there.
 
 - **Want to use it?** Every feature, walked through with screenshots, is in the **[User’s Guide](docs/USER-GUIDE.md)**.
 - **Want to see how it’s built?** Start with [the design notes](docs/v1/SPEC.md), then the per-feature specs under [`docs/`](docs/).
@@ -125,7 +143,7 @@ Want to build something like this yourself? The Concord ecosystem now has two be
 
 <br>
 
-Docker Desktop isn’t running. Open it (look for the whale icon), wait until it says it’s running, then try `docker compose up` again from the songbird folder.
+Docker Desktop isn’t running. Open it (look for the whale icon), wait until it says it’s running, then run the command from step 3 again in the songbird folder.
 </details>
 
 <details>
@@ -137,11 +155,23 @@ Give it a moment — on the first run, songbird waits for the Scripture engine t
 </details>
 
 <details>
+<summary>A translation I expect isn’t in the list</summary>
+
+<br>
+
+Open the **Status** page in songbird. It names the Concord it’s reading and lists every translation that Concord carries — and that list is everything songbird can offer.
+
+If the one you want isn’t there, it isn’t missing from songbird; it isn’t in that Concord. The engine that ships with songbird carries the public-domain translations only. To read others, point songbird at a Concord that has them by setting `CONCORD_BASE_URL` in your `.env` file (see *How it works* above), then start it again.
+</details>
+
+<details>
 <summary>It says it can’t reach Concord</summary>
 
 <br>
 
-songbird needs its Scripture engine running. If you started everything with `docker compose up` from the songbird folder, both run together automatically. If you see this error, the engine may still be starting (wait a moment and refresh) or may have been stopped — restart with `docker compose up`.
+songbird needs its Scripture engine running. If you started everything with the command from step 3, both run together automatically. If you see this error, the engine may still be starting (wait a moment and refresh) or may have been stopped — start it again with that same command.
+
+The **Status** page in songbird shows the exact address it’s trying, which is the quickest way to see what it’s looking for.
 </details>
 
 <br>

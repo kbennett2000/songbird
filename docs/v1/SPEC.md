@@ -102,6 +102,20 @@ works with zero config), but that's only a default — set `CONCORD_BASE_URL` to
 (e.g. `http://192.168.1.62:8000`) and songbird talks to Concord there instead. One config
 value; no service discovery; no hardcoded "same server."
 
+**The deployment must not quietly override that.** Shipping a compose file that starts a
+Concord of its own and writes `CONCORD_BASE_URL` into songbird's environment defeats the
+config: whatever the operator sets is ignored, and songbird reads an engine nobody chose. So
+the bundled engine is **opt-in** (`docker compose --profile bundled-concord up`) and the
+address is always `${CONCORD_BASE_URL:-…}` — an operator-supplied value wins, and when one is
+supplied the bundled engine does not start at all. The bundled image is also, necessarily, the
+**public-domain corpus only**: licensed translations can't ship in a public download, so a
+deployment that needs them must point at a Concord that has them.
+
+**Reachability is not correctness.** A Concord at the wrong address is up, healthy, and
+answers every request — the only difference is the corpus it serves. `/healthz` therefore
+reports the base URL *and* the translation ids together, and the Status page renders them
+side by side. Neither fact diagnoses anything alone.
+
 **When Concord is unreachable: error.** The real requirement is that Concord is **reachable**
 at `CONCORD_BASE_URL` over HTTP — not that it's co-located. If a Concord call fails (server
 down, network gone, wrong URL), songbird **surfaces a clear error** — it does **not** attempt

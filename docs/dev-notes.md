@@ -4,6 +4,112 @@ A running log of per-slice decisions, gotchas, and how each slice was verified. 
 
 ---
 
+## Incident — the deployment overrode Concord's address
+
+- **Date:** 2026-09-07
+- **Branch:** `fix/concord-base-url-config`
+
+### The symptom
+
+The translation dropdown on the LAN server listed 15 translations. It had listed 19. ESV, NET,
+NKJV and NLT were gone. Every sign pointed at data loss — Concord's databases are baked into its
+image with no volume, and the concord container had been recreated that afternoon. That reading
+was wrong, and it is worth writing down *because* it was so plausible: a recreated container plus
+missing data is a compelling story, and it sent the first ten minutes of diagnosis down the wrong
+path, toward a volume that should not exist and was not the problem.
+
+Nothing had been deleted. `docker ps -a` showed **two** Concords running side by side:
+
+| Container | Image | Created |
+|---|---|---|
+| `concord-api-1` | `concord:latest` | 2026-08-28 — the operator's own build, all 19 translations, healthy |
+| `songbird-concord-1` | `ghcr.io/kbennett2000/concord:v1.2.0` | that afternoon — stock, public-domain only |
+
+songbird was reading the second one. The first had never been touched.
+
+### Root cause
+
+Slice 0's compose file got this right:
+
+```yaml
+CONCORD_BASE_URL: "${CONCORD_BASE_URL:-http://host.docker.internal:8000}"
+```
+
+Commit `f04debe` ("combined one-command docker compose") replaced it with:
+
+```yaml
+CONCORD_BASE_URL: "http://concord:8000"
+```
+
+The `${…}` indirection was deleted, so `CONCORD_BASE_URL` in `.env` stopped doing anything —
+compose wrote the bundled engine's address into songbird's environment on every boot. The same
+commit made that bundled engine unconditional. Together they mean the deployment silently
+overrode invariant 2: the setting stayed correct in `config.py` and was simply handed the wrong
+value.
+
+The published GHCR image cannot hold the missing translations either. Concord gitignores
+`data/private/`, because ESV/NET/NKJV/NLT are non-distributable — so the public build bakes the
+committed public-domain corpus and nothing else, by design. Pointing at it was never going to
+work, whatever the pin said.
+
+The defect has been in the compose file since `f04debe` on **2026-06-06** — three months. Exactly
+when this LAN server started reading the bundled engine isn't recoverable from the repo: the pin
+bump (`02cf9ce`) landed on 2026-06-08, but the host applied it whenever it was next brought up,
+and container creation timestamps only show the most recent recreate. What is certain is that any
+`docker compose up` from `f04debe` onward pointed songbird at an engine that could not serve the
+licensed translations, whatever `.env` said.
+
+### Why it hid for so long
+
+songbird already reported everything needed to spot it. `/healthz` returned `base_url` and
+`translation_count`; `StatusView` rendered both. But `/status` had **no link in `TopNav`** and
+was still captioned "Slice 0 — skeleton & boot". The page that would have said *"Concord at
+http://concord:8000 — 15 translations"* existed, worked, and was unreachable from the UI.
+
+The lesson isn't "add more diagnostics." It's that **a diagnostic nobody can navigate to is not
+a diagnostic.** The signal was built in slice 0 and never wired to a reader.
+
+### What landed
+
+- **`docker-compose.yml`** — `${CONCORD_BASE_URL:-http://concord:8000}` restores the
+  indirection; the `concord` service moves behind `profiles: ["bundled-concord"]` so it does not
+  start unless asked for; `depends_on` gains `required: false` so songbird still boots when it
+  isn't running. An operator-supplied address wins *and* suppresses the bundled engine.
+- **`/healthz` reports `translation_ids`** — the corpus, not just its size. Reachability is
+  decided by `/healthz` alone; the listing is a second, softer call, so a listing failure after a
+  healthy probe leaves the ids unknown rather than declaring Concord down.
+- **Boot logs the corpus** — `Concord corpus: 19 translations (AKJV, ASV, …)`, best-effort,
+  mirroring the session sweep. Invariant 3 still holds: unreachable Concord raises for the
+  requests that need it, but boot doesn't die on it.
+- **Status is in the nav** — in the utility cluster with the theme toggle, not the content row,
+  which already wraps on a phone at eight links. The page leads with address + corpus together.
+- **`config_test.py`** — pins that the address comes from the environment, is taken verbatim for
+  any host, and outranks a checked-out `.env`. The invariant now has a test, not just a prose
+  guarantee in CLAUDE.md.
+
+### Gotchas
+
+- **`depends_on` + `profiles` need `required: false`.** Without it, compose refuses to start a
+  service that depends on one no active profile enables. Needs Compose ≥ 2.20 (verified on
+  v5.3.1); worth checking on an older deployment host.
+- **`docker compose config` is the cheap proof.** `config --services` listing only `songbird`
+  is the whole assertion that the default path no longer starts an engine of its own.
+- **Compose reads `.env` regardless of the shell.** `env -u CONCORD_BASE_URL` does not test the
+  fallback — the repo's own `.env` still wins. Use `--env-file /dev/null` for that.
+- **The Makefile gate lints `songbird/` only**, not `tests/`, so `ruff check .` surfaces
+  pre-existing findings in test files that CI never sees. Match the gate, don't widen it
+  mid-fix.
+
+### How it was verified
+
+- Backend: `ruff check songbird`, `ruff format --check songbird`, `pyright` (strict, 0 errors),
+  `pytest` — 483 passed.
+- Frontend: `eslint`, `tsc --noEmit`, `vitest` — 291 passed across 39 files, `vite build` clean.
+- Compose, all four paths: `.env` value honoured; shell value honoured; no `.env` + profile →
+  falls back to `http://concord:8000` and starts both; no `.env`, no profile → `songbird` alone.
+
+---
+
 ## Sermon sources slice 4b — place (the scan's second half)
 
 - **Date:** 2026-09-07
