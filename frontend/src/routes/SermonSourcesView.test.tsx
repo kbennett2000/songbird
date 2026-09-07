@@ -516,8 +516,12 @@ describe("SermonSourcesView", () => {
     await user.click(await screen.findByRole("button", { name: "Check all now" }));
 
     await waitFor(() => expect(queued).toBe(true));
-    // No banner for a queued check: the "Checking…" line is the page's one live region for scan
-    // state, and two things saying it at once is worse than one.
+    // Someone who pressed the button is told something started — and told it exactly once.
+    // Two live regions talk over each other for a screen reader, which is what the browser pass
+    // found when the indicator carried a `role="status"` of its own.
+    const announced = await screen.findByRole("status");
+    expect(announced).toHaveTextContent("Checking your sources…");
+    expect(screen.queryAllByRole("status")).toHaveLength(1);
     expect(screen.queryByText(/Nothing to check/)).not.toBeInTheDocument();
   });
 
@@ -572,9 +576,12 @@ describe("SermonSourcesView", () => {
     server.use(statusHandler(true, 10, true), sourcesHandler(CORNERSTONE));
     renderPage();
 
-    expect(await screen.findByRole("status")).toHaveTextContent("Checking your sources…");
+    expect(await screen.findByText("Checking your sources…")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Check all now" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Check now" })).toBeDisabled();
+    // Nothing to announce: this page was loaded while a check was already running, so the reader
+    // did nothing that needs a reply. The indicator is visual state, not a live region.
+    expect(screen.queryAllByRole("status")).toHaveLength(0);
   });
 
   it("says a source is waiting its turn once one has been asked for", async () => {
@@ -750,7 +757,7 @@ describe("SermonSourcesView", () => {
       renderPage(appClient());
 
       await vi.advanceTimersByTimeAsync(50);
-      expect(screen.getByRole("status")).toHaveTextContent("Checking your sources…");
+      expect(screen.getByText("Checking your sources…")).toBeInTheDocument();
       const whileRunning = statusCalls;
 
       // It keeps asking while there is something to watch…
@@ -761,7 +768,7 @@ describe("SermonSourcesView", () => {
       running = false;
       const sourcesBefore = sourceCalls;
       await vi.advanceTimersByTimeAsync(3100);
-      expect(screen.queryByRole("status")).not.toBeInTheDocument();
+      expect(screen.queryByText("Checking your sources…")).not.toBeInTheDocument();
       // …the counts and the ledger are refreshed, because nothing else would tell them…
       expect(sourceCalls).toBeGreaterThan(sourcesBefore);
 
@@ -798,7 +805,7 @@ describe("SermonSourcesView", () => {
       renderPage(appClient());
 
       await vi.advanceTimersByTimeAsync(50);
-      expect(screen.getByRole("status")).toBeInTheDocument(); // the poll started
+      expect(screen.getByText("Checking your sources…")).toBeInTheDocument(); // the poll started
 
       // The second ask fails; nothing should ask a third time.
       await vi.advanceTimersByTimeAsync(3100);

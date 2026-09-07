@@ -94,10 +94,63 @@ async function addSource(page, { url, tags }) {
   console.log(`  added ${url}`);
 }
 
+/** The page while a check is running (v1.7 slice 4a) — the state that only exists for a few
+ *  seconds, and the one no unit test can show you. */
+async function captureChecking(page, label) {
+  const button = page.getByRole("button", { name: "Check all now" });
+  if (!(await button.count())) return;
+  await button.click();
+  // Waited on by TEXT, not by role: the page has exactly one `role="status"` (the banner), and
+  // this indicator deliberately isn't it — two live regions talk over each other for a screen
+  // reader, which is what this pass found the first time it ran.
+  const indicator = page.locator("span", { hasText: /^Checking your sources…$/ });
+  // It appears on the first poll answer; if it never does, `scan_running` is being set inside
+  // the background task instead of before the response, and polling never starts.
+  try {
+    await indicator.waitFor({ timeout: 5000 });
+  } catch {
+    console.warn(`  ⚠ ${label}: no "checking" indicator appeared — did the poll start?`);
+    return;
+  }
+  await shot(page, `${label}-checking`, { fullPage: false });
+  // And then it must go away on its own, with nobody touching the page.
+  await indicator.waitFor({ state: "detached", timeout: 120000 });
+  await page.waitForTimeout(400);
+  await shot(page, `${label}-checked`);
+}
+
+/** The ledger's states (v1.7 slice 4a): what a check found, filtered, and paged. */
+async function captureLedger(page, label) {
+  const ledger = page.getByRole("region", { name: "What songbird found" });
+  if (!(await ledger.count())) {
+    console.warn(`  ⚠ no ledger at ${label} — has anything been checked?`);
+    return;
+  }
+  await ledger.scrollIntoViewIfNeeded();
+  await shot(page, `${label}-ledger`, { fullPage: false });
+
+  // Skipped rows carry the longest reason text, which is where a phone width shows.
+  await page.getByLabel("Filter by state").selectOption("skipped");
+  await page.waitForTimeout(600);
+  await ledger.scrollIntoViewIfNeeded();
+  await shot(page, `${label}-ledger-skipped`, { fullPage: false });
+
+  // A filter combination with nothing in it — the empty state a reader will actually hit.
+  await page.getByLabel("Filter by state").selectOption("placed");
+  await page.waitForTimeout(600);
+  await ledger.scrollIntoViewIfNeeded();
+  await shot(page, `${label}-ledger-empty`, { fullPage: false });
+  await page.getByLabel("Filter by state").selectOption("all");
+  await page.waitForTimeout(400);
+}
+
 /** Every state of the page, at one viewport and one theme. */
 async function captureStates(page, label) {
   await page.goto(`${BASE}/sermon-sources`, { waitUntil: "networkidle" });
   await shot(page, `${label}-populated`);
+  await captureChecking(page, label);
+  await captureLedger(page, label);
+  await page.goto(`${BASE}/sermon-sources`, { waitUntil: "networkidle" });
 
   // The add form, open and empty.
   await page.getByRole("button", { name: "Add source", exact: true }).first().click();

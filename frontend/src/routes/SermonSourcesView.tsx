@@ -222,11 +222,14 @@ export function SermonSourcesView(): JSX.Element {
         queryClient.invalidateQueries({ queryKey: ["sermon-sources-status"] }),
         queryClient.invalidateQueries({ queryKey: ["sermon-sources"] }),
       ]);
-      // Nothing to say when work was queued: the "Checking…" line below takes over, so the page
-      // keeps one live region for scan state instead of two saying the same thing.
-      if (result.queued === 0) {
-        setActionMsg({ kind: "ok", text: "Nothing to check — every source is paused." });
-      }
+      setActionMsg(
+        result.queued === 0
+          ? { kind: "ok", text: "Nothing to check — every source is paused." }
+          : // Announced here rather than by the indicator below, because this banner is the
+            // page's only live region: a screen-reader user who pressed the button has to be
+            // told something started.
+            { kind: "ok", text: "Checking your sources…" },
+      );
     },
     onError: (err) => fail(err, "Couldn't start a check."),
   });
@@ -390,9 +393,12 @@ export function SermonSourcesView(): JSX.Element {
                     Check all now
                   </button>
                   {scanning && (
-                    // Status, not a dimmed control — so it is its own text in its own colour,
-                    // never an opacity on something else.
-                    <span role="status" className="text-sm text-gray-600 dark:text-gray-300">
+                    // Visual state beside the control that caused it — deliberately NOT a second
+                    // `role="status"`. The banner above is the page's one live region, and two
+                    // of them announce over each other for a screen reader while telling a
+                    // sighted reader the same thing twice. Its own text in its own colour, never
+                    // an opacity on something else.
+                    <span className="text-sm text-gray-600 dark:text-gray-300">
                       Checking your sources…
                     </span>
                   )}
