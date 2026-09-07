@@ -107,6 +107,18 @@ a diagnostic.** The signal was built in slice 0 and never wired to a reader.
 - Frontend: `eslint`, `tsc --noEmit`, `vitest` — 291 passed across 39 files, `vite build` clean.
 - Compose, all four paths: `.env` value honoured; shell value honoured; no `.env` + profile →
   falls back to `http://concord:8000` and starts both; no `.env`, no profile → `songbird` alone.
+- **Live, against all three real states**, running uvicorn with a throwaway `DATA_DIR`:
+  - *Right Concord* — `CONCORD_BASE_URL=http://192.168.1.62:8000` → `reachable: true`,
+    **19 translations**, `translation_ids` carrying ESV, NET, NKJV, NLT.
+  - *Wrong but healthy* — a throwaway `ghcr.io/kbennett2000/concord:v1.2.0` on `:8100`, which is
+    the incident exactly → `reachable: true`, `status: "ok"`, **15 translations**, and the four
+    licensed ones absent. Nothing errors; the corpus is the only tell. This is the state the
+    change exists to make readable, and it now reads as
+    `Concord corpus: 15 translations (AKJV, ASV, BSB, …)` at boot.
+  - *Unreachable* — pointed at a stopped container → `reachable: false`,
+    `translation_ids: null`, a `WARNING Concord not reachable at startup`, and the app boots
+    anyway. Invariant 3 intact: absence is an error for the requests that need Concord, not a
+    reason for the process to die.
 
 ---
 
