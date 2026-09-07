@@ -3,7 +3,7 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
 import { MemoryRouter } from "react-router-dom";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { SermonSourcesView } from "@/routes/SermonSourcesView";
 import { server } from "@/test/msw/server";
@@ -722,6 +722,94 @@ describe("SermonSourcesView", () => {
     expect(
       await screen.findByText(/Nothing yet. Press Check all now and songbird will go and look./),
     ).toBeInTheDocument();
+  });
+
+  it("stops asking once the check is done, and refreshes what it found", async () => {
+    // The only test in this suite that needs fake timers, because the behaviour IS the passage of
+    // time: a poll that never stops looks identical to a correct one in a single snapshot.
+    vi.useFakeTimers();
+    try {
+      let running = true;
+      let statusCalls = 0;
+      let sourceCalls = 0;
+      server.use(
+        http.get("/api/v1/sermon-sources/status", () => {
+          statusCalls += 1;
+          return HttpResponse.json({
+            configured: true,
+            min_minutes_default: 10,
+            scan_running: running,
+            scan_started_at: running ? "2026-09-07T12:00:00Z" : null,
+          });
+        }),
+        http.get("/api/v1/sermon-sources", () => {
+          sourceCalls += 1;
+          return HttpResponse.json([CORNERSTONE]);
+        }),
+      );
+      renderPage(appClient());
+
+      await vi.advanceTimersByTimeAsync(50);
+      expect(screen.getByRole("status")).toHaveTextContent("Checking your sources…");
+      const whileRunning = statusCalls;
+
+      // It keeps asking while there is something to watch…
+      await vi.advanceTimersByTimeAsync(3100);
+      expect(statusCalls).toBeGreaterThan(whileRunning);
+
+      // …the check finishes…
+      running = false;
+      const sourcesBefore = sourceCalls;
+      await vi.advanceTimersByTimeAsync(3100);
+      expect(screen.queryByRole("status")).not.toBeInTheDocument();
+      // …the counts and the ledger are refreshed, because nothing else would tell them…
+      expect(sourceCalls).toBeGreaterThan(sourcesBefore);
+
+      // …and then it goes quiet. This is the assertion the whole test exists for.
+      const afterFinishing = statusCalls;
+      await vi.advanceTimersByTimeAsync(30_000);
+      expect(statusCalls).toBe(afterFinishing);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("stops asking when songbird stops answering", async () => {
+    // A query keeps its last successful data through a failure, so without the error guard on the
+    // interval a songbird that had gone away would be asked every three seconds for as long as
+    // the tab stayed open — the last good answer saying "still checking" for ever.
+    vi.useFakeTimers();
+    try {
+      let calls = 0;
+      server.use(
+        http.get("/api/v1/sermon-sources/status", () => {
+          calls += 1;
+          return calls === 1
+            ? HttpResponse.json({
+                configured: true,
+                min_minutes_default: 10,
+                scan_running: true,
+                scan_started_at: "2026-09-07T12:00:00Z",
+              })
+            : new HttpResponse(null, { status: 503 });
+        }),
+        sourcesHandler(CORNERSTONE),
+      );
+      renderPage(appClient());
+
+      await vi.advanceTimersByTimeAsync(50);
+      expect(screen.getByRole("status")).toBeInTheDocument(); // the poll started
+
+      // The second ask fails; nothing should ask a third time.
+      await vi.advanceTimersByTimeAsync(3100);
+      const afterFailing = calls;
+      expect(afterFailing).toBeGreaterThan(1);
+
+      await vi.advanceTimersByTimeAsync(30_000);
+      expect(calls).toBe(afterFailing);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("does not show the ledger before there is a source to fill it", async () => {
