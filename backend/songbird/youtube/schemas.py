@@ -138,6 +138,26 @@ class _WirePlaylistListResponse(_Wire):
     items: list[_WirePlaylist] = []
 
 
+class _WirePlaylistItemContentDetails(_Wire):
+    video_id: str
+    # Absent when the entry points at a video that has since gone private or been deleted: the
+    # playlist entry survives, the video it names does not.
+    video_published_at: datetime | None = None
+
+
+class _WirePlaylistItem(_Wire):
+    """One entry of `playlistItems.list`. Only `contentDetails` is asked for — see `PlaylistPage`
+    for why the snippet is deliberately left on the table."""
+
+    content_details: _WirePlaylistItemContentDetails
+
+
+class _WirePlaylistItemListResponse(_Wire):
+    items: list[_WirePlaylistItem] = []
+    # Absent on the last page, which is how paging knows to stop.
+    next_page_token: str | None = None
+
+
 class _WireVideoListResponse(_Wire):
     # YouTube omits `items` entirely when nothing matched, rather than sending an empty list.
     items: list[_WireVideo] = []
@@ -154,6 +174,13 @@ class Video(BaseModel):
     live_broadcast_content: str  # "none" | "live" | "upcoming"
     duration_seconds: int | None  # None = unknown length; 0 only for a real PT0S/P0D
     actual_start_time: datetime | None  # aware, UTC — when a livestream actually began
+    # Whether YouTube sent a `liveStreamingDetails` block at all — i.e. this was streamed rather
+    # than uploaded. NOT the same question as `actual_start_time is not None`: spec §6's
+    # `live_excluded` filter tests the block's PRESENCE, and a stream can carry the block with no
+    # start time recorded in it. Premieres carry it too, so a source with `include_live` off
+    # excludes those as well — deliberate, and why this is named for the block rather than for
+    # "was a service".
+    is_livestream: bool
     channel_id: str
     channel_title: str
 
@@ -175,6 +202,7 @@ class Video(BaseModel):
                     and item.live_streaming_details.actual_start_time is not None
                     else None
                 ),
+                is_livestream=item.live_streaming_details is not None,
                 channel_id=item.snippet.channel_id,
                 channel_title=item.snippet.channel_title,
             )
@@ -221,3 +249,52 @@ class Playlist(BaseModel):
         """Validate a `playlists.list` body and flatten every item into a `Playlist`."""
         wire = _WirePlaylistListResponse.model_validate(payload)
         return [cls(id=item.id, title=item.snippet.title) for item in wire.items]
+
+
+class PlaylistItem(BaseModel):
+    """One entry in a playlist: the video it points at, and the day that video went up."""
+
+    video_id: str
+    published_at: datetime | None  # aware, UTC — None for a private or deleted video
+
+
+class PlaylistPage(BaseModel):
+    """One page of a playlist's contents — up to 50 entries, and how to ask for the next page.
+
+    Ids and dates only, on purpose. `playlistItems` will also return a snippet, and songbird
+    ignores it: that snippet describes the playlist ENTRY, so it goes stale when a video is
+    retitled, and it carries neither `contentDetails.duration` nor `liveStreamingDetails` — the
+    two fields every filter in spec §6 turns on. `videos.list` is the source of truth for what a
+    video *is*; this is only the feed of what to ask about, at one quota unit per fifty.
+
+    `parse_youtube` returns ONE page rather than a list, unlike its siblings here: a page is a
+    single thing with a cursor attached, not a collection of them.
+    """
+
+    items: list[PlaylistItem]
+    next_page_token: str | None
+
+    @property
+    def video_ids(self) -> list[str]:
+        """The ids on this page, in the order YouTube listed them (newest first for an uploads
+        playlist; the curator's order for a hand-made one)."""
+        return [item.video_id for item in self.items]
+
+    @classmethod
+    def parse_youtube(cls, payload: object) -> "PlaylistPage":
+        """Validate a `playlistItems.list` body into a page."""
+        wire = _WirePlaylistItemListResponse.model_validate(payload)
+        return cls(
+            items=[
+                PlaylistItem(
+                    video_id=item.content_details.video_id,
+                    published_at=(
+                        _as_utc(item.content_details.video_published_at)
+                        if item.content_details.video_published_at is not None
+                        else None
+                    ),
+                )
+                for item in wire.items
+            ],
+            next_page_token=wire.next_page_token,
+        )

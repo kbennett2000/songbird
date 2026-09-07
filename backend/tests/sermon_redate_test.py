@@ -44,6 +44,9 @@ def _video(
         live_broadcast_content="none",
         duration_seconds=3600,
         actual_start_time=actual_start_time,
+        # A recorded start time only ever comes from a liveStreamingDetails block, so a fixture
+        # that has one is a stream by construction.
+        is_livestream=actual_start_time is not None,
         channel_id="UC_test",
         channel_title="A church",
     )
