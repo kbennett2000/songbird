@@ -624,7 +624,15 @@ async def test_status_reports_no_key_without_failing(
         resp = await client.get("/api/v1/sermon-sources/status")
 
     assert resp.status_code == 200
-    assert resp.json() == {"configured": False, "min_minutes_default": 10}
+    # The whole shape, so a field added later has to be added here deliberately. `scan_running`
+    # is false because the fast suite never runs the lifespan and so has no runner — which is
+    # exactly the "answer, don't fail" property this endpoint exists for, now applied twice.
+    assert resp.json() == {
+        "configured": False,
+        "min_minutes_default": 10,
+        "scan_running": False,
+        "scan_started_at": None,
+    }
 
 
 async def test_status_reports_a_configured_key(
