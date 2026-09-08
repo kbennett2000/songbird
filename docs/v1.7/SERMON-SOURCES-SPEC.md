@@ -174,6 +174,18 @@ page polls `/status` while it runs. Three consequences worth stating:
 - **The scheduled check (c) needs no scan logic of its own.** Slice 6's timer sets
   `check_requested_at` on every enabled source when the interval elapses; this runner does the rest.
 
+*As built (slice 6): the boot rule and the interval rule are deliberately different.* At boot the
+timer fires only if some enabled source is genuinely overdue — otherwise a box that restarts nightly
+would re-walk every catalogue every morning. On the interval it stamps **every** enabled source,
+because the interval elapsing is itself the event; the cost is that a source added an hour before a
+tick is re-walked an hour later, which this section already makes cheap (one unit per page, no detail
+calls). Dueness is decided in Python rather than SQL because SQLite hands `DateTime(timezone=True)`
+back naive, and comparing that against an aware `now()` is the `TypeError` `DueSource.requested_at`
+warns about. An interval of `0` creates no task at all rather than one that wakes to decline. And
+`last`/`next` live in memory on the timer: a restart forgets them, each source's own
+`last_checked_at` remains the durable record, and the page simply omits "last" until this process has
+run one.
+
 **What.** List the source's playlist newest-first (`playlistItems.list`, 50 per page, 1 unit each);
 stop at the first page where every video is already in the ledger (a curated playlist is paged fully —
 its order isn't chronological).
@@ -567,20 +579,41 @@ otherwise.
 
 ## 14. Definition of done (feature)
 
-- One YouTube client, key never logged or served; feature cleanly off without a key. "Never
+- ✅ One YouTube client, key never logged or served; feature cleanly off without a key. "Never
   logged" is pinned by three tests: the key is absent from the full rendered traceback of every
   failure path, absent from the logs of a *successful* call, and the redacting log filter installs
   only once. (The middle one must set the level on the root logger — scoping it to `songbird`
   would make it unable to fail, since the logger that leaks is `httpx`'s.)
-- Sources CRUD; adding a source scans its full catalog; scheduled + on-demand checks; one scan at a
-  time; per-source failure recording; the app never errors because YouTube did.
-- Filters and rules as specified, with the real Celebration / Cornerstone / 2819 description shapes as
-  test fixtures; boilerplate exclusion tested against a repeated reference.
-- Created notes are ordinary sermon notes: canonical anchor via Concord (invariant 4 test applies),
-  shared tags, `event_date` by the date rule, `youtube_video_id` stamped.
-- Review list: place (one note per reference, all-or-nothing), dismiss, restore, note-it-anyway.
-- Re-date action with preview-then-apply; back-fills `youtube_video_id`.
-- User's Guide section (with the key walkthrough), CHANGELOG entry, compose comments, SECURITY note.
+- ✅ Sources CRUD; adding a source scans its full catalog; scheduled + on-demand checks; one scan at
+  a time; per-source failure recording; the app never errors because YouTube did.
+- ✅ Filters and rules as specified, with the real Celebration / Cornerstone / 2819 description
+  shapes as test fixtures; boilerplate exclusion tested against a repeated reference.
+- ✅ Created notes are ordinary sermon notes: canonical anchor via Concord (invariant 4 test
+  applies), shared tags, `event_date` by the date rule, `youtube_video_id` stamped.
+- ✅ Review list: place (one note per reference, all-or-nothing), dismiss, restore, note-it-anyway
+  — and, beyond what this list asked for, reopen and the bulk dismiss (§8).
+- ✅ Re-date action with preview-then-apply; back-fills `youtube_video_id`.
+- ✅ User's Guide section (with the key walkthrough), CHANGELOG entry, compose comments, SECURITY
+  note.
+
+**Walked item by item at the end of slice 6, and three things are worth saying plainly rather than
+leaving inside a tick:**
+
+- **"Scheduled checks" was the last unbuilt clause on this list.** `SERMON_CHECK_INTERVAL_HOURS`
+  had been declared since slice 1 and read by nothing; slice 6 is what makes the first bullet's
+  "scheduled" true. Everything above it was already done by slice 5.
+- **The compose lines were missing, not merely unwritten.** `docker-compose.yml` has no `env_file:`
+  — the pass-through is compose interpolating `${VAR}` from the repo-root `.env` — so until slice 6
+  a value set for either sermon setting reached nothing at all. Verified now with
+  `docker compose config --no-interpolate`.
+- **The key walkthrough has no screenshots, and cannot.** Google's Cloud console is an external
+  site behind a Google login; the screenshot harness photographs songbird. The seven steps name
+  every button and where it sits instead, which is why §3's "screen by screen" is met in words.
+
+**What is NOT done, and is deferred rather than hidden:** everything in §13 stands as written. The
+two smallest are that a `already_noted` row is never auto-reopened (no note links to it, so there
+is nothing to notice) and that a chapter-to-chapter range with a verse on one end — Cornerstone's
+`Judges 13-14:11` — is refused by Concord and goes to the review list, 8 rows in 1,273.
 
 ## 15. Slice plan
 
@@ -606,8 +639,12 @@ Smallest reviewable, load-bearing unit; branch `slice/N-…`, PR per slice, Plan
    automatic reopen when a video's last note is deleted, the listing's date and title filters
    with per-state counts, and the bulk dismiss. Worked for real against 351 live rows, which is
    what found the six things the UI got wrong and the one that corrupted a scan.
-6. **Schedule + docs** — the in-process timer with boot catch-up, status endpoint, compose lines,
-   User's Guide walkthrough, CHANGELOG, SECURITY note, Dockerfile comment.
+6. **Schedule + docs** — ✅ the in-process timer with boot catch-up, status endpoint, compose lines,
+   User's Guide walkthrough, CHANGELOG, SECURITY note, Dockerfile comment. The timer owns no scan
+   logic: it stamps `check_requested_at` and calls the 4a runner, which is why "one scan at a time"
+   needed nothing new. Last/next scheduled run are held **in memory**, so a restart forgets them —
+   each source's own `last_checked_at` is the durable record, and a box that is genuinely overdue
+   fires at boot anyway.
 
 Slices 3 and 4 could merge if the CRUD alone feels too thin to review; the default is to keep them
 apart so the scan lands as one focused diff. In the event 4 split again, for the same reason.

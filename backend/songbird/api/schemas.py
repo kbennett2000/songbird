@@ -298,8 +298,9 @@ class SermonSourceUpdate(BaseModel):
 
 class SermonSourcesStatus(BaseModel):
     """What the Sources page needs before it can render anything: whether a key is configured at
-    all (no key → the page is one setup sentence), and the default the add form hints at. Slice 6
-    adds the schedule fields to this same response."""
+    all (no key → the page is one setup sentence), the default the add form hints at, and the
+    schedule (spec §6c) — enough for the page to say in one line when it last looked and when it
+    will look again."""
 
     configured: bool
     min_minutes_default: int
@@ -308,6 +309,16 @@ class SermonSourcesStatus(BaseModel):
     scan_running: bool
     # Non-null exactly when `scan_running` is true.
     scan_started_at: datetime | None
+    # `SERMON_CHECK_INTERVAL_HOURS`, reported whether or not the timer runs, so the page can say
+    # what the box is configured for.
+    interval_hours: int
+    # False when the interval is 0, and false when there is no key — in that second case the page
+    # shows only the setup message, so it never has to explain the difference.
+    timer_enabled: bool
+    # Both null until this process has run a scheduled check: the timer keeps them in memory, so a
+    # restart forgets the last one. Each source row carries its own durable "last checked".
+    last_scheduled_run_at: datetime | None
+    next_scheduled_run_at: datetime | None
 
 
 SermonVideoStatus = Literal[

@@ -800,6 +800,87 @@ async function isolatedPinPoint(page) {
 // songbird chrome, matching the other README shots (a viewport, not a bare-modal, screenshot).
 // Framed on Acts 27 (Paul's voyage to Rome): its places spread across the Mediterranean for a
 // striking hero, and the Holy-Land corner shows the filled inland seas (Dead Sea, Sea of Galilee).
+/**
+ * The Sermon sources page (v1.7) — the three shots the User's Guide needs.
+ *
+ * This one is different from every other capture here: it needs an instance with a real YouTube
+ * key AND at least one source already added, because the page is deliberately one sentence
+ * without a key and an invitation without a source. It cannot seed itself — adding a source spends
+ * real YouTube quota and pulls a whole back catalogue.
+ *
+ * So it CHECKS and WARNS rather than shooting whatever is on screen. That is the direct lesson of
+ * the slice-4a browser pass, where the harness silently never got past login and two states went
+ * unlooked-at for a whole slice. A skipped shot has to be louder than a wrong one.
+ */
+async function captureSermonSources(page) {
+  await page.goto(`${BASE}/sermon-sources`, { waitUntil: "networkidle" });
+  await page.waitForTimeout(600);
+
+  const noKey = await page.getByText(/YOUTUBE_API_KEY=your-key-here/).count();
+  if (noKey) {
+    console.warn(
+      "⚠ sermon-sources: this instance has no YouTube key — the guide's three shots were NOT taken",
+    );
+    return;
+  }
+  const sources = await page.getByRole("region", { name: "Sources" }).count();
+  if (!sources) {
+    console.warn(
+      "⚠ sermon-sources: no source is set up here — the guide's three shots were NOT taken",
+    );
+    return;
+  }
+
+  // Viewport-framed, NOT fullPage. A full-page shot of this page is the whole ledger — the first
+  // attempt came out 24,644 pixels tall and 3.6MB, which is unreadable as a guide image and a
+  // silly thing to put in a repository. What the guide needs is the top: the schedule line, the
+  // source and its counts, and enough of the list below to show what it is.
+  await page.screenshot({ path: `${OUT}/sermon-sources.png`, fullPage: false });
+  console.log("✓ sermon-sources.png");
+
+  // The add form, filled but NOT submitted: submitting would resolve a channel against YouTube
+  // and start a real back-catalogue scan.
+  const addButton = page.getByRole("button", { name: "Add source" });
+  if (await addButton.count()) {
+    await addButton.first().click();
+    await page.waitForTimeout(300);
+    const link = page.getByLabel(/link/i).first();
+    if (await link.count()) {
+      await link.fill("https://www.youtube.com/@majesticviewchurchlive407");
+      await page.waitForTimeout(200);
+      await page.screenshot({ path: `${OUT}/sermon-sources-add.png`, fullPage: false });
+      console.log("✓ sermon-sources-add.png");
+    } else {
+      console.warn("⚠ sermon-sources-add: the add form did not open — NOT taken");
+    }
+    const cancel = page.getByRole("button", { name: "Cancel" });
+    if (await cancel.count()) await cancel.first().click();
+    await page.waitForTimeout(300);
+  }
+
+  // The review list, narrowed to the state the guide is about to describe.
+  // By VALUE, not by label: each option carries its own count ("Needs a passage (352)"), so a
+  // label match would break the first time the numbers moved.
+  const state = page.getByLabel("Filter by state");
+  if (await state.count()) {
+    await state.first().selectOption("needs_passage");
+    await page.waitForTimeout(900);
+    const region = page.getByRole("region", { name: "What songbird found" });
+    const box = await region.boundingBox().catch(() => null);
+    if (box) {
+      await page.screenshot({
+        path: `${OUT}/sermon-sources-review.png`,
+        clip: { x: box.x, y: box.y, width: box.width, height: Math.min(box.height, 900) },
+      });
+      console.log("✓ sermon-sources-review.png");
+    } else {
+      console.warn("⚠ sermon-sources-review: the review list was not on the page — NOT taken");
+    }
+  } else {
+    console.warn("⚠ sermon-sources-review: no state filter — is there a ledger? NOT taken");
+  }
+}
+
 async function captureMapDesktop(page) {
   await page.goto(`${BASE}/read?book=ACT&chapter=27`, {
     waitUntil: "networkidle",
@@ -878,6 +959,10 @@ async function main() {
   const channel = process.env.PLAYWRIGHT_CHROME_CHANNEL ?? "chrome";
   // Map-only run (for live visual verification): MAP_ONLY=1 skips the README shots + note seeding.
   const mapOnly = process.env.MAP_ONLY === "1";
+  // SOURCES_ONLY exists because the Sermon sources shots are the only ones that need an instance
+  // with a real key and real channels — they are taken during live acceptance, not on the throwaway
+  // instance the other thirty come from.
+  const sourcesOnly = process.env.SOURCES_ONLY === "1";
   const browser = await chromium.launch(channel ? { channel } : {});
   const context = await browser.newContext({
     viewport: { width: 1440, height: 900 },
@@ -886,6 +971,10 @@ async function main() {
   const page = await context.newPage();
   try {
     await ensureSignedIn(page);
+    if (sourcesOnly) {
+      await captureSermonSources(page);
+      return;
+    }
     if (!mapOnly) {
       await seedNotes(page);
       await seedSermonNotes(page);
@@ -916,6 +1005,8 @@ async function main() {
       const { journeyId, placeId } = await discoverJourney(page);
       await captureJourneys(page, journeyId);
       await capturePlaceDetail(page, placeId);
+      // Warns and skips unless this instance has a key and a source; see the function.
+      await captureSermonSources(page);
     }
     await captureMapDesktop(page);
     await captureMapMobile(browser, channel);

@@ -4,6 +4,107 @@ A running log of per-slice decisions, gotchas, and how each slice was verified. 
 
 ---
 
+## Sermon sources slice 6 — the schedule, and the documentation
+
+- **Date:** 2026-09-07
+- **Branch:** `slice/sermon-sources-6-schedule-docs`
+
+### Why
+
+Two things were left. `SERMON_CHECK_INTERVAL_HOURS` had been declared since slice 1 and **read by
+nothing** — songbird only ever checked when a button was pressed. And nobody but Kris could set the
+feature up at all, because getting a YouTube key is a seven-screen trip through Google's Cloud
+console that no page in this repo described.
+
+### What landed
+
+- **`sermons/schedule.py`** — `ScheduledCheck`, built like `ScanRunner` and owning no scan logic. It
+  stamps `check_requested_at` on every enabled source and calls `request_scan()`. A timer that made
+  its own task would step around the one guard that stops two scans, so it makes none.
+- **Boot catch-up**, which is what makes a weekly interval survive a nightly reboot. The two rules
+  differ on purpose: at boot, fire only if something is genuinely overdue; on the interval, stamp
+  everything, because the interval elapsing is itself the event.
+- **`/status`** gains `interval_hours`, `timer_enabled`, `last_scheduled_run_at`,
+  `next_scheduled_run_at`; the page turns them into one line.
+- **`docker-compose.yml`** finally passes the two sermon settings through — see the gotcha below.
+- **The User's Guide** gains its section, with the key walkthrough and three screenshots. **README**
+  and **SECURITY.md** and the **Dockerfile** comment stop claiming Concord is the only outbound call.
+- **`v1/SPEC.md` §12** gains its v1.7 paragraph and loses its "no new tables" claim.
+
+### Gotchas
+
+- **A mutation harness with no baseline gate reports every mutant as killed.** The frontend pass
+  came back 7/7 on the first run and all seven were lies: `npx vitest` resolved a cached vitest from
+  `~/.npm/_npx`, which could not find `happy-dom`, so *every* run failed identically — mutated or
+  not. It now runs the project's own `node_modules/.bin/vitest` and **asserts the unmutated tree is
+  green before it mutates anything**. A mutation result is only worth what the baseline is worth.
+- **`docker-compose.yml` has no `env_file:`.** The pass-through is compose interpolating `${VAR}`
+  from the repo-root `.env`, which means a variable absent from the `environment:` block reaches
+  nothing at all — `SERMON_CHECK_INTERVAL_HOURS` and `SERMON_MIN_MINUTES` had been documented in
+  `.env.example` and silently ignored since slice 1. Check with `docker compose config --no-interpolate`
+  — **always with that flag**, because the plain form prints the real key.
+- **A `fullPage` screenshot of a page with a 352-row ledger is 24,644 pixels tall and 3.6MB.**
+  Useless as a guide image and a silly thing to commit. Viewport-framed now.
+- **Playwright `selectOption({label})` breaks on a label carrying a count** — the state options read
+  "Needs a passage (352)". Select by value.
+- **A dev instance serves the API only** unless `FRONTEND_DIST_DIR` points at a built SPA, so the
+  screenshot harness cannot even find the login form. Build once, point all three instances at it.
+- SQLite still hands `DateTime(timezone=True)` back **naive**, so dueness is a pure function that
+  normalises before comparing. Comparing straight against `datetime.now(UTC)` is a `TypeError`.
+
+### How it was verified
+
+`make check` **535 passed**, Ruff, format and Pyright-strict clean; `make check-frontend` **326
+passed** across 42 files, ESLint, tsc and build clean.
+
+**Mutation testing, 17/17 killed** — 10 on the timer (the `<=` boundary, never-checked-is-due, the
+naive normalisation, the interval-0 guard, both `enabled` restrictions, the unconditional catch-up,
+the missing commit, the runner never being told, and `next_run_at` before the first sleep) and 7 on
+the status line. Both passes ran in a **throwaway `git worktree`**, source committed first.
+
+**Live acceptance** against the real key and a dockerised Concord, one source
+(`@majesticviewchurchlive407`), four checks:
+
+1. `SERMON_CHECK_INTERVAL_HOURS=1` — the line reads as specified and `next_scheduled_run_at` is
+   59.8 minutes out.
+2. `last_checked_at` wound back two days directly in the dev database, restart — boot catch-up
+   fired, logged `scheduled check: 1 source(s) queued`, and the source came back `ok`.
+3. `SERMON_CHECK_INTERVAL_HOURS=0`, 30 days overdue — **nothing ran**, `check_requested_at` still
+   null, and `POST /check` still answered `202 {queued: 1}`.
+4. `docker compose config --no-interpolate` — all three variables pass through, key unexpanded.
+
+**A bonus the scan itself reported:** the clean run came back **12 placed / 352 needs a passage / 7
+skipped**, where slice 5 got 13/351/7. The one that moved is
+`MVC - Talking About Respect with Pastor John 06-25-2020` — PR #133's numeric-date fix, confirmed on
+live data, with no `John 6-25` note anywhere in the database.
+
+**Secrets:** zero key-shaped tokens across every server log, and 23 confirmed `key=REDACTED` lines
+proving the filter is doing it. The only `AIza` strings in the tree are the same all-zeros fixture
+in two test files.
+
+**Browser pass** on `inspect-sources.mjs` across **three** instances (normal, keyless, zero
+interval), 76 shots, light and dark, 1440px and 390px. Then a focused check with contrast measured,
+not eyeballed: the schedule line **7.24:1** light and **12.04:1** dark, the new guide link 6.42:1 /
+6.98:1, both line states correct in every combination, no schedule line at all without a key, and
+phone `scrollWidth` 390 on all three instances.
+
+**Closed an open item from slice 2:** a truly absent `YOUTUBE_API_KEY` on a machine that has a
+`.env` had never been exercised. Passing `YOUTUBE_API_KEY=` as an environment variable overrides the
+`.env` value, and that instance boots `sermon sources: off (no YOUTUBE_API_KEY)` with no timer.
+
+### Still open
+
+- **`v1/SPEC.md` §12 has no v1.6 paragraph** — headings, topics, word study and journeys shipped
+  without one. Slice 6 says so in the spec rather than leaving the gap looking deliberate, but
+  writing it is somebody's next small job.
+- A contrast harness has now been written from scratch four slices running. Promoting it to
+  `scripts/screenshots/` is still worth doing and still not this slice's job.
+- `capture.mjs` registers-then-signs-in while `inspect-sources.mjs` signs-in-then-registers. Both
+  work — capture's fallback covers the fresh instance — so they were left alone, but one order
+  would be better than two.
+
+---
+
 ## Sermon sources slice 5 — the review list
 
 - **Date:** 2026-09-07

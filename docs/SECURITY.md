@@ -8,8 +8,9 @@ internet).
 ## The default posture
 
 - **Self-hosted, single unit.** songbird runs as one process; your notes, tags, and accounts live
-  in your `DATA_DIR` and never leave your machine. The only thing it talks to over the network is
-  **Concord** (`CONCORD_BASE_URL`), for Scripture and places.
+  in your `DATA_DIR` and never leave your machine. It talks to **Concord** (`CONCORD_BASE_URL`) for
+  Scripture and places, and — only if you give it a YouTube key — to YouTube, for the sermon
+  sources feature below. With no key set, Concord is the only thing it talks to.
 - **Accounts.** The first person to sign up is the owner; everyone else gets their own private
   account. Passwords are stored hashed, never in plaintext — but anyone who can *reach* the site
   can try to log in, so use a strong password.
@@ -21,6 +22,31 @@ internet).
 
 songbird is **not** designed for hostile, public, multi-tenant hosting — that's explicitly out of
 scope. The model is "self-hosted for you and people you trust."
+
+## The YouTube key, if you use sermon sources
+
+songbird can follow a church's YouTube channel and write the sermon notes for you. That feature is
+off unless you give it a key, and this section is about what having one means.
+
+- **The key is a secret; treat it like a password.** It lives in the `.env` file next to
+  `docker-compose.yml`, which is never committed. Anyone who gets it can spend your daily YouTube
+  allowance; they cannot reach your notes with it.
+- **It is never shown in the browser.** No page and no API response ever contains it. The Sources
+  page knows only whether one is set, not what it is.
+- **It is never written to the log.** That takes more care than it sounds, because the key travels
+  in the web address of every request: songbird strips it out of the request log, and every error
+  it raises is rewritten so the address cannot reappear in a crash report you might paste
+  somewhere. If you ever see `key=REDACTED` in a log, that is the guard working.
+- **What the container reaches.** With a key set, songbird also makes outbound calls to
+  `www.googleapis.com`. Nothing accepts an inbound connection because of this feature.
+- **What songbird keeps from YouTube.** For each video: its title, its description, when it was
+  published, when a livestream actually started, how long it is, and its video id. That is what
+  the passage rules read and what the notes are dated from. **No video, no audio, no thumbnails,
+  no captions, and nothing about anyone who watched or commented.**
+- **If YouTube is unreachable, nothing breaks.** Unlike Concord, YouTube is not a hard dependency:
+  a failure is recorded against the source and shown on the page, and the rest of songbird carries
+  on. Removing the key switches the feature off; the notes it already made are ordinary notes and
+  stay exactly as they are.
 
 ## Exposing songbird beyond the LAN — the checklist
 

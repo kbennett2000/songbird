@@ -15,8 +15,9 @@ RUN npm run build
 
 # ---------------------------------------------------------------------------
 # Stage 2 — backend runtime. One uvicorn process serves the SPA + songbird's API.
-# songbird makes no outbound calls except to Concord (a runtime HTTP dependency);
-# the container must be able to reach CONCORD_BASE_URL.
+# songbird makes two kinds of outbound call: Concord (a runtime HTTP dependency — the container
+# must be able to reach CONCORD_BASE_URL), and, only when YOUTUBE_API_KEY is set,
+# www.googleapis.com for the YouTube Data API. With no key set, Concord really is the only one.
 # ---------------------------------------------------------------------------
 FROM python:3.12-slim AS runtime
 

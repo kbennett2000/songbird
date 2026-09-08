@@ -9,6 +9,7 @@ import { ApiError } from "@/lib/api";
 import { formatEventDate } from "@/lib/notes";
 import { fetchTags } from "@/lib/reader";
 import { applyRedate, previewRedate } from "@/lib/redate";
+import { describeSchedule } from "@/lib/schedule";
 import {
   checkAllSources,
   checkSource,
@@ -24,6 +25,12 @@ import type { RedateResult, SermonSource, SermonSourceCounts } from "@/schemas";
  * finishing feels immediate, long enough that a back-catalogue scan isn't answering the door
  * twenty times a minute. */
 const SCAN_POLL_MS = 3000;
+
+// The key walkthrough lives in the User's Guide, which the app does not serve — songbird is the
+// app, not its documentation — so this is the repository copy. It is the one link on the page a
+// reader follows before they have a key, which is exactly when they need it most.
+const GUIDE_URL =
+  "https://github.com/kbennett2000/songbird/blob/main/docs/USER-GUIDE.md#following-a-churchs-youtube-channel";
 
 /** The tag chips every list in songbird uses. */
 function TagChips({ tags }: { tags: string[] }): JSX.Element | null {
@@ -138,6 +145,7 @@ export function SermonSourcesView(): JSX.Element {
   const configured = statusQuery.data?.configured ?? false;
   const scanning = statusQuery.data?.scan_running ?? false;
   const minMinutesDefault = statusQuery.data?.min_minutes_default ?? 10;
+  const scheduleLine = statusQuery.data ? describeSchedule(statusQuery.data) : null;
 
   // Both wait for the status: with no key there is nothing to list and asking would only fail.
   const sourcesQuery = useQuery({
@@ -299,7 +307,13 @@ export function SermonSourcesView(): JSX.Element {
       />
 
       <main className="mx-auto max-w-3xl p-6">
-        <h1 className="mb-3 text-2xl font-bold tracking-tight">Sermon sources</h1>
+        <h1 className="mb-1 text-2xl font-bold tracking-tight">Sermon sources</h1>
+
+        {/* The schedule, in one line (spec §6c). The first status text this page has ever shown:
+            `scan_started_at` has been fetched and never rendered since slice 4a. */}
+        {scheduleLine && (
+          <p className="mb-3 text-sm text-gray-600 dark:text-gray-300">{scheduleLine}</p>
+        )}
 
         {actionMsg && (
           <p
@@ -327,7 +341,16 @@ export function SermonSourcesView(): JSX.Element {
             <code className="rounded bg-gray-100 dark:bg-gray-800 px-1">
               YOUTUBE_API_KEY=your-key-here
             </code>
-            , then restart songbird.
+            , then restart songbird.{" "}
+            <a
+              className="text-blue-700 dark:text-blue-400 hover:underline"
+              href={GUIDE_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              How to get a key
+            </a>{" "}
+            walks you through it, screen by screen.
           </p>
         )}
 
