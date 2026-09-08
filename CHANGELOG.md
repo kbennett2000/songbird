@@ -17,13 +17,6 @@ This project follows [Keep a Changelog](https://keepachangelog.com/) and
 
 ## [Unreleased]
 
-### Fixed
-- **A sermon titled with a plain numeric date no longer gets the wrong passage.** A video called
-  something like "… with Pastor John 06-25-2020" was being read as John chapters 6 to 25, so a talk
-  about respect ended up noted across sixteen chapters. songbird now recognises a date written in
-  digits the same way it already recognised one written with a month name, and leaves that video for
-  you to place yourself.
-
 ### Added
 - **songbird can follow your church's YouTube channel and write the sermon notes for you.** Add a
   channel or playlist once, on the new **Sermon sources** page, and songbird reads through it: for
@@ -59,8 +52,25 @@ This project follows [Keep a Changelog](https://keepachangelog.com/) and
   somewhere other than YouTube are left alone, and so are videos that have since been made private or
   removed — those are listed so you know they were skipped rather than missed. This needs a free
   YouTube API key; without one the button explains what to set, and the rest of songbird is unchanged.
+- **And it keeps looking, without being asked.** songbird now checks the channels you follow on a
+  schedule — once a week to begin with — so a Sunday sermon is usually noted before you next open
+  the passage. The line under the heading on the Sermon sources page always says how often it looks
+  and when the next look is due. If you would rather it never went looking on its own, set
+  `SERMON_CHECK_INTERVAL_HOURS=0` and use the **Check all now** button instead. A songbird that has
+  been switched off for a fortnight catches up as soon as it starts, so a machine you only turn on
+  at weekends still keeps up.
+- **And there's now a walkthrough for setting the whole thing up.** Getting the free key from Google
+  is seven screens of a console you have probably never opened, so the User's Guide walks them one
+  at a time, naming every button and where it sits. The Sermon sources page links straight to it
+  when no key is set yet.
 
 ### Fixed
+- **A sermon titled with a plain numeric date no longer gets the wrong passage.** A video called
+  something like "… with Pastor John 06-25-2020" was being read as John chapters 6 to 25, so a talk
+  about respect ended up noted across sixteen chapters. songbird now recognises a date written in
+  digits the same way it already recognised one written with a month name, and leaves that video for
+  you to place yourself.
+
 - **songbird now reads the Concord you point it at.** If you set `CONCORD_BASE_URL` to your own
   Scripture engine, songbird ignored it: the `docker compose` setup started an engine of its own and
   quietly used that one instead. On a machine already running its own Concord that meant songbird
