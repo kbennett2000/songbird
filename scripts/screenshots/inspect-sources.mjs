@@ -9,12 +9,15 @@
 //   1. install once:   cd scripts/screenshots && npm install && npx playwright install chromium
 //   2. run:            node inspect-sources.mjs
 //
-// Two songbirds are needed, because "no key configured" is a state of the SERVER, not of the
-// page: point SONGBIRD_URL at one that has a YouTube key and SONGBIRD_NOKEY_URL at one that
-// doesn't. The no-key shots are skipped (loudly) if the second isn't set.
+// Up to three songbirds are needed, because two of the states this pass has to look at belong to
+// the SERVER rather than the page and cannot be reached by clicking: "no key configured", and
+// "scheduled checks are off" (SERMON_CHECK_INTERVAL_HOURS=0). Point SONGBIRD_URL at a normal one,
+// SONGBIRD_NOKEY_URL at one with no key, and SONGBIRD_NOTIMER_URL at one on a zero interval.
+// Either of the last two being unset skips its shots — loudly, never silently.
 //
 //   SONGBIRD_URL=http://127.0.0.1:8099 \
 //   SONGBIRD_NOKEY_URL=http://127.0.0.1:8098 \
+//   SONGBIRD_NOTIMER_URL=http://127.0.0.1:8097 \
 //   OUT_DIR=/tmp/sources-pass node inspect-sources.mjs
 //
 // Run it against a THROWAWAY songbird (a scratch DATA_DIR): it adds and removes real sources.
@@ -24,6 +27,9 @@ import { mkdirSync } from "node:fs";
 
 const BASE = process.env.SONGBIRD_URL ?? "http://localhost:8077";
 const NOKEY_BASE = process.env.SONGBIRD_NOKEY_URL ?? "";
+// A third instance, run with SERMON_CHECK_INTERVAL_HOURS=0. "Scheduled checks are off" is a state
+// of the SERVER, exactly as "no key" is, so it cannot be reached by clicking on this one.
+const NOTIMER_BASE = process.env.SONGBIRD_NOTIMER_URL ?? "";
 const OUT = process.env.OUT_DIR ?? "/tmp/sources-pass";
 // Overridable so the pass can be pointed at a scratch songbird that has already been scanned —
 // the ledger states below need real placed rows, and re-scanning four churches to see them costs
@@ -280,10 +286,35 @@ async function main() {
         console.log(`  (sources already present — skipping the empty shot at ${vp.name})`);
       }
 
+      // The schedule line lives above everything else on the page, so it rides along in every
+      // state shot below — but check it is actually THERE, or a regression that removed it would
+      // look exactly like a page that simply had nothing to say.
+      if (!(await page.getByText(/^Checks every /).count())) {
+        console.warn(`  ⚠ ${vp.name}: no "Checks every …" line — is the timer running?`);
+      }
+
       await captureStates(page, `${vp.name}-light`);
       await setTheme(page, "dark");
       await captureStates(page, `${vp.name}-dark`);
       await setTheme(page, "light");
+
+      if (NOTIMER_BASE) {
+        await ensureSignedIn(page, NOTIMER_BASE);
+        await page.goto(`${NOTIMER_BASE}/sermon-sources`, { waitUntil: "networkidle" });
+        await page.waitForTimeout(400);
+        if (!(await page.getByText("Scheduled checks are off; use Check now").count())) {
+          console.warn(
+            `  ⚠ ${vp.name}: the off-schedule line did not appear — is that instance really on 0?`,
+          );
+        }
+        await shot(page, `${vp.name}-light-schedule-off`);
+        await setTheme(page, "dark");
+        await shot(page, `${vp.name}-dark-schedule-off`);
+        await setTheme(page, "light");
+        await ensureSignedIn(page, BASE);
+      } else {
+        console.warn("⚠ SONGBIRD_NOTIMER_URL not set — the off-schedule line was NOT looked at");
+      }
 
       if (NOKEY_BASE) {
         await ensureSignedIn(page, NOKEY_BASE);
