@@ -4,6 +4,91 @@ A running log of per-slice decisions, gotchas, and how each slice was verified. 
 
 ---
 
+## Release prep v1.7.0 — version reconciliation + CHANGELOG (Stop 1 of a two-stop release)
+
+- **Date:** 2026-09-07
+- **Branch:** `slice/release-1.7.0-prep`
+
+### Why
+
+v1.7 Sermon Sources is complete — six slices, plus the numeric-date fix and two compose fixes — but
+the package versions still read `1.6.0` and everything since the 1.6.0 release was still sitting
+under `## [Unreleased]`. This reconciles the drift and closes the changelog block, so the tag in Stop
+2 has something honest to point at.
+
+### The version is single-sourced
+
+Unchanged since the 1.6.0 prep: `backend/songbird/__init__.py`'s `__version__` is the one source of
+truth for the *served* version — `main.py` passes it to `FastAPI(version=__version__)` (so the
+OpenAPI `info.version` follows) and `health.py` returns it on `/healthz`. Four files declare the
+literal:
+
+- `backend/pyproject.toml` → `1.7.0`
+- `backend/songbird/__init__.py` (`__version__`) → `1.7.0`  *(drives FastAPI/OpenAPI + `/healthz`)*
+- `frontend/package.json` → `1.7.0`
+- `frontend/src/test/msw/handlers.ts` (the `/healthz` mock) → `1.7.0` *(fixture realism; no test
+  asserts the literal — `health_test.py` only checks it's a `str`)*
+
+**No fifth site has crept in since 1.6.0.** The version-looking values that entry listed as
+deliberately untouched are untouched again, for the same reasons: the screenshot tool's own `1.0.0`,
+the export-bundle **data-format** `version` in `schemas.ts` / `api/schemas.py`, MapLibre's
+`version: 8` style-spec number, and `concord_contract_test.py`'s `"1.2.0"` — which is **Concord's**
+pinned OpenAPI version, not songbird's.
+
+### What's in the release
+
+Sermon sources end to end (slices 1–6: the YouTube client and settings, the Sources page, re-dating,
+the scan and the ledger, the review list, the schedule and the guide), the numeric-date fix that
+stopped `John 06-25-2020` being read as sixteen chapters, and **two compose fixes** — `CONCORD_BASE_URL`
+being ignored in favour of a bundled engine, and `PORT` being ignored entirely. The dark-mode
+highlight and multi-note fixes carried over from before v1.7 started ship here too, since 1.6.0 was
+tagged before them.
+
+### The `PORT` entry was missing, and finding out why took a `git log -S`
+
+`PORT=8077` has been in `.env.example` since the original scaffold commit, so it *looks* like old
+news that shipped long ago. It isn't: `docker-compose.yml` hardcoded `"8077:8077"` until
+`234d70a fix(compose): take songbird's published port from PORT`, which is **after `v1.6.0`**. So
+setting `PORT` did nothing at all until this release, and it belongs in 1.7.0's Fixed list. The
+README's "port won't load" troubleshooting still told people to go stop the other program; it now
+tells them to set `PORT` instead.
+
+The lesson for the next release prep: **a setting's presence in `.env.example` says nothing about
+when it started working.** Check the file that consumes it, not the file that documents it.
+
+### The README's spec index needed nothing
+
+The brief expected `docs/v1.7/SERMON-SOURCES-SPEC.md` to be missing from a list in the README. There
+is no such list any more — Docs Slice 5 replaced it with a generic pointer ("then the per-feature
+specs under `docs/`"), which cannot go stale. The enumerated index lives in `docs/v1/SPEC.md` §12,
+and slice 6 already added v1.7 to it. Nothing to fix; worth recording so the next release doesn't go
+looking for it either.
+
+### Two-stop release
+
+This PR is **files only** (versions + `CHANGELOG.md` + README troubleshooting + this entry) and
+leaves both gates green. The **tag and GitHub Release are Stop 2** — presented for explicit
+authorization *after* this PR merges, run from a freshly pulled `main`. The tag is never pushed in
+the same breath as the PR.
+
+### Verified
+
+- `grep -rn "1\.6\.0"` (deps/locks excluded) → only CHANGELOG history and this file's 1.6.0 entry;
+  the four bumped sites read `1.7.0`.
+- `make check` → green. `make check-frontend` → green. The bump, including the `/healthz` mock, broke
+  no test.
+- The finished `[1.7.0]` block read top to bottom as its audience, not as its author.
+
+### Still open
+
+- **`docs/v1/SPEC.md` §12 still has no v1.6 paragraph** — the section says so itself. Carried over
+  from slice 6; still not this slice's job.
+- **`frontend/src/lib/schedule.ts:46` renders "use Check now"** where the button it means is labelled
+  **Check all now** (`SermonSourcesView.tsx:413`). A one-word product-string nit that would touch a
+  shipped test and a committed screenshot, so it was named rather than fixed during release prep.
+
+---
+
 ## Sermon sources slice 6 — the schedule, and the documentation
 
 - **Date:** 2026-09-07
