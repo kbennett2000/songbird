@@ -32,6 +32,10 @@ The Bible text, search, and maps come from **[Concord](https://github.com/kbenne
 
 ![A passage’s places pinned on the Bible-world map](docs/screenshots/map-desktop.png)
 
+**Let your church’s YouTube channel write your sermon notes.** Follow a channel once and songbird reads each sermon for the passage it names, then notes it for you — and hands you the ones it couldn’t work out, a tap each.
+
+![The Sermon sources page, showing a followed channel with its counts and the list of sermons songbird found](docs/screenshots/sermon-sources.png)
+
 <br>
 
 ## What you’ll need
@@ -128,6 +132,16 @@ docker compose up
 Whatever translations your Concord serves are the ones songbird will show.
 
 Either way, the app’s **Status** page names the exact Concord it is reading and lists every translation it found there.
+
+That same `.env` file is where the rest of songbird’s settings live, and there are only a few. To let songbird follow a church’s YouTube channel you give it a free key from Google — the [User’s Guide walks you through getting one](docs/USER-GUIDE.md#following-a-churchs-youtube-channel), and without one that feature is simply switched off:
+
+```bash
+YOUTUBE_API_KEY=AIza...your key here...
+SERMON_CHECK_INTERVAL_HOURS=168
+SERMON_MIN_MINUTES=10
+```
+
+The second line is how often songbird looks for new sermons, in hours — 168 is once a week, and `0` means it only ever looks when you ask. The third is the shortest video it will treat as a sermon, which is what keeps clips and trailers out of your notes. Both have sensible defaults, so you only need the first. Treat the key like a password: it stays in `.env`, which is never committed.
 
 - **Want to use it?** Every feature, walked through with screenshots, is in the **[User’s Guide](docs/USER-GUIDE.md)**.
 - **Want to see how it’s built?** Start with [the design notes](docs/v1/SPEC.md), then the per-feature specs under [`docs/`](docs/).

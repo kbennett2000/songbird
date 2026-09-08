@@ -831,7 +831,11 @@ async function captureSermonSources(page) {
     return;
   }
 
-  await page.screenshot({ path: `${OUT}/sermon-sources.png`, fullPage: true });
+  // Viewport-framed, NOT fullPage. A full-page shot of this page is the whole ledger — the first
+  // attempt came out 24,644 pixels tall and 3.6MB, which is unreadable as a guide image and a
+  // silly thing to put in a repository. What the guide needs is the top: the schedule line, the
+  // source and its counts, and enough of the list below to show what it is.
+  await page.screenshot({ path: `${OUT}/sermon-sources.png`, fullPage: false });
   console.log("✓ sermon-sources.png");
 
   // The add form, filled but NOT submitted: submitting would resolve a channel against YouTube
@@ -844,7 +848,7 @@ async function captureSermonSources(page) {
     if (await link.count()) {
       await link.fill("https://www.youtube.com/@majesticviewchurchlive407");
       await page.waitForTimeout(200);
-      await page.screenshot({ path: `${OUT}/sermon-sources-add.png`, fullPage: true });
+      await page.screenshot({ path: `${OUT}/sermon-sources-add.png`, fullPage: false });
       console.log("✓ sermon-sources-add.png");
     } else {
       console.warn("⚠ sermon-sources-add: the add form did not open — NOT taken");
@@ -855,9 +859,11 @@ async function captureSermonSources(page) {
   }
 
   // The review list, narrowed to the state the guide is about to describe.
-  const state = page.getByLabel("State");
+  // By VALUE, not by label: each option carries its own count ("Needs a passage (352)"), so a
+  // label match would break the first time the numbers moved.
+  const state = page.getByLabel("Filter by state");
   if (await state.count()) {
-    await state.first().selectOption({ label: "Needs a passage" });
+    await state.first().selectOption("needs_passage");
     await page.waitForTimeout(900);
     const region = page.getByRole("region", { name: "What songbird found" });
     const box = await region.boundingBox().catch(() => null);
