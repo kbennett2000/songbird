@@ -79,6 +79,14 @@ services:
       #     YOUTUBE_API_KEY=your-key-here
       # (docker compose reads that file automatically). Treat it like a password.
       YOUTUBE_API_KEY: "${YOUTUBE_API_KEY:-}"
+      # How often songbird looks for new sermons on the channels you follow, in hours. 168 is
+      # once a week, which suits a church that posts on Sundays. Set it to 0 if you would rather
+      # it never went looking on its own — the "Check now" button on the page still works.
+      SERMON_CHECK_INTERVAL_HOURS: "${SERMON_CHECK_INTERVAL_HOURS:-168}"
+      # Videos shorter than this many minutes are skipped, which keeps clips, trailers and Shorts
+      # out of your notes. It is the starting point for every channel; a single channel can be
+      # given its own number on the Sermon sources page, and that one wins for that channel.
+      SERMON_MIN_MINUTES: "${SERMON_MIN_MINUTES:-10}"
     volumes:
       # Your notes live here, on your computer, so they survive restarts.
       - songbird-data:/data
