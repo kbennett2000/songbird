@@ -165,7 +165,9 @@ Docker Desktop isn’t running. Open it (look for the whale icon), wait until it
 
 <br>
 
-Give it a moment — on the first run, songbird waits for the Scripture engine to be ready before it starts. If the terminal is still scrolling, it’s not finished yet. Once the text settles, refresh the page. If another program is using port 8077, stop it (or ask in [Issues](../../issues) and we’ll help).
+Give it a moment — on the first run, songbird waits for the Scripture engine to be ready before it starts. If the terminal is still scrolling, it’s not finished yet. Once the text settles, refresh the page.
+
+If another program on your computer is already using port 8077, songbird can’t start there — but you don’t have to stop the other program. Open the `.env` file next to `docker-compose.yml` (make one if there isn’t one yet), add a line reading `PORT=8078`, and start songbird again with the command from step 3. It’ll be at [http://localhost:8078](http://localhost:8078) instead. Still stuck? Ask in [Issues](../../issues) and we’ll help.
 </details>
 
 <details>

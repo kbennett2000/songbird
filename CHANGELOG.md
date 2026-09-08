@@ -17,6 +17,10 @@ This project follows [Keep a Changelog](https://keepachangelog.com/) and
 
 ## [Unreleased]
 
+## [1.7.0] — 2026-09-07
+
+Sermon sources — songbird follows your church's channel and writes the notes itself.
+
 ### Added
 - **songbird can follow your church's YouTube channel and write the sermon notes for you.** Add a
   channel or playlist once, on the new **Sermon sources** page, and songbird reads through it: for
@@ -30,19 +34,20 @@ This project follows [Keep a Changelog](https://keepachangelog.com/) and
   left as it is. This needs the same free YouTube key as the re-dating button below.
 - **And you can work through the sermons it couldn't place, a tap at a time.** Plenty of churches
   title every service by its date and never write the passage down anywhere, so those sermons wait
-  in a **Needs a passage** list — which for one real channel was 351 of them after a single check.
-  The Sources page now lets you clear that list. Each sermon shows any passages songbird spotted in
-  the description as buttons: tap the right one — or several — and press **Place**, and you get the
-  same notes songbird would have made itself. You can type a passage instead if it isn't offered.
-  Anything that isn't a sermon at all — a concert, an announcement, a test stream — is one tap to
-  set aside, and one tap to bring back if you change your mind.
-  Narrow the list first by channel, by date, or by words in the title, and if a whole stretch is
-  worth setting aside — every livestream from before 2025, say — one button clears all of them,
-  telling you exactly how many and which ones before it does. It never touches a sermon that already
-  has notes.
-  If songbird did get a passage wrong, **Wrong passage** takes its notes back and puts the sermon
-  back in the list to be redone. Deleting the last note from a sermon on the Browse page does the
-  same thing, so a sermon can't end up marked done with nothing behind it.
+  in a **Needs a passage** list — and on a channel with years of Sunday livestreams behind it, that
+  list starts long. The Sources page now lets you clear it. Each sermon shows any passage songbird
+  spotted in the description as a button: tap the right one — or several — and press **Place**, and
+  you get the same notes songbird would have made itself. You can type a passage instead if it isn't
+  offered. Anything that isn't a sermon at all — a concert, an announcement, a test stream — is one
+  tap to set aside, and one tap to bring back if you change your mind.
+- **Narrow the list, or clear a whole stretch of it at once.** Filter it by channel, by date, or by
+  words in the title. And if a whole stretch is worth setting aside — every livestream from before
+  2025, say — one button clears all of them, telling you exactly how many and which ones before it
+  does. It never touches a sermon that already has notes.
+- **And if songbird got a passage wrong, you can take it back.** The **Wrong passage** button returns
+  the sermon's notes and puts it back in the list to be redone. Deleting the last note from a sermon
+  on the Browse page does the same thing, so a sermon can't end up marked done with nothing behind
+  it.
 - **Your sermon notes can take their dates from YouTube.** A sermon note you made by hand carries
   whatever date you typed — usually the day you wrote the note, not the day the sermon was preached.
   On the Browse notes page there's now a **Re-date YouTube sermons** button: songbird looks up every
@@ -70,7 +75,6 @@ This project follows [Keep a Changelog](https://keepachangelog.com/) and
   about respect ended up noted across sixteen chapters. songbird now recognises a date written in
   digits the same way it already recognised one written with a month name, and leaves that video for
   you to place yourself.
-
 - **songbird now reads the Concord you point it at.** If you set `CONCORD_BASE_URL` to your own
   Scripture engine, songbird ignored it: the `docker compose` setup started an engine of its own and
   quietly used that one instead. On a machine already running its own Concord that meant songbird
@@ -84,6 +88,10 @@ This project follows [Keep a Changelog](https://keepachangelog.com/) and
 - **You can see which Concord songbird is reading.** The **Status** page now has a link in the top
   bar, and it names the exact address songbird is using and lists every translation available there.
   If a translation you expect is missing, that page tells you why in one look.
+- **songbird now opens on the port you asked for.** The `PORT` line in your `.env` file was being
+  ignored: whatever you set it to, songbird still appeared at `localhost:8077`. That mattered if
+  another program on your computer already had that port — songbird couldn't start, and changing the
+  setting didn't help. Set `PORT` now and songbird is there.
 - **All notes on a verse now show, not just one.** When a verse carried more than one note, the
   reader and the side-by-side compare view showed a single marker and opened only the first note —
   the others were invisible and unreachable. The marker now carries a small count, and tapping it
@@ -162,6 +170,7 @@ The big fan-out — four study features at once, plus a proper guide.
   Scripture comes from [Concord](https://github.com/kbennett2000/concord); songbird keeps only your
   notes, on your own machine.
 
+[1.7.0]: https://github.com/kbennett2000/songbird/releases/tag/v1.7.0
 [1.6.0]: https://github.com/kbennett2000/songbird/releases/tag/v1.6.0
 [1.1.0]: https://github.com/kbennett2000/songbird/releases/tag/v1.1.0
 [1.0.0]: https://github.com/kbennett2000/songbird/releases/tag/v1.0.0
