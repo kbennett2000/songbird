@@ -119,15 +119,37 @@ function ledgerRows() {
   );
 }
 
+/** The status payload, in ONE place — the three handlers below all build on it.
+ *
+ * The schema is strict about required fields and this endpoint has no default MSW handler, so
+ * every field added to it breaks every fixture that omits it. It broke three when slice 6 added
+ * the schedule; there is one now. */
+function statusBody(overrides: Record<string, unknown> = {}) {
+  return {
+    configured: true,
+    min_minutes_default: 10,
+    scan_running: false,
+    scan_started_at: null,
+    interval_hours: 168,
+    timer_enabled: true,
+    last_scheduled_run_at: null,
+    next_scheduled_run_at: "2026-09-13T15:02:00Z",
+    ...overrides,
+  };
+}
+
 /** The status endpoint gates the whole page, so every test has to answer it. */
 function statusHandler(configured = true, minMinutesDefault = 10, scanRunning = false) {
   return http.get("/api/v1/sermon-sources/status", () =>
-    HttpResponse.json({
-      configured,
-      min_minutes_default: minMinutesDefault,
-      scan_running: scanRunning,
-      scan_started_at: scanRunning ? "2026-09-07T12:00:00Z" : null,
-    }),
+    HttpResponse.json(
+      statusBody({
+        configured,
+        min_minutes_default: minMinutesDefault,
+        scan_running: scanRunning,
+        scan_started_at: scanRunning ? "2026-09-07T12:00:00Z" : null,
+        timer_enabled: configured,
+      }),
+    ),
   );
 }
 
@@ -183,6 +205,45 @@ describe("SermonSourcesView", () => {
     expect(await screen.findByText(/No sources yet/)).toBeInTheDocument();
   });
 
+  it("says how often it checks, and when it last did and next will", async () => {
+    // Spec §6c. The line is built from `/status` alone, so the page never has to guess at a
+    // schedule it cannot see. Times are matched loosely: they render in the reader's timezone.
+    server.use(
+      http.get("/api/v1/sermon-sources/status", () =>
+        HttpResponse.json(
+          statusBody({
+            last_scheduled_run_at: "2026-09-06T15:02:00Z",
+            next_scheduled_run_at: "2026-09-13T15:02:00Z",
+          }),
+        ),
+      ),
+      sourcesHandler(CORNERSTONE),
+    );
+    renderPage();
+
+    expect(
+      await screen.findByText(/^Checks every 7 days · last .+ · next .+$/),
+    ).toBeInTheDocument();
+  });
+
+  it("says when the schedule is switched off, and points at the button that still works", async () => {
+    // An interval of 0 is a deliberate setting, not a fault, so the line reads as an answer
+    // rather than an absence — "Check now" still works and the reader is told so.
+    server.use(
+      http.get("/api/v1/sermon-sources/status", () =>
+        HttpResponse.json(
+          statusBody({ timer_enabled: false, interval_hours: 0, next_scheduled_run_at: null }),
+        ),
+      ),
+      sourcesHandler(CORNERSTONE),
+    );
+    renderPage();
+
+    expect(
+      await screen.findByText("Scheduled checks are off; use Check now"),
+    ).toBeInTheDocument();
+  });
+
   it("shows only the setup message when there is no API key", async () => {
     // Spec §10: without a key the page is one explanation and nothing else — no list to load,
     // no controls that would fail if pressed.
@@ -190,6 +251,15 @@ describe("SermonSourcesView", () => {
     renderPage();
 
     expect(await screen.findByText(/YOUTUBE_API_KEY=your-key-here/)).toBeInTheDocument();
+    // The one link a reader follows BEFORE they have a key, which is when they most need it:
+    // getting one is a seven-screen trip through Google's console that no page here can show.
+    const guide = screen.getByRole("link", { name: "How to get a key" });
+    expect(guide).toHaveAttribute(
+      "href",
+      expect.stringContaining("USER-GUIDE.md#following-a-churchs-youtube-channel"),
+    );
+    // And no schedule line: a schedule that cannot run is not an answer to any question yet.
+    expect(screen.queryByText(/^Checks every/)).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Add source" })).not.toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "Re-date YouTube sermons" }),
@@ -536,12 +606,12 @@ describe("SermonSourcesView", () => {
       // The server reports the scan as running once it has been asked for, which is what the
       // page's own refetch then sees — the real sequence, not a frozen snapshot of it.
       http.get("/api/v1/sermon-sources/status", () =>
-        HttpResponse.json({
-          configured: true,
-          min_minutes_default: 10,
-          scan_running: queued,
-          scan_started_at: queued ? "2026-09-07T12:00:00Z" : null,
-        }),
+        HttpResponse.json(
+          statusBody({
+            scan_running: queued,
+            scan_started_at: queued ? "2026-09-07T12:00:00Z" : null,
+          }),
+        ),
       ),
       sourcesHandler(CORNERSTONE),
       http.post("/api/v1/sermon-sources/check", () => {
@@ -857,12 +927,12 @@ describe("SermonSourcesView", () => {
       server.use(
         http.get("/api/v1/sermon-sources/status", () => {
           statusCalls += 1;
-          return HttpResponse.json({
-            configured: true,
-            min_minutes_default: 10,
-            scan_running: running,
-            scan_started_at: running ? "2026-09-07T12:00:00Z" : null,
-          });
+          return HttpResponse.json(
+            statusBody({
+              scan_running: running,
+              scan_started_at: running ? "2026-09-07T12:00:00Z" : null,
+            }),
+          );
         }),
         http.get("/api/v1/sermon-sources", () => {
           sourceCalls += 1;
@@ -907,12 +977,9 @@ describe("SermonSourcesView", () => {
         http.get("/api/v1/sermon-sources/status", () => {
           calls += 1;
           return calls === 1
-            ? HttpResponse.json({
-                configured: true,
-                min_minutes_default: 10,
-                scan_running: true,
-                scan_started_at: "2026-09-07T12:00:00Z",
-              })
+            ? HttpResponse.json(
+                statusBody({ scan_running: true, scan_started_at: "2026-09-07T12:00:00Z" }),
+              )
             : new HttpResponse(null, { status: 503 });
         }),
         sourcesHandler(CORNERSTONE),

@@ -238,6 +238,14 @@ export const sermonSourcesStatusSchema = z.object({
   // thing the page polls for.
   scan_running: z.boolean(),
   scan_started_at: z.string().nullable(),
+  // The schedule (spec §6c). `interval_hours` is the setting and is reported even where no timer
+  // runs; `timer_enabled` is whether one actually does — false for an interval of 0, and false
+  // with no key, where the page shows only its setup message anyway.
+  interval_hours: z.number(),
+  timer_enabled: z.boolean(),
+  // Null until this process has run a scheduled check: the timer holds them in memory.
+  last_scheduled_run_at: z.string().nullable(),
+  next_scheduled_run_at: z.string().nullable(),
 });
 
 export const readVerseSchema = z.object({
