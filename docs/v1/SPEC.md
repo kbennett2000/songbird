@@ -396,6 +396,22 @@ never a guessed pin), modern name and coordinates when located, and every verse 
 jump-link (reusing the already-proxied `/v1/places/{id}/verses`). Read-only — Concord owns the
 data; songbird stores none of it. Specified in `docs/v1.4/PLACES-SPEC.md`.
 
+**Sermon sources (v1.7).** songbird can follow a church's YouTube channel or playlist and write
+the sermon notes itself. Three new tables — `sermon_sources`, `sermon_source_tags` and the
+`sermon_source_videos` ledger — plus two columns on `sermon_notes` (`youtube_video_id`,
+`source_video_id`), migrations `0010`–`0013`, and one new outbound
+dependency, the **YouTube Data API v3**, reached through a single configured client
+(`YOUTUBE_API_KEY`, `SERMON_CHECK_INTERVAL_HOURS`, `SERMON_MIN_MINUTES`). A check pages the
+catalogue, filters by §6's rules, and reads each video's own text for a reference; **Concord decides
+what every candidate means**, so invariant 4 holds exactly as it does for a hand-typed note — songbird
+finds candidate *strings* and never interprets one. Videos it cannot read confidently land in a
+**review list** that places, dismisses, restores, reopens and bulk-dismisses, because a date-titled
+livestream names no passage and for one real channel that was 352 of 371. An in-process `asyncio`
+timer checks on a schedule with boot catch-up. _Caveat, and the reason this is the second dependency
+rather than the second hard one:_ unlike Concord, YouTube being down, rate-limited or keyless is
+**not** an error — it is recorded on the source and shown on the page, and a missing key simply
+leaves the feature off. Specified in `docs/v1.7/SERMON-SOURCES-SPEC.md`.
+
 **Concord consumer contract test.** A test validates songbird's hand-written Concord types
 against Concord's pinned OpenAPI schema, catching drift between the two services.
 
@@ -405,12 +421,17 @@ pan/zoom) and ADR 0003 (MapLibre GL over bundled PMTiles) — the current render
 notes in
 `docs/v1.2/SERMON-NOTES-SPEC.md`; the search expansion (multi-translation keyword + study-note
 search) in `docs/v1.3/SEARCH-EXPANSION-SPEC.md`; the places gazetteer in
-`docs/v1.4/PLACES-SPEC.md`; and the verse of the day in `docs/v1.5/RANDOM-VERSE-SPEC.md`.
+`docs/v1.4/PLACES-SPEC.md`; the verse of the day in `docs/v1.5/RANDOM-VERSE-SPEC.md`; and sermon
+sources in `docs/v1.7/SERMON-SOURCES-SPEC.md`. (The v1.6 feature line — section headings, topics,
+word study and journeys — has its specs under `docs/v1.6/` but no paragraph of its own above yet.)
 
 **The data model, restated.** songbird's database holds: `users` (now with `last_translation`,
 `last_book`, `last_chapter`, `theme`), `sessions`, `annotations`, `annotation_translations`, `tags`
 (+ `annotation_tags`, `sermon_note_tags` joins), and `sermon_notes`. Keyword search, compare,
 export/import, the home page, and the later search expansion (multi-translation keyword +
 study-note search, v1.3), the places gazetteer (v1.4), and the verse of the day (v1.5) all added
-**no new tables** — they proxy Concord or reuse existing models. Still **no Bible text**
-(invariant 5 intact).
+**no new tables** — they proxy Concord or reuse existing models. **Sermon sources (v1.7) is the
+first feature since sermon notes to add any**: `sermon_sources`, `sermon_source_tags` and
+`sermon_source_videos`. Every one of them holds songbird's own bookkeeping — which channels you
+follow, and what songbird decided about each video. Still **no Bible text** (invariant 5 intact),
+and no YouTube media: titles, descriptions, dates, durations and ids only.
