@@ -17,6 +17,10 @@ This project follows [Keep a Changelog](https://keepachangelog.com/) and
 
 ## [Unreleased]
 
+### Added
+- **← Prev and Next → buttons at the bottom of each chapter.** When you finish reading a chapter,
+  you can go straight to the next one without scrolling back up. It opens at the top of the page.
+
 ## [1.7.0] — 2026-09-07
 
 Sermon sources — songbird follows your church's channel and writes the notes itself.
