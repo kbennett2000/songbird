@@ -1,4 +1,4 @@
-import type { TranslatorNote } from "@/schemas";
+import type { ShownNote } from "@/lib/borrowedNotes";
 
 /**
  * Split a verse string into text runs interleaved with translator's-note markers.
@@ -13,20 +13,26 @@ import type { TranslatorNote } from "@/schemas";
  *
  * Markers are numbered sequentially per verse (1, 2, 3…) in (char_offset, ordinal) order —
  * NET's own footnote numbers are deliberately not shown, since they'd collide with the verse
- * numbers. Notes sharing an offset cluster as adjacent markers. Pure + testable.
+ * numbers. Notes sharing an offset cluster as adjacent markers, the translation's own before any
+ * borrowed from NET (see borrowedNotes.ts). Pure + testable.
  */
 
 export type VerseSegment =
   | { kind: "text"; text: string; key: string }
-  | { kind: "marker"; note: TranslatorNote; number: number; key: string };
+  | { kind: "marker"; note: ShownNote; number: number; key: string };
 
-export function verseSegments(text: string, notes: TranslatorNote[]): VerseSegment[] {
+export function verseSegments(text: string, notes: ShownNote[]): VerseSegment[] {
   if (notes.length === 0) return text ? [{ kind: "text", text, key: "t0" }] : [];
 
   const len = text.length;
   const placed = notes
     .map((note) => ({ note, offset: Math.min(Math.max(note.char_offset, 0), len) }))
-    .sort((a, b) => a.offset - b.offset || a.note.ordinal - b.note.ordinal);
+    .sort(
+      (a, b) =>
+        a.offset - b.offset ||
+        Number(!!a.note.borrowed) - Number(!!b.note.borrowed) ||
+        a.note.ordinal - b.note.ordinal,
+    );
 
   const segments: VerseSegment[] = [];
   let cursor = 0;
@@ -39,7 +45,7 @@ export function verseSegments(text: string, notes: TranslatorNote[]): VerseSegme
       kind: "marker",
       note: item.note,
       number: i + 1,
-      key: `m${item.note.ordinal}-${item.offset}`,
+      key: `m${item.note.borrowed ? "b" : ""}${item.note.ordinal}-${item.offset}`,
     });
   });
   if (cursor < len) segments.push({ kind: "text", text: text.slice(cursor), key: `t${cursor}` });

@@ -1,20 +1,21 @@
 import { useMemo } from "react";
 
+import type { ShownNote } from "@/lib/borrowedNotes";
 import { verseSegments } from "@/lib/verseSegments";
-import type { TranslatorNote } from "@/schemas";
 
 interface VerseTextProps {
   text: string;
-  notes: TranslatorNote[];
+  notes: ShownNote[];
   /** Open the note's popover, anchored to the tapped marker. */
-  onOpenNote: (note: TranslatorNote, anchor: HTMLElement) => void;
+  onOpenNote: (note: ShownNote, anchor: HTMLElement) => void;
 }
 
 /**
  * Verse text with NET's translator's-note markers injected inline — superscript numbers at the
  * notes' `char_offset` positions (see {@link verseSegments} for the positioning invariant).
  * Markers are coloured distinctly from the blue verse numbers so the two systems don't read as
- * one; tapping a marker opens its note popover.
+ * one; tapping a marker opens its note popover. A note borrowed from NET looks the same but says
+ * so in its label.
  */
 export function VerseText({ text, notes, onOpenNote }: VerseTextProps): JSX.Element {
   const segments = useMemo(() => verseSegments(text, notes), [text, notes]);
@@ -30,8 +31,14 @@ export function VerseText({ text, notes, onOpenNote }: VerseTextProps): JSX.Elem
             type="button"
             className="align-super font-sans text-[0.7em] font-medium text-violet-600 hover:text-violet-800 dark:text-violet-400 dark:hover:text-violet-300 hover:underline"
             onClick={(e) => onOpenNote(seg.note, e.currentTarget)}
-            aria-label={`Translator's note ${seg.number}`}
-            title="Translator's note"
+            aria-label={`Translator's note ${seg.number}${
+              seg.note.borrowed ? ` (from ${seg.note.borrowed.from})` : ""
+            }`}
+            title={
+              seg.note.borrowed
+                ? `Translator's note (${seg.note.borrowed.from})`
+                : "Translator's note"
+            }
           >
             {seg.number}
           </button>

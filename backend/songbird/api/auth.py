@@ -126,8 +126,9 @@ async def update_me(
     user: User = Depends(get_current_user),
 ) -> AuthEnvelope:
     """Update the current user's per-profile preferences — reading position (translation, book,
-    chapter) and the UI theme. A partial patch: only the fields the client sent are applied
-    (`model_fields_set`), so saving one never clobbers the others. Codes are normalized upper-case.
+    chapter), the UI theme, and the show-NET-notes toggle. A partial patch: only the fields the
+    client sent are applied (`model_fields_set`), so saving one never clobbers the others. Codes
+    are normalized upper-case.
     No Concord round-trip — a preference write shouldn't fail just because Concord is down; the
     frontend submits offered values and the reader self-heals a stale one."""
     fields = body.model_fields_set
@@ -139,5 +140,7 @@ async def update_me(
         user.last_chapter = body.last_chapter
     if "theme" in fields and body.theme is not None:
         user.theme = body.theme  # already constrained to light|dark|system by the schema
+    if "show_net_notes" in fields and body.show_net_notes is not None:
+        user.show_net_notes = body.show_net_notes
     await db.commit()
     return AuthEnvelope(user=UserResponse.model_validate(user))

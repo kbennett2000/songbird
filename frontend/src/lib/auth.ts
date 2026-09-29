@@ -50,3 +50,9 @@ export async function saveTheme(theme: "light" | "dark" | "system"): Promise<Use
   const data = await apiRequest<unknown>("PATCH", "/auth/me", { theme });
   return authEnvelopeSchema.parse(data).user;
 }
+
+/** Persist the reader's show-NET-notes toggle on the profile. Returns the updated user. */
+export async function saveShowNetNotes(showNetNotes: boolean): Promise<User> {
+  const data = await apiRequest<unknown>("PATCH", "/auth/me", { show_net_notes: showNetNotes });
+  return authEnvelopeSchema.parse(data).user;
+}

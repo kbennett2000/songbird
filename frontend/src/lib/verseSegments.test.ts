@@ -88,4 +88,17 @@ describe("verseSegments", () => {
     expect(segs.filter((s) => s.kind === "marker")).toHaveLength(42);
     expect(textOf(segs)).toBe(VERSE);
   });
+
+  it("puts a translation's own note before a borrowed one at the same offset, with distinct keys", () => {
+    const own = note({ char_offset: 19, ordinal: 1, text: "own" });
+    const borrowed = {
+      ...note({ char_offset: 19, ordinal: 1, text: "borrowed" }),
+      borrowed: { from: "NET", phrase: "the way" },
+    };
+    const markers = verseSegments(VERSE, [borrowed, own]).filter(
+      (s): s is Extract<VerseSegment, { kind: "marker" }> => s.kind === "marker",
+    );
+    expect(markers.map((m) => m.note.text)).toEqual(["own", "borrowed"]);
+    expect(new Set(markers.map((m) => m.key)).size).toBe(2);
+  });
 });

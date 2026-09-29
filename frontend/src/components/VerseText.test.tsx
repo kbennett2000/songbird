@@ -43,4 +43,12 @@ describe("VerseText", () => {
     expect(screen.getByText(VERSE)).toBeInTheDocument();
     expect(screen.queryByRole("button")).not.toBeInTheDocument();
   });
+
+  it("labels a note borrowed from NET as such", () => {
+    const borrowed = { ...note({ char_offset: 8 }), borrowed: { from: "NET", phrase: "For this" } };
+    render(<VerseText text={VERSE} notes={[borrowed]} onOpenNote={vi.fn()} />);
+    expect(
+      screen.getByRole("button", { name: "Translator's note 1 (from NET)" }),
+    ).toBeInTheDocument();
+  });
 });

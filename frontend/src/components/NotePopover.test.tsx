@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { NotePopover } from "@/components/NotePopover";
+import type { ShownNote } from "@/lib/borrowedNotes";
 import type { TranslatorNote } from "@/schemas";
 
 function note(overrides: Partial<TranslatorNote> = {}): TranslatorNote {
@@ -21,7 +22,7 @@ function note(overrides: Partial<TranslatorNote> = {}): TranslatorNote {
   };
 }
 
-function renderPopover(n: TranslatorNote, onJump = vi.fn(), onClose = vi.fn()) {
+function renderPopover(n: ShownNote, onJump = vi.fn(), onClose = vi.fn()) {
   const anchor = document.createElement("button");
   document.body.appendChild(anchor);
   render(<NotePopover note={n} anchor={anchor} onJump={onJump} onClose={onClose} />);
@@ -77,5 +78,23 @@ describe("NotePopover", () => {
     // Scrolling the surrounding page/reader does dismiss it (so it can't drift from its anchor).
     fireEvent.scroll(document);
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("says where a borrowed note came from and quotes the NET words it's about", () => {
+    renderPopover({ ...note(), borrowed: { from: "NET", phrase: "…be subject to rulers and" } });
+    expect(screen.getByText(/From the NET Bible/)).toHaveTextContent(
+      "From the NET Bible · NET reads “…be subject to rulers and”",
+    );
+  });
+
+  it("shows only the source for a borrowed verse-level note (no phrase)", () => {
+    renderPopover({ ...note(), borrowed: { from: "NET", phrase: "" } });
+    expect(screen.getByText("From the NET Bible")).toBeInTheDocument();
+    expect(screen.queryByText(/NET reads/)).not.toBeInTheDocument();
+  });
+
+  it("shows no source line for the translation's own note", () => {
+    renderPopover(note());
+    expect(screen.queryByText(/From the/)).not.toBeInTheDocument();
   });
 });

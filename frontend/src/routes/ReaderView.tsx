@@ -41,7 +41,8 @@ import {
   VERSE_HIGHLIGHT,
 } from "@/lib/annotationStyles";
 import { ApiError } from "@/lib/api";
-import { saveReadingPosition } from "@/lib/auth";
+import { saveReadingPosition, saveShowNetNotes } from "@/lib/auth";
+import { borrowNotes, NOTES_SOURCE, type ShownNote } from "@/lib/borrowedNotes";
 import { nextChapter, prevChapter } from "@/lib/navigation";
 import {
   createAnnotation,
@@ -59,14 +60,7 @@ import {
   updateAnnotation,
   updateSermonNote,
 } from "@/lib/reader";
-import type {
-  ReadAnnotation,
-  ReadVerse,
-  Scope,
-  SectionHeading,
-  SermonNote,
-  TranslatorNote,
-} from "@/schemas";
+import type { ReadAnnotation, ReadVerse, Scope, SectionHeading, SermonNote, User } from "@/schemas";
 
 const DEFAULT_TRANSLATION = "KJV";
 
@@ -136,9 +130,7 @@ export function ReaderView(): JSX.Element {
   const [geo, setGeo] = useState(false);
   const [map, setMap] = useState(false);
   // The translator's note whose popover is open, with the marker it's anchored to.
-  const [openNote, setOpenNote] = useState<{ note: TranslatorNote; anchor: HTMLElement } | null>(
-    null,
-  );
+  const [openNote, setOpenNote] = useState<{ note: ShownNote; anchor: HTMLElement } | null>(null);
   // The sermon notes covering the tapped verse, whose popover is open (separate system —
   // canonical, all-translations). One note → single popover; several → a stacked list.
   const [openSermon, setOpenSermon] = useState<{
@@ -189,22 +181,64 @@ export function ReaderView(): JSX.Element {
     queryKey: ["notes", translation, chapterBook, chapter],
     queryFn: () => fetchNotes(translation, chapterBook, chapter),
   });
+  // Opt-in (the user's `show_net_notes`): while reading another translation, also borrow NET's
+  // notes and place them on this translation's words (borrowedNotes.ts, ADR 0004). Placing them
+  // needs NET's verse text too. Both fetches share their cache keys with reading NET itself, and
+  // run only while borrowing.
+  const netOffered = (translationsQuery.data ?? []).some((t) => t.id === NOTES_SOURCE);
+  const canBorrowNotes = netOffered && translation !== NOTES_SOURCE;
+  const showNetNotes = user?.show_net_notes ?? false;
+  const borrowing = canBorrowNotes && showNetNotes;
+  const netNotesQuery = useQuery({
+    queryKey: ["notes", NOTES_SOURCE, chapterBook, chapter],
+    queryFn: () => fetchNotes(NOTES_SOURCE, chapterBook, chapter),
+    enabled: borrowing,
+  });
+  const netChapterQuery = useQuery({
+    queryKey: ["chapter", NOTES_SOURCE, book, chapter],
+    queryFn: () => fetchChapter(NOTES_SOURCE, book, chapter),
+    enabled: borrowing,
+  });
   // Only a genuine Concord outage warrants the notice. A 404 (NOT_FOUND) means "no notes for this
   // passage" — markers simply absent, no scary message — while CONCORD_UNREACHABLE (502) and
   // NETWORK_ERROR (0) still surface. Before the Concord v1.1.0 pin the notes route 404'd on every
   // translation, so this fired on every chapter; the bump makes a 404 mean genuinely-not-found.
+  // Borrowed NET notes follow the same rule — an outage is an error, never a silent fallback.
+  const isOutage = (q: { isError: boolean; error: unknown }) =>
+    q.isError && !(q.error instanceof ApiError && q.error.code === "NOT_FOUND");
   const notesUnreachable =
-    notesQuery.isError &&
-    !(notesQuery.error instanceof ApiError && notesQuery.error.code === "NOT_FOUND");
+    isOutage(notesQuery) || (borrowing && (isOutage(netNotesQuery) || isOutage(netChapterQuery)));
   const notesByVerse = useMemo(() => {
-    const map = new Map<number, TranslatorNote[]>();
+    const map = new Map<number, ShownNote[]>();
     for (const note of notesQuery.data ?? []) {
       const list = map.get(note.verse);
       if (list) list.push(note);
       else map.set(note.verse, [note]);
     }
+    if (borrowing && netNotesQuery.data && netChapterQuery.data && chapterQuery.data) {
+      const borrowed = borrowNotes(
+        netNotesQuery.data,
+        netChapterQuery.data.verses,
+        chapterQuery.data.verses,
+      );
+      for (const [verse, notes] of borrowed) map.set(verse, [...(map.get(verse) ?? []), ...notes]);
+    }
     return map;
-  }, [notesQuery.data]);
+  }, [notesQuery.data, borrowing, netNotesQuery.data, netChapterQuery.data, chapterQuery.data]);
+
+  // Flip the show-NET-notes preference: apply it to the cached user at once (the markers appear or
+  // clear immediately), then persist it; a failed save flips the cached value back.
+  const setShowNetNotes = (next: boolean) => {
+    const flip = (value: boolean) =>
+      queryClient.setQueryData<User | null>(["auth", "me"], (u) =>
+        u ? { ...u, show_net_notes: value } : u,
+      );
+    if (!next) setOpenNote(null); // its marker may be about to disappear
+    flip(next);
+    void saveShowNetNotes(next)
+      .then((updated) => queryClient.setQueryData(["auth", "me"], updated))
+      .catch(() => flip(!next));
+  };
 
   // Section headings for the chapter, in the CURRENT translation. Keyed like notes so switching
   // translation refetches. Pure enrichment: on error OR empty we render nothing and show NO
@@ -643,6 +677,16 @@ export function ReaderView(): JSX.Element {
               ))}
             </select>
           </label>
+          {canBorrowNotes && (
+            <label className="flex items-center gap-1.5">
+              <input
+                type="checkbox"
+                checked={showNetNotes}
+                onChange={(e) => setShowNetNotes(e.target.checked)}
+              />
+              <span className="text-gray-500 dark:text-gray-400">Show NET notes</span>
+            </label>
+          )}
         </div>
 
         <div className="flex flex-wrap items-center gap-3">

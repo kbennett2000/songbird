@@ -336,6 +336,16 @@ _Caveat (a real finding):_ these footnotes come from **NET**, which the stock Co
 correct — it lights up when a Concord build includes NET. (Softening that notice so "no notes
 here" ≠ "Concord is down" is open work; tracked in dev-notes.)
 
+**Borrowed NET notes (opt-in).** A per-user `show_net_notes` preference (default off, a checkbox in
+the reader shown only when Concord offers NET and another translation is being read) also shows
+NET's translator's notes on the translation being read. Notes join verses on the canonical verse
+number. Within a verse, each marker is placed by matching the NET words just before the note's
+anchor: the last 3, then 2, then 1 words, used only when the match is unique in the verse.
+Otherwise the marker goes at the end of the verse. The popover names NET as the source and quotes
+those NET words. NET's notes and text are fetched from Concord while borrowing and never stored,
+and an outage shows the notes-unavailable notice. See
+[ADR 0004](../adr/0004-borrow-net-notes-by-phrase-match.md).
+
 **Keyword Scripture search.** Alongside semantic search, a **keyword/semantic toggle** on the
 Search screen. Keyword search proxies Concord's `/v1/search` (`GET /api/v1/keyword-search`) for
 exact word/phrase matches with highlighted snippets; semantic search finds by meaning. When a
