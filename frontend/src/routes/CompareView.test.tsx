@@ -3,7 +3,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
 import { MemoryRouter } from "react-router-dom";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { CompareView } from "@/routes/CompareView";
 import { server } from "@/test/msw/server";
@@ -209,5 +209,21 @@ describe("CompareView", () => {
     expect(await screen.findByText("WEB 3:16")).toBeInTheDocument();
     // The missing WEB 3:15 cell shows an em-dash.
     expect(screen.getAllByText("—").length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("navigates from the bottom of the chapter and returns to the top of the page", async () => {
+    const scrollTo = vi.spyOn(window, "scrollTo").mockImplementation(() => {});
+    const user = userEvent.setup();
+    renderCompare();
+
+    expect(await screen.findByRole("heading", { name: "JHN 3" })).toBeInTheDocument();
+    await user.click(await screen.findByRole("button", { name: "Next chapter (bottom)" }));
+    expect(await screen.findByRole("heading", { name: "JHN 4" })).toBeInTheDocument();
+    expect(scrollTo).toHaveBeenCalledWith({ top: 0 });
+
+    await user.click(screen.getByRole("button", { name: "Previous chapter (bottom)" }));
+    expect(await screen.findByRole("heading", { name: "JHN 3" })).toBeInTheDocument();
+    expect(scrollTo).toHaveBeenCalledTimes(2);
+    scrollTo.mockRestore();
   });
 });
