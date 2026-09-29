@@ -299,6 +299,12 @@ export function ReaderView(): JSX.Element {
     setOpenAnnotations(null);
   };
 
+  // Bottom-of-chapter nav: go to the chapter, then start reading it from the top.
+  const navigateToTop = (b: string, c: number) => {
+    navigate(b, c);
+    if (typeof window.scrollTo === "function") window.scrollTo({ top: 0 });
+  };
+
   // Self-heal a stale *stored* position once Concord's book list is known: if the initial book is
   // one Concord no longer lists, reset to the default; if the initial chapter overruns the book,
   // clamp it. Runs once (on first book-list availability) so it heals the loaded position without
@@ -879,6 +885,28 @@ export function ReaderView(): JSX.Element {
               );
             })}
           </article>
+        )}
+        {chapterQuery.data && (
+          <nav aria-label="Chapter navigation" className="mt-8 flex justify-between font-sans">
+            <button
+              type="button"
+              className="rounded border border-gray-300 dark:border-gray-600 px-3 py-1 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-40"
+              onClick={() => prev && navigateToTop(prev.book, prev.chapter)}
+              disabled={!prev}
+              aria-label="Previous chapter (bottom)"
+            >
+              ← Prev
+            </button>
+            <button
+              type="button"
+              className="rounded border border-gray-300 dark:border-gray-600 px-3 py-1 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-40"
+              onClick={() => next && navigateToTop(next.book, next.chapter)}
+              disabled={!next}
+              aria-label="Next chapter (bottom)"
+            >
+              Next →
+            </button>
+          </nav>
         )}
       </main>
 

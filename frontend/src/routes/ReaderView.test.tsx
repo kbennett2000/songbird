@@ -336,7 +336,7 @@ describe("ReaderView", () => {
     expect(await screen.findByText(/JHN 3:16/)).toBeInTheDocument();
 
     // Next chapter → JHN 4; the whole position is saved (debounced).
-    await user.click(screen.getByRole("button", { name: /next chapter/i }));
+    await user.click(screen.getByRole("button", { name: "Next chapter" }));
     expect(await screen.findByText(/JHN 4:16/)).toBeInTheDocument();
     await waitFor(() =>
       expect(body).toEqual({ last_translation: "KJV", last_book: "JHN", last_chapter: 4 }),
@@ -756,6 +756,22 @@ describe("ReaderView", () => {
     expect(await screen.findByText(/JHN 4:16/)).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Previous chapter" }));
     expect(await screen.findByText(/JHN 3:16/)).toBeInTheDocument();
+  });
+
+  it("navigates from the bottom of the chapter and returns to the top of the page", async () => {
+    const scrollTo = vi.spyOn(window, "scrollTo").mockImplementation(() => {});
+    const user = userEvent.setup();
+    renderReader();
+
+    expect(await screen.findByText(/JHN 3:16/)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Next chapter (bottom)" }));
+    expect(await screen.findByText(/JHN 4:16/)).toBeInTheDocument();
+    expect(scrollTo).toHaveBeenCalledWith({ top: 0 });
+
+    await user.click(screen.getByRole("button", { name: "Previous chapter (bottom)" }));
+    expect(await screen.findByText(/JHN 3:16/)).toBeInTheDocument();
+    expect(scrollTo).toHaveBeenCalledTimes(2);
+    scrollTo.mockRestore();
   });
 
   it("keeps the annotation overlay after navigating", async () => {

@@ -58,7 +58,9 @@ That's the whole idea of songbird in one picture — Scripture on the left, and 
 tucked into the margin on the right.
 
 **Getting around.** Up top, the **Book** and **Chapter** dropdowns take you anywhere; **← Prev** and
-**Next →** walk you one chapter at a time. In a hurry? The **Jump to…** box understands plain
+**Next →** walk you one chapter at a time. You'll find a second pair at the bottom of each chapter,
+so when you finish reading you can go straight on, and the next chapter opens at its first verse.
+In a hurry? The **Jump to…** box understands plain
 references — type something like `John 3` or `Gen 1:1` and press **Go**.
 
 **Switching translations.** A *translation* is one English wording of the Bible — songbird offers
