@@ -1,9 +1,9 @@
 import { Popover } from "@/components/Popover";
+import type { ShownNote } from "@/lib/borrowedNotes";
 import { NOTE_TYPE_LABELS } from "@/lib/notes";
-import type { TranslatorNote } from "@/schemas";
 
 interface NotePopoverProps {
-  note: TranslatorNote;
+  note: ShownNote;
   /** The tapped marker button the popover anchors to. */
   anchor: HTMLElement;
   onClose: () => void;
@@ -20,11 +20,16 @@ function typeLabel(type: string | null): string {
  * A floating popover for one translator's note, anchored to its inline marker. Shows the note
  * type, its text (Greek/Hebrew Unicode renders natively), and its cross-references as buttons
  * that jump the reader via the existing canonical navigation. Positioning + dismissal live in
- * the shared {@link Popover} shell.
+ * the shared {@link Popover} shell. A note borrowed from NET says where it came from and quotes
+ * the NET words it's about, since its marker in this translation is a best-guess placement.
  */
 export function NotePopover({ note, anchor, onClose, onJump }: NotePopoverProps): JSX.Element {
   return (
-    <Popover anchor={anchor} onClose={onClose} ariaLabel={`${typeLabel(note.type)} — ${note.reference}`}>
+    <Popover
+      anchor={anchor}
+      onClose={onClose}
+      ariaLabel={`${typeLabel(note.type)} — ${note.reference}`}
+    >
       <div className="mb-1 flex items-center justify-between gap-2">
         <span className="text-xs font-semibold uppercase tracking-wide text-violet-700 dark:text-violet-400">
           {typeLabel(note.type)}
@@ -38,7 +43,22 @@ export function NotePopover({ note, anchor, onClose, onJump }: NotePopoverProps)
           ✕
         </button>
       </div>
-      <p className="whitespace-pre-wrap break-words text-gray-800 dark:text-gray-100">{note.text}</p>
+      {note.borrowed && (
+        <p className="mb-1 text-xs text-gray-500 dark:text-gray-400">
+          From the {note.borrowed.from} Bible
+          {note.borrowed.phrase && (
+            <>
+              {" "}
+              · {note.borrowed.from} reads &ldquo;
+              <span className="italic">{note.borrowed.phrase}</span>
+              &rdquo;
+            </>
+          )}
+        </p>
+      )}
+      <p className="whitespace-pre-wrap break-words text-gray-800 dark:text-gray-100">
+        {note.text}
+      </p>
       {note.cross_references.length > 0 && (
         <ul className="mt-2 flex flex-col gap-1 border-t border-gray-100 pt-2">
           {note.cross_references.map((ref) => (
