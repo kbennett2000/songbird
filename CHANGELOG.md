@@ -21,6 +21,11 @@ This project follows [Keep a Changelog](https://keepachangelog.com/) and
 - **← Prev and Next → buttons at the bottom of each chapter.** When you finish reading a chapter,
   you can go straight to the next one without scrolling back up. It opens at the top of the page.
   This works on both the reader and the Compare page.
+- **NET's translator's notes can follow you into other translations.** If your songbird offers the
+  NET Bible, tick **Show NET notes** in the reader, and NET's notes appear while you read the ESV,
+  KJV or any other translation. Each note lands on the same words when songbird can find them, and
+  otherwise at the end of the verse. Every note says it's from NET and quotes NET's wording.
+  songbird remembers the setting.
 
 ## [1.7.0] — 2026-09-07
 
