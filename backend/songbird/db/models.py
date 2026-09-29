@@ -101,6 +101,11 @@ class User(Base):
     # UI colour-scheme preference, per profile (#60): "light" | "dark" | "system". Null = follow
     # the OS until the user picks. songbird's own domain — no Concord involvement.
     theme: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    # Reader toggle: also show NET's translator's notes while reading another translation. Only the
+    # preference lives here — the notes and NET's text come from Concord at request time.
+    show_net_notes: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="0"
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=_utcnow
     )

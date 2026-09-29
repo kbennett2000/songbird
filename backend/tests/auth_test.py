@@ -262,6 +262,45 @@ async def test_patch_me_rejects_unknown_theme(
     assert resp.status_code == 422
 
 
+async def test_me_show_net_notes_defaults_off(
+    make_concord: type[FakeConcordClient],
+    unauth_client: Callable[[FakeConcordClient], httpx.AsyncClient],
+) -> None:
+    async with unauth_client(make_concord()) as client:
+        await client.post("/api/v1/auth/register", json=CREDS)
+        me = await client.get("/api/v1/auth/me")
+    assert me.json()["user"]["show_net_notes"] is False
+
+
+async def test_patch_me_sets_show_net_notes_and_does_not_clobber_others(
+    make_concord: type[FakeConcordClient],
+    unauth_client: Callable[[FakeConcordClient], httpx.AsyncClient],
+) -> None:
+    async with unauth_client(make_concord()) as client:
+        await client.post("/api/v1/auth/register", json=CREDS)
+        await client.patch(
+            "/api/v1/auth/me",
+            json={"last_translation": "ESV", "last_book": "TIT", "theme": "dark"},
+        )
+        patch = await client.patch("/api/v1/auth/me", json={"show_net_notes": True})
+        assert patch.status_code == 200
+        me = await client.get("/api/v1/auth/me")
+    user = me.json()["user"]
+    # The toggle persists; the fields this partial patch didn't send survive.
+    assert user["show_net_notes"] is True
+    assert (user["last_translation"], user["last_book"], user["theme"]) == ("ESV", "TIT", "dark")
+
+
+async def test_patch_me_rejects_non_boolean_show_net_notes(
+    make_concord: type[FakeConcordClient],
+    unauth_client: Callable[[FakeConcordClient], httpx.AsyncClient],
+) -> None:
+    async with unauth_client(make_concord()) as client:
+        await client.post("/api/v1/auth/register", json=CREDS)
+        resp = await client.patch("/api/v1/auth/me", json={"show_net_notes": "yes"})
+    assert resp.status_code == 422
+
+
 def test_argon2_hash_verifies() -> None:
     hashed = hash_password("supersecret")
     assert hashed != "supersecret"
