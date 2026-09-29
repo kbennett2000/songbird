@@ -94,6 +94,11 @@ export function CompareView(): JSX.Element {
     setChapter(c);
     setOpenNote(null);
   };
+  // Bottom-of-chapter nav: go to the chapter, then start reading it from the top.
+  const navigateToTop = (b: string, c: number) => {
+    navigate(b, c);
+    if (typeof window.scrollTo === "function") window.scrollTo({ top: 0 });
+  };
   const next = nextChapter(books, book, chapter);
   const prev = prevChapter(books, book, chapter);
 
@@ -336,6 +341,29 @@ export function CompareView(): JSX.Element {
               ))}
             </div>
           </div>
+        )}
+
+        {!allPending && (
+          <nav aria-label="Chapter navigation" className="mt-8 flex justify-between font-sans">
+            <button
+              type="button"
+              className="rounded border border-gray-300 dark:border-gray-600 px-3 py-1 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-40"
+              onClick={() => prev && navigateToTop(prev.book, prev.chapter)}
+              disabled={!prev}
+              aria-label="Previous chapter (bottom)"
+            >
+              ← Prev
+            </button>
+            <button
+              type="button"
+              className="rounded border border-gray-300 dark:border-gray-600 px-3 py-1 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-40"
+              onClick={() => next && navigateToTop(next.book, next.chapter)}
+              disabled={!next}
+              aria-label="Next chapter (bottom)"
+            >
+              Next →
+            </button>
+          </nav>
         )}
       </main>
 
