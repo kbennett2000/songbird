@@ -20,6 +20,7 @@ This project follows [Keep a Changelog](https://keepachangelog.com/) and
 ### Added
 - **← Prev and Next → buttons at the bottom of each chapter.** When you finish reading a chapter,
   you can go straight to the next one without scrolling back up. It opens at the top of the page.
+  This works on both the reader and the Compare page.
 
 ## [1.7.0] — 2026-09-07
 
