@@ -1381,3 +1381,133 @@ describe("ReaderView", () => {
     });
   });
 });
+
+describe("ReaderView — borrowed NET notes", () => {
+  const TRANSLATIONS = ["KJV", "NET"].map((id) => ({
+    id,
+    name: id,
+    language: "en",
+    versification: "standard",
+    attribution: null,
+  }));
+  // The same verse in two wordings; NET's note sits just after "and".
+  const TEXT: Record<string, string> = {
+    NET: "to be subject to rulers and authorities",
+    KJV: "to be submissive to rulers and authorities",
+  };
+  const NET_NOTE = {
+    book: "JHN",
+    chapter: 3,
+    verse: 16,
+    reference: "John 3:16",
+    type: "tn",
+    text: "Grk “and”; a borrowed note.",
+    char_offset: TEXT.NET!.indexOf(" authorities"),
+    marker: "1",
+    ordinal: 0,
+    cross_references: [],
+  };
+
+  /** Concord offers NET; each translation reads its own wording; only NET has notes. The signed-in
+   * user is stateful, so a PATCH is reflected by later reads (and recorded in `patches`). */
+  function useNetWorld(showNetNotes = false) {
+    let me = {
+      id: 1,
+      username: "tester",
+      is_admin: true,
+      last_translation: null,
+      last_book: null,
+      last_chapter: null,
+      theme: null,
+      show_net_notes: showNetNotes,
+      created_at: "2026-01-01T00:00:00Z",
+    };
+    const patches: Record<string, unknown>[] = [];
+    server.use(
+      http.get("/api/v1/auth/me", () => HttpResponse.json({ user: me })),
+      http.patch("/api/v1/auth/me", async ({ request }) => {
+        const body = (await request.json()) as Record<string, unknown>;
+        patches.push(body);
+        me = { ...me, ...body };
+        return HttpResponse.json({ user: me });
+      }),
+      http.get("/api/v1/translations", () => HttpResponse.json({ translations: TRANSLATIONS })),
+      http.get("/api/v1/read/:translation/:book/:chapter", ({ params }) => {
+        const t = String(params.translation);
+        const body = readResponse([], t);
+        body.verses[0]!.text = TEXT[t] ?? "";
+        return HttpResponse.json(body);
+      }),
+      http.get("/api/v1/notes/:translation/:book/:chapter", ({ params }) =>
+        HttpResponse.json(String(params.translation) === "NET" ? [NET_NOTE] : []),
+      ),
+    );
+    return patches;
+  }
+
+  it("hides the checkbox when Concord doesn't offer NET", async () => {
+    renderReader(); // default translations: KJV + WEB
+    expect(await screen.findByText(/JHN 3:16/)).toBeInTheDocument();
+    expect(screen.queryByLabelText("Show NET notes")).not.toBeInTheDocument();
+  });
+
+  it("borrows NET's note onto the matching words when switched on, and saves the choice", async () => {
+    const patches = useNetWorld();
+    const user = userEvent.setup();
+    renderReader();
+
+    // KJV, switch off: no translator's-note marker at all.
+    const checkbox = await screen.findByLabelText("Show NET notes");
+    expect(await screen.findByText(TEXT.KJV!)).toBeInTheDocument();
+    expect(checkbox).not.toBeChecked();
+    expect(screen.queryByRole("button", { name: /Translator's note/ })).not.toBeInTheDocument();
+
+    // Switch on → NET's note appears on KJV's "rulers and", and the choice is saved.
+    await user.click(checkbox);
+    const marker = await screen.findByRole("button", { name: "Translator's note 1 (from NET)" });
+    expect(marker.previousSibling?.textContent).toBe("to be submissive to rulers and");
+    await waitFor(() => expect(patches).toContainEqual({ show_net_notes: true }));
+
+    // The popover says where it came from and which NET words it's about.
+    await user.click(marker);
+    expect(await screen.findByText(/a borrowed note/)).toBeInTheDocument();
+    expect(screen.getByText(/From the NET Bible/)).toHaveTextContent(
+      "From the NET Bible · NET reads “to be subject to rulers and”",
+    );
+
+    // Switch off → the borrowed marker clears.
+    await user.click(screen.getByLabelText("Show NET notes"));
+    await waitFor(() =>
+      expect(screen.queryByRole("button", { name: /Translator's note/ })).not.toBeInTheDocument(),
+    );
+    await waitFor(() => expect(patches).toContainEqual({ show_net_notes: false }));
+  });
+
+  it("hides the checkbox while reading NET itself, which shows its own notes", async () => {
+    useNetWorld(true);
+    const user = userEvent.setup();
+    renderReader();
+
+    // Wait until Concord's translation list (with NET) has loaded — the checkbox signals it.
+    expect(await screen.findByLabelText("Show NET notes")).toBeChecked();
+    await user.selectOptions(screen.getByLabelText("Translation"), "NET");
+    expect(await screen.findByRole("button", { name: "Translator's note 1" })).toBeInTheDocument();
+    expect(screen.queryByLabelText("Show NET notes")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /from NET/ })).not.toBeInTheDocument();
+  });
+
+  it("shows the notes-unavailable notice when NET's notes can't be reached", async () => {
+    useNetWorld(true);
+    server.use(
+      http.get("/api/v1/notes/:translation/:book/:chapter", ({ params }) =>
+        String(params.translation) === "NET"
+          ? HttpResponse.json({ detail: { code: "CONCORD_UNREACHABLE" } }, { status: 502 })
+          : HttpResponse.json([]),
+      ),
+    );
+    renderReader();
+
+    expect(await screen.findByText(TEXT.KJV!)).toBeInTheDocument();
+    expect(await screen.findByText(/Translator.*notes unavailable/)).toBeInTheDocument();
+  });
+});
