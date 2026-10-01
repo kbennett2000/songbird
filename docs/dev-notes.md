@@ -4,6 +4,64 @@ A running log of per-slice decisions, gotchas, and how each slice was verified. 
 
 ---
 
+## v1.8 slice A1 — the note view (a study Bible's notes, shown properly)
+
+- **Date:** 2026-10-01
+- **Branch:** `slice/v1.8-a1-note-view`
+- **Spec:** `docs/v1.8/STUDY-BIBLE-SPEC.md` §3 ("The note view" and "Search"). Slice A ships as two
+  PRs; A2 (notes from any source: the per-source checkboxes, the preference list and its
+  migration, ADR 0005) is stacked on this one.
+
+### Why
+
+Concord v8 is loading the Every Man's Bible's notes with fields NET never needed (Concord
+ADR-0011): a label for the kind of note, a title, the passages it covers, and Markdown text with
+`ref:` links. songbird already showed EMB's text; this makes its notes readable.
+
+### What landed
+
+- **The backend would have dropped every new field.** songbird validates Concord's notes into
+  `concord/schemas.py` (Pydantic ignores unknown keys) and re-maps them field by field into
+  `api/schemas.py`. Both layers now carry `label`, `title`, `text_format`, `passages` on notes,
+  `label` and `text_format` on search hits, and `note_count` on translations. `text_format` is a
+  plain string, not a `Literal["markdown"]`: an unknown future value must not fail a whole
+  chapter's notes; the client treats only `"markdown"` as Markdown. `image` isn't modelled until
+  slice B gives it a value.
+- **Markdown is parsed, never injected.** markdown-it (`html: false`, `linkify: false`) turns the
+  text into tokens and `NoteMarkdown.tsx` walks them into React elements. Raw HTML stays literal
+  text, bare URLs stay text, and only a well-formed `ref:` link becomes a (button) link.
+- **Not a new dependency in practice.** markdown-it 14.2.0 was already installed and already in the
+  main chunk via the note editor's tiptap-markdown. It's now declared, with `@types/markdown-it`, at
+  the installed versions. The main chunk went from 2,010.48 kB to 2,015.00 kB (+1.25 kB gzipped),
+  all of it this slice's own code.
+- **`ref:` targets are parsed to ADR-0011's grammar exactly**, backwards ranges rejected. A range
+  jumps to its start and a chapter opens at its top, via the reader's existing `navigate`.
+- **Search** badges a hit with its `label`, names the translation when more than one has notes
+  (`noteSources()`: `note_count > 0`, or NET alone against an older Concord), and strips Markdown
+  from snippets with regexes that keep `<mark>` and cope with links cut off at either edge (Concord
+  cuts snippets from the raw Markdown).
+
+### Gotchas
+
+- **Prettier isn't enforced in this repo**: 42 files on `main` already differ from it. Only the
+  files this slice created were formatted, so existing files carry no unrelated reformatting.
+- **Study-note search rows were keyed by book/chapter/verse/translation/type.** A study Bible can
+  have two notes of one kind on a verse, so the row index joined the key.
+- `npm install` synced `package-lock.json`'s stale root version (0.1.0) to `package.json`'s 1.7.0.
+  It wasn't one of the values release prep deliberately leaves alone.
+
+### How it was verified
+
+- `make check`: 546 passed (ruff, format check, pyright strict clean).
+- `make check-frontend`: 401 passed across 45 files; eslint, tsc and the build clean.
+- **Today's behavior against an older Concord**: the backend tests feed raw pre-v8 JSON through the
+  real client and check that every field songbird sent before is unchanged and the new ones are
+  null or `[]`. The frontend tests render pre-v8 notes and search hits (no `label`, no
+  `text_format`) and check they look exactly as before. Every existing fixture lacks the new
+  fields, and every existing test still passes unchanged.
+
+---
+
 ## Release prep v1.7.0 — version reconciliation + CHANGELOG (Stop 1 of a two-stop release)
 
 - **Date:** 2026-09-07

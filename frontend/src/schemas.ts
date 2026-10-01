@@ -6,6 +6,9 @@ export const translationSchema = z.object({
   language: z.string(),
   versification: z.string(),
   attribution: z.string().nullable(),
+  // How many notes Concord has loaded for this translation (Concord v8). Above 0 = a notes
+  // source. Null/absent from a Concord that predates it — see noteSources().
+  note_count: z.number().nullable().optional(),
 });
 
 export const translationsResponseSchema = z.object({
@@ -407,17 +410,31 @@ export const noteCrossReferenceSchema = z.object({
   reference: z.string(), // human-readable, e.g. "Romans 5:8"
 });
 
+// A range a note covers beyond its anchor verse, in the note's own book (Concord v8).
+export const notePassageSchema = z.object({
+  start_chapter: z.number(),
+  start_verse: z.number(),
+  end_chapter: z.number(),
+  end_verse: z.number(),
+  reference: z.string(), // human-readable, e.g. "Genesis 12:10-20"
+});
+
 export const translatorNoteSchema = z.object({
   book: z.string(), // USFM code — the note's canonical anchor
   chapter: z.number(),
   verse: z.number(),
   reference: z.string(),
-  type: z.string().nullable(), // tn | sn | tc | map | null (plain footnote)
+  type: z.string().nullable(), // tn | sn | tc | map | article | chart | null (plain footnote)
   text: z.string(),
   char_offset: z.number(),
   marker: z.string().nullable(),
   ordinal: z.number(),
   cross_references: z.array(noteCrossReferenceSchema),
+  // Concord v8 (ADR-0011). Optional so a note from an older Concord (or an older fixture) parses.
+  label: z.string().nullish(), // the source's own name for the kind ("Study Note") — shown over type
+  title: z.string().nullish(),
+  text_format: z.string().nullish(), // "markdown" → rendered as Markdown; else plain text
+  passages: z.array(notePassageSchema).optional(),
 });
 export const translatorNotesSchema = z.array(translatorNoteSchema);
 
@@ -560,8 +577,10 @@ export const studyNoteResultSchema = z.object({
   verse: z.number(),
   reference: z.string(),
   translation: z.string(),
-  type: z.string().nullable(), // tn | sn | tc | map | other → a readable badge
+  type: z.string().nullable(), // tn | sn | tc | map | other | article | chart → a readable badge
   snippet: z.string().nullable(),
+  label: z.string().nullish(), // Concord v8: the source's own name for the kind — the badge when set
+  text_format: z.string().nullish(), // "markdown" → strip the syntax from the snippet
 });
 export const studyNoteResultsSchema = z.array(studyNoteResultSchema);
 export type StudyNoteResult = z.infer<typeof studyNoteResultSchema>;

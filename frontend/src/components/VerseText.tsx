@@ -10,6 +10,11 @@ interface VerseTextProps {
   onOpenNote: (note: ShownNote, anchor: HTMLElement) => void;
 }
 
+/** A marker's name: the source's own label for the note's kind when it has one ("Study Note"). */
+function markerName(note: ShownNote): string {
+  return note.label ?? "Translator's note";
+}
+
 /**
  * Verse text with NET's translator's-note markers injected inline — superscript numbers at the
  * notes' `char_offset` positions (see {@link verseSegments} for the positioning invariant).
@@ -31,13 +36,13 @@ export function VerseText({ text, notes, onOpenNote }: VerseTextProps): JSX.Elem
             type="button"
             className="align-super font-sans text-[0.7em] font-medium text-violet-600 hover:text-violet-800 dark:text-violet-400 dark:hover:text-violet-300 hover:underline"
             onClick={(e) => onOpenNote(seg.note, e.currentTarget)}
-            aria-label={`Translator's note ${seg.number}${
+            aria-label={`${markerName(seg.note)} ${seg.number}${
               seg.note.borrowed ? ` (from ${seg.note.borrowed.from})` : ""
             }`}
             title={
               seg.note.borrowed
-                ? `Translator's note (${seg.note.borrowed.from})`
-                : "Translator's note"
+                ? `${markerName(seg.note)} (${seg.note.borrowed.from})`
+                : markerName(seg.note)
             }
           >
             {seg.number}

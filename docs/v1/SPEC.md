@@ -336,6 +336,18 @@ _Caveat (a real finding):_ these footnotes come from **NET**, which the stock Co
 correct — it lights up when a Concord build includes NET. (Softening that notice so "no notes
 here" ≠ "Concord is down" is open work; tracked in dev-notes.)
 
+**Study-Bible notes (v1.8 slice A, part 1).** Concord v8 appends `label`, `title`, `text_format`
+and `passages` to each note and notes-search hit, and `note_count` to each translation
+(Concord ADR-0011). songbird carries them through its own models (absent from an older Concord, they
+arrive null or `[]`). The note popover shows `label` over the type label, `title` as a heading, and
+the passages' `reference` strings ("Covers …"). A note with `text_format: "markdown"` is rendered
+read-only: markdown-it parses it and the tokens become React elements, so no HTML is ever injected
+and raw HTML stays literal text. A `ref:` link (ADR-0011's grammar) is a button that jumps the reader
+like a cross-reference; any other link shows only its words. Plain-text notes render as before. In
+Search, a study-note hit's badge is its `label`, the hit names its translation when more than one
+translation has notes, and a Markdown snippet loses its syntax while keeping `<mark>`. Specified in
+`docs/v1.8/STUDY-BIBLE-SPEC.md`.
+
 **Borrowed NET notes (opt-in).** A per-user `show_net_notes` preference (default off, a checkbox in
 the reader shown only when Concord offers NET and another translation is being read) also shows
 NET's translator's notes on the translation being read. Notes join verses on the canonical verse

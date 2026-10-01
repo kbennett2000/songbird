@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
@@ -612,6 +612,112 @@ describe("SearchView", () => {
     expect(studyCalled).toBe(false);
     expect(screen.queryByRole("region", { name: "Note results" })).not.toBeInTheDocument();
     expect(screen.queryByRole("region", { name: "Study notes results" })).not.toBeInTheDocument();
+  });
+
+  // --- Concord v8: a study Bible's notes beside NET's. Made-up text only. ---
+
+  function translationsWithNotes(counts: Record<string, number | undefined>) {
+    return http.get("/api/v1/translations", () =>
+      HttpResponse.json({
+        translations: Object.entries(counts).map(([id, note_count]) => ({
+          id,
+          name: id,
+          language: "en",
+          versification: "standard",
+          attribution: null,
+          note_count,
+        })),
+      }),
+    );
+  }
+
+  const EMB_HIT = {
+    book: "GEN",
+    chapter: 12,
+    verse: 10,
+    reference: "Genesis 12:10",
+    translation: "EMB",
+    type: "sn",
+    snippet: "A *made-up* note on <mark>famine</mark>, see [the next chapter](ref:GEN.13) and",
+    label: "Study Note",
+    text_format: "markdown",
+  };
+
+  async function searchStudyNotesFor(q: string) {
+    const user = userEvent.setup();
+    renderSearch();
+    await user.click(screen.getByRole("tab", { name: "Keyword" }));
+    await user.type(screen.getByLabelText("Search query"), q);
+    await user.click(screen.getByRole("button", { name: "Search" }));
+    return screen.findByRole("region", { name: "Study notes results" });
+  }
+
+  it("badges a study Bible's note with its own label and names its Bible among several", async () => {
+    server.use(
+      translationsWithNotes({ EMB: 9, KJV: 0, NET: 12 }),
+      http.get("/api/v1/keyword-search", () => HttpResponse.json([])),
+      http.get("/api/v1/annotations", () => HttpResponse.json([])),
+      http.get("/api/v1/study-notes-search", () => HttpResponse.json([EMB_HIT])),
+    );
+    const section = await searchStudyNotesFor("famine");
+    expect(within(section).getByText("Study Note")).toBeInTheDocument();
+    expect(within(section).queryByText("Study note")).not.toBeInTheDocument();
+    expect(await within(section).findByText("EMB")).toBeInTheDocument();
+  });
+
+  it("shows a Markdown snippet without its syntax, highlights kept", async () => {
+    server.use(
+      translationsWithNotes({ EMB: 9, KJV: 0 }),
+      http.get("/api/v1/keyword-search", () => HttpResponse.json([])),
+      http.get("/api/v1/annotations", () => HttpResponse.json([])),
+      http.get("/api/v1/study-notes-search", () => HttpResponse.json([EMB_HIT])),
+    );
+    const section = await searchStudyNotesFor("famine");
+    const mark = within(section).getByText("famine");
+    expect(mark.tagName).toBe("MARK");
+    const snippet = mark.parentElement!;
+    expect(snippet).toHaveTextContent("A made-up note on famine, see the next chapter and");
+    expect(snippet.textContent).not.toMatch(/[*[\]()]|ref:/);
+  });
+
+  it("doesn't name the Bible when only one has notes", async () => {
+    server.use(
+      translationsWithNotes({ EMB: 9, KJV: 0 }),
+      http.get("/api/v1/keyword-search", () => HttpResponse.json([])),
+      http.get("/api/v1/annotations", () => HttpResponse.json([])),
+      http.get("/api/v1/study-notes-search", () => HttpResponse.json([EMB_HIT])),
+    );
+    const section = await searchStudyNotesFor("famine");
+    expect(within(section).getByText("Study Note")).toBeInTheDocument();
+    expect(within(section).queryByText("EMB")).not.toBeInTheDocument();
+  });
+
+  it("an older Concord's NET hit looks as before: type badge, no Bible named, snippet as sent", async () => {
+    server.use(
+      translationsWithNotes({ KJV: undefined, NET: undefined }),
+      http.get("/api/v1/keyword-search", () => HttpResponse.json([])),
+      http.get("/api/v1/annotations", () => HttpResponse.json([])),
+      http.get("/api/v1/study-notes-search", () =>
+        HttpResponse.json([
+          {
+            book: "JHN",
+            chapter: 3,
+            verse: 16,
+            reference: "John 3:16",
+            translation: "NET",
+            type: "tn",
+            snippet: "A plain *made-up* <mark>note</mark>.",
+          },
+        ]),
+      ),
+    );
+    const section = await searchStudyNotesFor("note");
+    expect(within(section).getByText("Translator’s note")).toBeInTheDocument();
+    expect(within(section).queryByText("NET")).not.toBeInTheDocument();
+    // A plain-text note's snippet is shown exactly as Concord sent it.
+    expect(within(section).getByText("note").parentElement).toHaveTextContent(
+      "A plain *made-up* note.",
+    );
   });
 
   it("preserves scope selections across the mode toggle (#66)", async () => {

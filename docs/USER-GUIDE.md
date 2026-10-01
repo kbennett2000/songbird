@@ -83,6 +83,13 @@ footnotes. If you ever see **small raised numbers** sprinkled through the text, 
 phrase. **The standard songbird setup includes none of these,** so most readers won't see them at all
 — there's nothing missing if your text is clean.
 
+**A study Bible's notes.** Some Scripture engines also carry a study Bible, such as the Every Man's
+Bible. When you read it, its notes appear the same way, as small raised numbers you can tap. These
+notes can say more. Each one starts with what kind of note it is, like *Study Note* or *Textual Note*,
+and some have a heading and the verses they cover. The text keeps the book's own paragraphs, italics
+and lists. **A reference shown in blue is a link:** tap it and the reader jumps to that passage. A
+long note scrolls inside its box.
+
 **NET's notes, in the translation you're reading.** If your songbird offers the NET Bible, a **Show
 NET notes** checkbox sits next to the Translation menu whenever you're reading a different
 translation. Tick it, and NET's notes appear in your translation too, on the same words wherever
@@ -373,7 +380,9 @@ each wording lands:
 Notice the row of checkboxes under the search box: the same search can also look through **your own
 notes** and through **study notes** — the translators' footnotes from [Reading](#reading). Study notes
 are **only there when your Scripture engine provides them** (the standard setup ships none), so that
-option simply stays quiet until it has something to find.
+option simply stays quiet until it has something to find. A study Bible's notes are labelled with
+their own kind, like *Study Note*, and when more than one Bible has notes, each result says which
+Bible it came from.
 
 **Find your own notes.** Two ways, depending on what you remember. If you recall a *word* you wrote,
 search for it with **Your notes** ticked in that same checkbox row:

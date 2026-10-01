@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { borrowNotes, placeBorrowedNote, words } from "@/lib/borrowedNotes";
+import { borrowNotes, noteSources, placeBorrowedNote, words } from "@/lib/borrowedNotes";
 import type { TranslatorNote } from "@/schemas";
 
 // Titus 3:1 — NET's note on "and" should land on the ESV's "and" (the feature's motivating case).
@@ -150,5 +150,30 @@ describe("borrowNotes", () => {
       after(ESV_TIT_3_1, "obedient"),
     ]);
     expect(byVerse.get(1)?.every((n) => n.borrowed?.from === "NET")).toBe(true);
+  });
+});
+
+describe("noteSources", () => {
+  const tr = (id: string, note_count?: number | null) => ({ id, note_count });
+
+  it("is every translation with notes, in Concord's order, when Concord counts them", () => {
+    expect(noteSources([tr("EMB", 7), tr("ESV", 0), tr("NET", 58), tr("KJV", 0)])).toEqual([
+      "EMB",
+      "NET",
+    ]);
+  });
+
+  it("drops NET when a counting Concord says it has none", () => {
+    expect(noteSources([tr("NET", 0), tr("KJV", 0)])).toEqual([]);
+  });
+
+  it("falls back to NET alone against a Concord that doesn't send note_count", () => {
+    expect(noteSources([tr("KJV"), tr("NET"), tr("EMB")])).toEqual(["NET"]);
+    expect(noteSources([tr("KJV", null), tr("NET", null)])).toEqual(["NET"]);
+  });
+
+  it("is empty against an older Concord without NET (the stock image)", () => {
+    expect(noteSources([tr("KJV"), tr("WEB")])).toEqual([]);
+    expect(noteSources([])).toEqual([]);
   });
 });

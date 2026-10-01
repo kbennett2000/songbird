@@ -13,6 +13,9 @@ class Translation(BaseModel):
     language: str
     versification: str
     attribution: str | None = None
+    # How many notes Concord has loaded for this translation (Concord v8, ADR-0011). Any
+    # translation above 0 is a notes source. None = a Concord that predates the field.
+    note_count: int | None = None
 
 
 class TranslationsResponse(BaseModel):
@@ -390,20 +393,38 @@ class NoteCrossReference(BaseModel):
     reference: str
 
 
+class NotePassage(BaseModel):
+    """A range a note covers beyond its anchor verse, in the note's own book (Concord v8)."""
+
+    start_chapter: int
+    start_verse: int
+    end_chapter: int
+    end_verse: int
+    reference: str  # human-readable, e.g. "Genesis 12:10-20"
+
+
 class TranslatorNote(BaseModel):
     """One translator's note: its canonical anchor, the `char_offset` point a client uses to
-    place the marker in the verse text, and the note's own cross-references."""
+    place the marker in the verse text, and the note's own cross-references. The fields after
+    `cross_references` are Concord v8's (ADR-0011) — all optional, so an older Concord's notes
+    parse as before."""
 
     book: str  # USFM code — canonical
     chapter: int
     verse: int
     reference: str
-    type: str | None = None  # tn | sn | tc | map | null (plain footnote)
+    type: str | None = None  # tn | sn | tc | map | article | chart | null (plain footnote)
     text: str
     char_offset: int
     marker: str | None = None
     ordinal: int
     cross_references: list[NoteCrossReference]
+    label: str | None = None  # the source's own name for the kind ("Study Note")
+    title: str | None = None
+    # "markdown", or None for plain text. A str, not a Literal: an unknown future value must not
+    # fail a whole chapter's notes — the client renders only "markdown" as Markdown.
+    text_format: str | None = None
+    passages: list[NotePassage] = []
 
 
 class NotesResponse(BaseModel):
@@ -453,8 +474,10 @@ class NoteSearchHit(BaseModel):
     verse: int
     reference: str
     translation: str  # which translation's notes the hit came from
-    type: str | None = None  # tn | sn | tc | map | other
+    type: str | None = None  # tn | sn | tc | map | other | article | chart
     snippet: str | None = None  # note text with <mark>…</mark> around the matched term(s)
+    label: str | None = None  # Concord v8: the source's own name for the kind of note
+    text_format: str | None = None  # "markdown" → the snippet is cut from raw Markdown
 
 
 class NoteSearchResponse(BaseModel):

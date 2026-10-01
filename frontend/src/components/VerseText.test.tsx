@@ -51,4 +51,16 @@ describe("VerseText", () => {
       screen.getByRole("button", { name: "Translator's note 1 (from NET)" }),
     ).toBeInTheDocument();
   });
+
+  it("names a marker by the source's own label when the note has one", () => {
+    render(
+      <VerseText
+        text={VERSE}
+        notes={[note({ char_offset: 8, label: "Study Note" })]}
+        onOpenNote={vi.fn()}
+      />,
+    );
+    const marker = screen.getByRole("button", { name: "Study Note 1" });
+    expect(marker).toHaveAttribute("title", "Study Note");
+  });
 });

@@ -97,4 +97,60 @@ describe("NotePopover", () => {
     renderPopover(note());
     expect(screen.queryByText(/From the/)).not.toBeInTheDocument();
   });
+
+  // --- Concord v8's fields (a study Bible's notes). Made-up text only. ---
+
+  it("shows the source's own label over the type label", () => {
+    renderPopover(note({ type: "sn", label: "Textual Note" }));
+    expect(screen.getByText("Textual Note")).toBeInTheDocument();
+    expect(screen.queryByText("Study note")).not.toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "Textual Note — John 3:16" })).toBeInTheDocument();
+  });
+
+  it("shows the title as a heading and what the note covers under it", () => {
+    renderPopover(
+      note({
+        title: "A made-up heading",
+        passages: [
+          { start_chapter: 3, start_verse: 16, end_chapter: 3, end_verse: 21, reference: "John 3:16-21" },
+          { start_chapter: 5, start_verse: 1, end_chapter: 5, end_verse: 9, reference: "John 5:1-9" },
+        ],
+      }),
+    );
+    expect(screen.getByRole("heading", { name: "A made-up heading" })).toBeInTheDocument();
+    expect(screen.getByText("Covers John 3:16-21; John 5:1-9")).toBeInTheDocument();
+  });
+
+  it("renders a Markdown note as Markdown, with ref: links that jump", async () => {
+    const { onJump } = renderPopover(
+      note({
+        text: "A *made-up* note.\n\n- first\n- second\n\nSee [chapter 4](ref:JHN.4).",
+        text_format: "markdown",
+      }),
+    );
+    expect(screen.getByText("made-up").tagName).toBe("EM");
+    expect(screen.getByRole("dialog").querySelectorAll("li")).toHaveLength(2);
+    await userEvent.click(screen.getByRole("button", { name: "chapter 4" }));
+    expect(onJump).toHaveBeenCalledWith("JHN", 4, null);
+  });
+
+  it("keeps a plain-text note exactly as before — Markdown characters and all", () => {
+    renderPopover(note({ text: "Plain *text*, [not a link](ref:JHN.4)." }));
+    expect(screen.getByText("Plain *text*, [not a link](ref:JHN.4).")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "not a link" })).not.toBeInTheDocument();
+  });
+
+  it("an older Concord's note (no v8 fields) shows no heading and no 'Covers' line", () => {
+    renderPopover(note());
+    expect(screen.queryByRole("heading")).not.toBeInTheDocument();
+    expect(screen.queryByText(/^Covers/)).not.toBeInTheDocument();
+  });
+
+  it("keeps the kind and Close pinned while a long note scrolls", () => {
+    renderPopover(note({ label: "Study Note", text: "A long made-up note. ".repeat(200) }));
+    const header = screen.getByText("Study Note").parentElement!;
+    expect(header).toHaveClass("sticky");
+    expect(header).toContainElement(screen.getByRole("button", { name: "Close" }));
+    expect(screen.getByRole("dialog")).toHaveClass("overflow-y-auto");
+  });
 });
