@@ -112,6 +112,8 @@ async def study_notes_search(
             translation=h.translation,
             type=h.type,
             snippet=h.snippet,
+            label=h.label,
+            text_format=h.text_format,
         )
         for h in result.hits
     ]

@@ -6,7 +6,7 @@ an error — so the reader simply shows no markers. Mirrors the geography pass-t
 from fastapi import APIRouter, Depends
 
 from songbird.api.deps import get_concord_client
-from songbird.api.schemas import NoteCrossReference, TranslatorNote
+from songbird.api.schemas import NoteCrossReference, NotePassage, TranslatorNote
 from songbird.concord.client import (
     ConcordClient,
     ConcordNotFoundError,
@@ -51,6 +51,19 @@ async def notes_in_chapter(
                     reference=x.reference,
                 )
                 for x in n.cross_references
+            ],
+            label=n.label,
+            title=n.title,
+            text_format=n.text_format,
+            passages=[
+                NotePassage(
+                    start_chapter=p.start_chapter,
+                    start_verse=p.start_verse,
+                    end_chapter=p.end_chapter,
+                    end_verse=p.end_verse,
+                    reference=p.reference,
+                )
+                for p in n.passages
             ],
         )
         for n in result.notes

@@ -766,21 +766,36 @@ class NoteCrossReference(BaseModel):
     reference: str  # human-readable, e.g. "Romans 5:8"
 
 
+class NotePassage(BaseModel):
+    """A range a note covers beyond its anchor verse, in the note's own book (from Concord)."""
+
+    start_chapter: int
+    start_verse: int
+    end_chapter: int
+    end_verse: int
+    reference: str  # human-readable, e.g. "Genesis 12:10-20"
+
+
 class TranslatorNote(BaseModel):
     """One translator's note (from Concord). Translation-specific: `char_offset` is a point
     anchor into THAT translation's verse text where the marker attaches. songbird stores
-    none of this — it's a pass-through of Concord's notes data."""
+    none of this — it's a pass-through of Concord's notes data. The last four fields are
+    Concord v8's (ADR-0011); an older Concord sends none, and they arrive as null / []."""
 
     book: str  # USFM code — canonical (the note's anchor)
     chapter: int
     verse: int
     reference: str  # human-readable, e.g. "John 3:16"
-    type: str | None  # tn | sn | tc | map | null (plain footnote)
+    type: str | None  # tn | sn | tc | map | article | chart | null (plain footnote)
     text: str
     char_offset: int  # point anchor into the verse text — where the marker attaches
     marker: str | None  # source marker (e.g. NET's footnote number)
     ordinal: int  # stable order within a verse
     cross_references: list[NoteCrossReference]
+    label: str | None  # the source's own name for the kind ("Study Note") — shown over `type`
+    title: str | None  # a heading
+    text_format: str | None  # "markdown" → render `text` as Markdown; null → plain text
+    passages: list[NotePassage]  # what the note covers beyond its anchor verse
 
 
 class SectionHeading(BaseModel):
@@ -808,8 +823,10 @@ class StudyNoteResult(BaseModel):
     verse: int
     reference: str
     translation: str  # which translation's notes the hit came from
-    type: str | None  # tn | sn | tc | map | other → a readable badge client-side
+    type: str | None  # tn | sn | tc | map | other | article | chart → a badge client-side
     snippet: str | None
+    label: str | None  # Concord v8: the source's own name for the kind — the badge when set
+    text_format: str | None  # "markdown" → the client strips Markdown syntax from the snippet
 
 
 class ResolvedReference(BaseModel):

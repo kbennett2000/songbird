@@ -44,6 +44,9 @@ async def test_study_notes_search_returns_shaped_hits(
             "translation": "NET",
             "type": "sn",
             "snippet": "The Greek word for <mark>love</mark> here is ἀγάπη.",
+            # Concord v8's fields — absent from an older Concord's hit, so they arrive as null.
+            "label": None,
+            "text_format": None,
         }
     ]
 
