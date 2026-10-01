@@ -93,12 +93,26 @@ describe("verseSegments", () => {
     const own = note({ char_offset: 19, ordinal: 1, text: "own" });
     const borrowed = {
       ...note({ char_offset: 19, ordinal: 1, text: "borrowed" }),
-      borrowed: { from: "NET", phrase: "the way" },
+      borrowed: { from: "NET", phrase: "the way", rank: 0 },
     };
     const markers = verseSegments(VERSE, [borrowed, own]).filter(
       (s): s is Extract<VerseSegment, { kind: "marker" }> => s.kind === "marker",
     );
     expect(markers.map((m) => m.note.text)).toEqual(["own", "borrowed"]);
     expect(new Set(markers.map((m) => m.key)).size).toBe(2);
+  });
+
+  it("orders borrowed sources at one spot by checkbox rank, keys unique across sources", () => {
+    const at = (text: string, from?: string, rank = 0) => ({
+      ...note({ char_offset: 19, ordinal: 1, text }),
+      ...(from ? { borrowed: { from, phrase: "", rank } } : {}),
+    });
+    // Same offset, same ordinal in every source; given out of order.
+    const markers = verseSegments(VERSE, [at("net", "NET", 1), at("own"), at("emb", "EMB", 0)]).filter(
+      (s): s is Extract<VerseSegment, { kind: "marker" }> => s.kind === "marker",
+    );
+    expect(markers.map((m) => m.note.text)).toEqual(["own", "emb", "net"]);
+    expect(markers.map((m) => m.number)).toEqual([1, 2, 3]);
+    expect(new Set(markers.map((m) => m.key)).size).toBe(3);
   });
 });

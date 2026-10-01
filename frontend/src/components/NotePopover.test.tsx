@@ -80,22 +80,34 @@ describe("NotePopover", () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
-  it("says where a borrowed note came from and quotes the NET words it's about", () => {
-    renderPopover({ ...note(), borrowed: { from: "NET", phrase: "…be subject to rulers and" } });
-    expect(screen.getByText(/From the NET Bible/)).toHaveTextContent(
-      "From the NET Bible · NET reads “…be subject to rulers and”",
+  it("says where a borrowed note came from and quotes the source's words it's about", () => {
+    renderPopover({
+      ...note(),
+      borrowed: { from: "NET", phrase: "…be subject to rulers and", rank: 0 },
+    });
+    expect(screen.getByText(/From NET/)).toHaveTextContent(
+      "From NET · NET reads “…be subject to rulers and”",
     );
   });
 
+  it("names any source by its code, the one on its checkbox", () => {
+    renderPopover({
+      ...note({ label: "Textual Note" }),
+      borrowed: { from: "EMB", phrase: "made-up words", rank: 1 },
+    });
+    expect(screen.getByText(/From EMB/)).toHaveTextContent("From EMB · EMB reads “made-up words”");
+    expect(screen.getByText("Textual Note")).toBeInTheDocument();
+  });
+
   it("shows only the source for a borrowed verse-level note (no phrase)", () => {
-    renderPopover({ ...note(), borrowed: { from: "NET", phrase: "" } });
-    expect(screen.getByText("From the NET Bible")).toBeInTheDocument();
+    renderPopover({ ...note(), borrowed: { from: "NET", phrase: "", rank: 0 } });
+    expect(screen.getByText("From NET")).toBeInTheDocument();
     expect(screen.queryByText(/NET reads/)).not.toBeInTheDocument();
   });
 
   it("shows no source line for the translation's own note", () => {
     renderPopover(note());
-    expect(screen.queryByText(/From the/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/^From /)).not.toBeInTheDocument();
   });
 
   // --- Concord v8's fields (a study Bible's notes). Made-up text only. ---
