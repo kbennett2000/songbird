@@ -22,6 +22,18 @@ import type { TranslatorNote } from "@/schemas";
 /** The one translation Concord has translator's notes for — the source the reader can borrow. */
 export const NOTES_SOURCE = "NET";
 
+/**
+ * The translations that have notes, in Concord's order. A Concord v8 says so per translation
+ * (`note_count` above 0). An older Concord doesn't send `note_count` at all; there, NET is the
+ * one source when Concord offers it — today's behavior.
+ */
+export function noteSources(translations: { id: string; note_count?: number | null }[]): string[] {
+  if (translations.some((t) => t.note_count != null)) {
+    return translations.filter((t) => (t.note_count ?? 0) > 0).map((t) => t.id);
+  }
+  return translations.some((t) => t.id === NOTES_SOURCE) ? [NOTES_SOURCE] : [];
+}
+
 /** A translator's note as the reader shows it — its own, or borrowed from {@link NOTES_SOURCE}. */
 export type ShownNote = TranslatorNote & {
   borrowed?: {

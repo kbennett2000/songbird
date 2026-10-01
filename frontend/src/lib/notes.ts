@@ -17,6 +17,16 @@ export function studyNoteBadge(type: string | null): string {
   return (type && NOTE_TYPE_LABELS[type]) || "Note";
 }
 
+/**
+ * The reader's name for a note's kind: the source's own `label` when Concord sends one ("Study
+ * Note", Concord v8), otherwise the type's label — a plain footnote (no type) is a "Footnote".
+ */
+export function noteKindLabel(note: { label?: string | null; type: string | null }): string {
+  if (note.label) return note.label;
+  if (!note.type) return "Footnote";
+  return NOTE_TYPE_LABELS[note.type] ?? "Note";
+}
+
 /** The canonical anchor fields both annotations and sermon notes carry. */
 export interface NoteAnchor {
   book_usfm: string;
