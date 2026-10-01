@@ -4,7 +4,9 @@ import { Link } from "react-router-dom";
 
 import { TopNav } from "@/components/TopNav";
 import { useReadingTranslation } from "@/hooks/useReadingTranslation";
+import { noteSources } from "@/lib/borrowedNotes";
 import { markSegments } from "@/lib/highlight";
+import { markdownSnippetText } from "@/lib/noteMarkdown";
 import { noteReference, notePreview, readerLink, studyNoteBadge } from "@/lib/notes";
 import {
   fetchBooks,
@@ -108,6 +110,8 @@ export function SearchView(): JSX.Element {
     [booksQuery.data],
   );
   const translationsQuery = useQuery({ queryKey: ["translations"], queryFn: fetchTranslations });
+  // With more than one Bible's notes in Concord, each study-note hit names whose note it is.
+  const severalNoteSources = noteSources(translationsQuery.data ?? []).length > 1;
 
   const semantic = useQuery({
     queryKey: ["semantic-search", query, readingTranslation],
@@ -393,16 +397,22 @@ export function SearchView(): JSX.Element {
                   <span className="text-sm font-normal text-gray-400 dark:text-gray-500">(keyword)</span>
                 </h2>
                 <ul className="flex flex-col gap-3">
-                  {studyNotes.data.map((n) => (
+                  {studyNotes.data.map((n, i) => (
                     <li
-                      key={`${n.book}-${n.chapter}-${n.verse}-${n.translation}-${n.type ?? ""}`}
+                      // A study Bible can have two notes of one kind on a verse: the index keeps keys unique.
+                      key={`${n.book}-${n.chapter}-${n.verse}-${n.translation}-${n.type ?? ""}-${i}`}
                       className="rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4"
                     >
                       <div className="flex items-center gap-2">
                         <span className="font-semibold">{n.reference}</span>
                         <span className="rounded bg-violet-100 px-2 py-0.5 text-xs font-medium text-violet-800">
-                          {studyNoteBadge(n.type)}
+                          {n.label ?? studyNoteBadge(n.type)}
                         </span>
+                        {severalNoteSources && (
+                          <span className="text-xs font-medium text-gray-500 dark:text-gray-400">
+                            {n.translation}
+                          </span>
+                        )}
                         <Link
                           to={`/read?book=${n.book}&chapter=${n.chapter}&verse=${n.verse}`}
                           className="ml-auto text-sm text-blue-700 dark:text-blue-400 hover:underline"
@@ -411,7 +421,11 @@ export function SearchView(): JSX.Element {
                         </Link>
                       </div>
                       {n.snippet && (
-                        <p className="mt-1 font-serif text-gray-700 dark:text-gray-200">{highlighted(n.snippet)}</p>
+                        <p className="mt-1 font-serif text-gray-700 dark:text-gray-200">
+                          {highlighted(
+                            n.text_format === "markdown" ? markdownSnippetText(n.snippet) : n.snippet,
+                          )}
+                        </p>
                       )}
                     </li>
                   ))}
