@@ -1,6 +1,7 @@
 # ADR 0004 — Borrow NET's translator's notes onto other translations by phrase match
 
-- **Status:** Accepted
+- **Status:** Accepted; generalised to any notes source by
+  [ADR 0005](0005-borrow-notes-from-any-source.md)
 - **Date:** 2026-09-29
 - **Context:** reader feature: "show NET notes on other translations"
 
