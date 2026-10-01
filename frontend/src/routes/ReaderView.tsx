@@ -1,4 +1,10 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  type UseQueryResult,
+  useMutation,
+  useQueries,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import {
   type FormEvent,
   Fragment,
@@ -41,8 +47,8 @@ import {
   VERSE_HIGHLIGHT,
 } from "@/lib/annotationStyles";
 import { ApiError } from "@/lib/api";
-import { saveReadingPosition, saveShowNetNotes } from "@/lib/auth";
-import { borrowNotes, NOTES_SOURCE, type ShownNote } from "@/lib/borrowedNotes";
+import { saveReadingPosition, saveShowNotesFrom } from "@/lib/auth";
+import { borrowNotes, noteSources, type ShownNote } from "@/lib/borrowedNotes";
 import { nextChapter, prevChapter } from "@/lib/navigation";
 import {
   createAnnotation,
@@ -60,9 +66,35 @@ import {
   updateAnnotation,
   updateSermonNote,
 } from "@/lib/reader";
-import type { ReadAnnotation, ReadVerse, Scope, SectionHeading, SermonNote, User } from "@/schemas";
+import type {
+  ReadAnnotation,
+  ReadChapter,
+  ReadVerse,
+  Scope,
+  SectionHeading,
+  SermonNote,
+  TranslatorNote,
+  User,
+} from "@/schemas";
 
 const DEFAULT_TRANSLATION = "KJV";
+
+// Only a genuine Concord outage warrants the notes notice. A 404 (NOT_FOUND) means "no notes for
+// this passage" — markers simply absent, no scary message — while CONCORD_UNREACHABLE (502) and
+// NETWORK_ERROR (0) still surface. Before the Concord v1.1.0 pin the notes route 404'd on every
+// translation, so this fired on every chapter; the bump makes a 404 mean genuinely-not-found.
+function isOutage(q: { isError: boolean; error: unknown }): boolean {
+  return q.isError && !(q.error instanceof ApiError && q.error.code === "NOT_FOUND");
+}
+
+// Combiners for the per-source borrowing queries. Module-level so their identity is stable, which
+// lets TanStack Query hand back the same combined result while nothing has changed.
+function combineBorrowedNotes(results: UseQueryResult<TranslatorNote[]>[]) {
+  return { data: results.map((r) => r.data), outage: results.some(isOutage) };
+}
+function combineBorrowedChapters(results: UseQueryResult<ReadChapter>[]) {
+  return { data: results.map((r) => r.data), outage: results.some(isOutage) };
+}
 
 type NoteKind = "annotation" | "sermon";
 
@@ -181,33 +213,37 @@ export function ReaderView(): JSX.Element {
     queryKey: ["notes", translation, chapterBook, chapter],
     queryFn: () => fetchNotes(translation, chapterBook, chapter),
   });
-  // Opt-in (the user's `show_net_notes`): while reading another translation, also borrow NET's
-  // notes and place them on this translation's words (borrowedNotes.ts, ADR 0004). Placing them
-  // needs NET's verse text too. Both fetches share their cache keys with reading NET itself, and
-  // run only while borrowing.
-  const netOffered = (translationsQuery.data ?? []).some((t) => t.id === NOTES_SOURCE);
-  const canBorrowNotes = netOffered && translation !== NOTES_SOURCE;
-  const showNetNotes = user?.show_net_notes ?? false;
-  const borrowing = canBorrowNotes && showNetNotes;
-  const netNotesQuery = useQuery({
-    queryKey: ["notes", NOTES_SOURCE, chapterBook, chapter],
-    queryFn: () => fetchNotes(NOTES_SOURCE, chapterBook, chapter),
-    enabled: borrowing,
+  // Notes from other Bibles (opt-in, ADR 0005): one "Show … notes" checkbox per notes source
+  // other than the translation being read (`noteSources`: Concord's note_count, or NET alone
+  // against an older Concord), ticked per the user's `show_notes_from`. For each ticked source,
+  // fetch its notes and its verse text (placing a note needs the source's words; ADR 0004) —
+  // sharing cache keys with reading that translation itself, and only while borrowing.
+  const notesSources = useMemo(() => noteSources(translationsQuery.data ?? []), [translationsQuery.data]);
+  const offeredSources = useMemo(
+    () => notesSources.filter((code) => code !== translation),
+    [notesSources, translation],
+  );
+  const showNotesFrom = user?.show_notes_from ?? [];
+  const borrowFrom = offeredSources.filter((code) => showNotesFrom.includes(code));
+  const borrowedNotes = useQueries({
+    queries: borrowFrom.map((code) => ({
+      queryKey: ["notes", code, chapterBook, chapter],
+      queryFn: () => fetchNotes(code, chapterBook, chapter),
+    })),
+    combine: combineBorrowedNotes,
   });
-  const netChapterQuery = useQuery({
-    queryKey: ["chapter", NOTES_SOURCE, book, chapter],
-    queryFn: () => fetchChapter(NOTES_SOURCE, book, chapter),
-    enabled: borrowing,
+  const borrowedChapters = useQueries({
+    queries: borrowFrom.map((code) => ({
+      queryKey: ["chapter", code, book, chapter],
+      queryFn: () => fetchChapter(code, book, chapter),
+    })),
+    combine: combineBorrowedChapters,
   });
-  // Only a genuine Concord outage warrants the notice. A 404 (NOT_FOUND) means "no notes for this
-  // passage" — markers simply absent, no scary message — while CONCORD_UNREACHABLE (502) and
-  // NETWORK_ERROR (0) still surface. Before the Concord v1.1.0 pin the notes route 404'd on every
-  // translation, so this fired on every chapter; the bump makes a 404 mean genuinely-not-found.
-  // Borrowed NET notes follow the same rule — an outage is an error, never a silent fallback.
-  const isOutage = (q: { isError: boolean; error: unknown }) =>
-    q.isError && !(q.error instanceof ApiError && q.error.code === "NOT_FOUND");
+  // Borrowed notes follow the same rule as the translation's own: an outage is an error (the
+  // notice), never a silent fallback (invariant 3).
   const notesUnreachable =
-    isOutage(notesQuery) || (borrowing && (isOutage(netNotesQuery) || isOutage(netChapterQuery)));
+    isOutage(notesQuery) || borrowedNotes.outage || borrowedChapters.outage;
+  const borrowKey = borrowFrom.join(",");
   const notesByVerse = useMemo(() => {
     const map = new Map<number, ShownNote[]>();
     for (const note of notesQuery.data ?? []) {
@@ -215,29 +251,43 @@ export function ReaderView(): JSX.Element {
       if (list) list.push(note);
       else map.set(note.verse, [note]);
     }
-    if (borrowing && netNotesQuery.data && netChapterQuery.data && chapterQuery.data) {
-      const borrowed = borrowNotes(
-        netNotesQuery.data,
-        netChapterQuery.data.verses,
-        chapterQuery.data.verses,
-      );
-      for (const [verse, notes] of borrowed) map.set(verse, [...(map.get(verse) ?? []), ...notes]);
-    }
+    // Each source's notes, placed on this translation's words. `rank` is the source's checkbox
+    // position, so notes at one spot read: the translation's own, then sources in that order.
+    const codes = borrowKey ? borrowKey.split(",") : [];
+    codes.forEach((code, i) => {
+      const notes = borrowedNotes.data[i];
+      const sourceChapter = borrowedChapters.data[i];
+      if (!notes || !sourceChapter || !chapterQuery.data) return;
+      const rank = offeredSources.indexOf(code);
+      const placed = borrowNotes(notes, sourceChapter.verses, chapterQuery.data.verses, code, rank);
+      for (const [verse, list] of placed) map.set(verse, [...(map.get(verse) ?? []), ...list]);
+    });
     return map;
-  }, [notesQuery.data, borrowing, netNotesQuery.data, netChapterQuery.data, chapterQuery.data]);
+  }, [
+    notesQuery.data,
+    borrowKey,
+    offeredSources,
+    borrowedNotes.data,
+    borrowedChapters.data,
+    chapterQuery.data,
+  ]);
 
-  // Flip the show-NET-notes preference: apply it to the cached user at once (the markers appear or
-  // clear immediately), then persist it; a failed save flips the cached value back.
-  const setShowNetNotes = (next: boolean) => {
-    const flip = (value: boolean) =>
+  // Tick or untick one source: apply it to the cached user at once (the markers appear or clear
+  // immediately), then persist the whole list; a failed save puts the previous list back.
+  const setShowNotesFrom = (code: string, on: boolean) => {
+    const previous = queryClient.getQueryData<User | null>(["auth", "me"])?.show_notes_from ?? [];
+    const next = on
+      ? [...previous.filter((c) => c !== code), code]
+      : previous.filter((c) => c !== code);
+    const put = (value: string[]) =>
       queryClient.setQueryData<User | null>(["auth", "me"], (u) =>
-        u ? { ...u, show_net_notes: value } : u,
+        u ? { ...u, show_notes_from: value } : u,
       );
-    if (!next) setOpenNote(null); // its marker may be about to disappear
-    flip(next);
-    void saveShowNetNotes(next)
+    if (!on) setOpenNote(null); // its marker may be about to disappear
+    put(next);
+    void saveShowNotesFrom(next)
       .then((updated) => queryClient.setQueryData(["auth", "me"], updated))
-      .catch(() => flip(!next));
+      .catch(() => put(previous));
   };
 
   // Section headings for the chapter, in the CURRENT translation. Keyed like notes so switching
@@ -677,16 +727,16 @@ export function ReaderView(): JSX.Element {
               ))}
             </select>
           </label>
-          {canBorrowNotes && (
-            <label className="flex items-center gap-1.5">
+          {offeredSources.map((code) => (
+            <label key={code} className="flex items-center gap-1.5">
               <input
                 type="checkbox"
-                checked={showNetNotes}
-                onChange={(e) => setShowNetNotes(e.target.checked)}
+                checked={showNotesFrom.includes(code)}
+                onChange={(e) => setShowNotesFrom(code, e.target.checked)}
               />
-              <span className="text-gray-500 dark:text-gray-400">Show NET notes</span>
+              <span className="text-gray-500 dark:text-gray-400">Show {code} notes</span>
             </label>
-          )}
+          ))}
         </div>
 
         <div className="flex flex-wrap items-center gap-3">

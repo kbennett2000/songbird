@@ -336,7 +336,7 @@ _Caveat (a real finding):_ these footnotes come from **NET**, which the stock Co
 correct — it lights up when a Concord build includes NET. (Softening that notice so "no notes
 here" ≠ "Concord is down" is open work; tracked in dev-notes.)
 
-**Study-Bible notes (v1.8 slice A, part 1).** Concord v8 appends `label`, `title`, `text_format`
+**Study-Bible notes (v1.8 slice A).** Concord v8 appends `label`, `title`, `text_format`
 and `passages` to each note and notes-search hit, and `note_count` to each translation
 (Concord ADR-0011). songbird carries them through its own models (absent from an older Concord, they
 arrive null or `[]`). The note popover shows `label` over the type label, `title` as a heading, and
@@ -348,15 +348,20 @@ Search, a study-note hit's badge is its `label`, the hit names its translation w
 translation has notes, and a Markdown snippet loses its syntax while keeping `<mark>`. Specified in
 `docs/v1.8/STUDY-BIBLE-SPEC.md`.
 
-**Borrowed NET notes (opt-in).** A per-user `show_net_notes` preference (default off, a checkbox in
-the reader shown only when Concord offers NET and another translation is being read) also shows
-NET's translator's notes on the translation being read. Notes join verses on the canonical verse
-number. Within a verse, each marker is placed by matching the NET words just before the note's
-anchor: the last 3, then 2, then 1 words, used only when the match is unique in the verse.
-Otherwise the marker goes at the end of the verse. The popover names NET as the source and quotes
-those NET words. NET's notes and text are fetched from Concord while borrowing and never stored,
-and an outage shows the notes-unavailable notice. See
-[ADR 0004](../adr/0004-borrow-net-notes-by-phrase-match.md).
+**Borrowed notes, from any source (opt-in).** A notes source is any translation whose Concord
+`note_count` is above 0; against a Concord that predates `note_count`, NET is the one source when
+offered. The reader shows a "Show ⟨code⟩ notes" checkbox per source, hidden while that source is
+the translation being read, backed by a per-user `show_notes_from` list (default `[]`; migration
+0015 turned a v1.7 `show_net_notes = true` into `["NET"]`). Ticked sources' notes are shown on the
+translation being read. Notes join verses on the canonical verse number. Within a verse, each
+marker is placed by matching the source's words just before the note's anchor: the last 3, then 2,
+then 1 words, used only when the match is unique in the verse. Otherwise the marker goes at the end
+of the verse, and a note anchored at its verse's start stays at the start. At one spot the
+translation's own notes come first, then borrowed ones in checkbox order. The popover names the
+source by its code and quotes those words. Sources' notes and text are fetched from Concord while
+borrowing and never stored, and an outage shows the notes-unavailable notice. See
+[ADR 0004](../adr/0004-borrow-net-notes-by-phrase-match.md) and
+[ADR 0005](../adr/0005-borrow-notes-from-any-source.md).
 
 **Keyword Scripture search.** Alongside semantic search, a **keyword/semantic toggle** on the
 Search screen. Keyword search proxies Concord's `/v1/search` (`GET /api/v1/keyword-search`) for

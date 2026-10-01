@@ -57,7 +57,7 @@ describe("placeBorrowedNote", () => {
       ESV_TIT_3_1,
     );
     expect(placed.char_offset).toBe(after(ESV_TIT_3_1, "rulers and"));
-    expect(placed.borrowed).toEqual({ from: "NET", phrase: "…to be subject to rulers and" });
+    expect(placed.borrowed).toEqual({ from: "NET", phrase: "…to be subject to rulers and", rank: 0 });
   });
 
   it("keeps the rest of the note intact", () => {
@@ -114,7 +114,7 @@ describe("placeBorrowedNote", () => {
   it("keeps a verse-level note (offset 0) at the start, with no phrase", () => {
     const placed = placeBorrowedNote(note({ char_offset: 0 }), NET_TIT_3_1, ESV_TIT_3_1);
     expect(placed.char_offset).toBe(0);
-    expect(placed.borrowed).toEqual({ from: "NET", phrase: "" });
+    expect(placed.borrowed).toEqual({ from: "NET", phrase: "", rank: 0 });
   });
 
   it("quotes a short phrase without a leading ellipsis", () => {
@@ -150,6 +150,24 @@ describe("borrowNotes", () => {
       after(ESV_TIT_3_1, "obedient"),
     ]);
     expect(byVerse.get(1)?.every((n) => n.borrowed?.from === "NET")).toBe(true);
+  });
+});
+
+describe("borrowNotes from any source", () => {
+  it("tags each placed note with its source and that source's checkbox rank", () => {
+    const placed = borrowNotes(
+      [note({ verse: 1, char_offset: 0 }), note({ verse: 1, char_offset: after(NET_TIT_3_1, "rulers and") })],
+      [{ verse: 1, text: NET_TIT_3_1 }],
+      [{ verse: 1, text: ESV_TIT_3_1 }],
+      "EMB",
+      1,
+    );
+    const notes = placed.get(1) ?? [];
+    expect(notes.map((n) => n.borrowed)).toEqual([
+      { from: "EMB", phrase: "", rank: 1 }, // anchored at the start of its verse: stays at the start
+      { from: "EMB", phrase: "…to be subject to rulers and", rank: 1 },
+    ]);
+    expect(notes.map((n) => n.char_offset)).toEqual([0, after(ESV_TIT_3_1, "rulers and")]);
   });
 });
 

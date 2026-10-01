@@ -90,12 +90,13 @@ and some have a heading and the verses they cover. The text keeps the book's own
 and lists. **A reference shown in blue is a link:** tap it and the reader jumps to that passage. A
 long note scrolls inside its box.
 
-**NET's notes, in the translation you're reading.** If your songbird offers the NET Bible, a **Show
-NET notes** checkbox sits next to the Translation menu whenever you're reading a different
-translation. Tick it, and NET's notes appear in your translation too, on the same words wherever
-songbird can find them. Tapping one tells you it came from the NET Bible and quotes NET's own
-wording, so you know what it's about. When your translation words that part differently, the note
-waits at the end of the verse instead. songbird remembers whether you left it on.
+**Another Bible's notes, in the translation you're reading.** Next to the Translation menu there's
+a checkbox for each Bible that has notes, such as **Show NET notes** or **Show EMB notes**. Tick
+one, and that Bible's notes appear in the translation you're reading too, on the same words
+wherever songbird can find them. You can tick more than one. Tapping a note tells you which Bible
+it came from (*From NET*) and quotes that Bible's own wording, so you know what it's about. When
+your translation words that part differently, the note waits at the end of the verse instead. A
+note about a whole verse sits at its start. songbird remembers which boxes you left ticked.
 
 **Light or dark.** The little sun/moon toggle in the top corner switches between a light theme and a
 dark one — easy on the eyes in a dim room — and songbird remembers which you prefer:

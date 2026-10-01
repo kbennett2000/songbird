@@ -6,13 +6,15 @@ Kept separate from `concord/schemas.py` (which models Concord's responses).
 from datetime import date, datetime
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, StrictBool, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 # --- Auth (Slice 8) ---
 
 USERNAME_PATTERN = r"^[A-Za-z0-9_-]+$"
 UsernameStr = Annotated[str, Field(min_length=3, max_length=32, pattern=USERNAME_PATTERN)]
 PasswordStr = Annotated[str, Field(min_length=8)]
+# A translation code in the show-notes-from list ("NET", "EMB"); normalized upper-case on save.
+NoteSourceCode = Annotated[str, Field(min_length=1, max_length=16, pattern=r"^[A-Za-z0-9_-]+$")]
 
 
 class RegisterRequest(BaseModel):
@@ -35,21 +37,24 @@ class UserResponse(BaseModel):
     last_book: str | None
     last_chapter: int | None
     theme: str | None
-    show_net_notes: bool
+    show_notes_from: list[str]  # the Bibles whose notes the reader borrows (ADR 0005)
     created_at: datetime
 
 
 class UserUpdate(BaseModel):
     """Per-profile preference patch — reading position (translation + book + chapter), the UI
-    theme, and the show-NET-notes toggle. All optional so one PATCH can save any subset; only the
-    fields the client sent are applied (partial update via `model_fields_set`). No Concord
-    round-trip — a preference write must not fail when Concord blips."""
+    theme, and which Bibles' notes to show on other translations. All optional so one PATCH can
+    save any subset; only the fields the client sent are applied (partial update via
+    `model_fields_set`). No Concord round-trip — a preference write must not fail when Concord
+    blips."""
 
     last_translation: str | None = Field(default=None, min_length=1, max_length=16)
     last_book: str | None = Field(default=None, min_length=1, max_length=3)
     last_chapter: int | None = Field(default=None, ge=1)
     theme: Literal["light", "dark", "system"] | None = Field(default=None)
-    show_net_notes: StrictBool | None = Field(default=None)
+    # The whole list each time (it replaces the stored one). Codes Concord doesn't offer today are
+    # kept: a source that comes back keeps the user's choice.
+    show_notes_from: list[NoteSourceCode] | None = Field(default=None, max_length=32)
 
 
 class AuthEnvelope(BaseModel):

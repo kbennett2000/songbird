@@ -1382,7 +1382,9 @@ describe("ReaderView", () => {
   });
 });
 
-describe("ReaderView — borrowed NET notes", () => {
+// An older Concord (no note_count on its translations): NET is the one notes source, exactly as
+// before v1.8 — only the preference is now a list.
+describe("ReaderView — borrowed NET notes (an older Concord)", () => {
   const TRANSLATIONS = ["KJV", "NET"].map((id) => ({
     id,
     name: id,
@@ -1419,7 +1421,7 @@ describe("ReaderView — borrowed NET notes", () => {
       last_book: null,
       last_chapter: null,
       theme: null,
-      show_net_notes: showNetNotes,
+      show_notes_from: showNetNotes ? ["NET"] : [],
       created_at: "2026-01-01T00:00:00Z",
     };
     const patches: Record<string, unknown>[] = [];
@@ -1466,13 +1468,13 @@ describe("ReaderView — borrowed NET notes", () => {
     await user.click(checkbox);
     const marker = await screen.findByRole("button", { name: "Translator's note 1 (from NET)" });
     expect(marker.previousSibling?.textContent).toBe("to be submissive to rulers and");
-    await waitFor(() => expect(patches).toContainEqual({ show_net_notes: true }));
+    await waitFor(() => expect(patches).toContainEqual({ show_notes_from: ["NET"] }));
 
     // The popover says where it came from and which NET words it's about.
     await user.click(marker);
     expect(await screen.findByText(/a borrowed note/)).toBeInTheDocument();
-    expect(screen.getByText(/From the NET Bible/)).toHaveTextContent(
-      "From the NET Bible · NET reads “to be subject to rulers and”",
+    expect(screen.getByText(/From NET/)).toHaveTextContent(
+      "From NET · NET reads “to be subject to rulers and”",
     );
 
     // Switch off → the borrowed marker clears.
@@ -1480,7 +1482,7 @@ describe("ReaderView — borrowed NET notes", () => {
     await waitFor(() =>
       expect(screen.queryByRole("button", { name: /Translator's note/ })).not.toBeInTheDocument(),
     );
-    await waitFor(() => expect(patches).toContainEqual({ show_net_notes: false }));
+    await waitFor(() => expect(patches).toContainEqual({ show_notes_from: [] }));
   });
 
   it("hides the checkbox while reading NET itself, which shows its own notes", async () => {
@@ -1503,6 +1505,209 @@ describe("ReaderView — borrowed NET notes", () => {
         String(params.translation) === "NET"
           ? HttpResponse.json({ detail: { code: "CONCORD_UNREACHABLE" } }, { status: 502 })
           : HttpResponse.json([]),
+      ),
+    );
+    renderReader();
+
+    expect(await screen.findByText(TEXT.KJV!)).toBeInTheDocument();
+    expect(await screen.findByText(/Translator.*notes unavailable/)).toBeInTheDocument();
+  });
+});
+
+// Concord v8: any translation with note_count > 0 is a notes source — here a study Bible (EMB)
+// beside NET. Made-up verse and note text only.
+describe("ReaderView — notes from any source (Concord v8)", () => {
+  const COUNTS: Record<string, number> = { EMB: 2, ESV: 0, KJV: 1, NET: 1 };
+  const TRANSLATIONS = Object.entries(COUNTS).map(([id, note_count]) => ({
+    id,
+    name: id,
+    language: "en",
+    versification: "standard",
+    attribution: null,
+    note_count,
+  }));
+  const TEXT: Record<string, string> = {
+    EMB: "made-up words of the study bible",
+    ESV: "made-up words of another wording",
+    KJV: "made-up words of the old wording",
+    NET: "made-up words of the net wording",
+  };
+  function verseNote(overrides: Record<string, unknown>) {
+    return {
+      book: "JHN",
+      chapter: 3,
+      verse: 16,
+      reference: "John 3:16",
+      type: "tn",
+      text: "A made-up note.",
+      char_offset: 0,
+      marker: null,
+      ordinal: 0,
+      cross_references: [],
+      ...overrides,
+    };
+  }
+  // Every note here is a verse-level note (offset 0), so all of them share the verse's start —
+  // the spot where their order shows.
+  const NOTES: Record<string, ReturnType<typeof verseNote>[]> = {
+    EMB: [
+      verseNote({
+        type: "sn",
+        label: "Study Note",
+        title: "A made-up heading",
+        text: "A *made-up* study note. See [chapter 4](ref:JHN.4).",
+        text_format: "markdown",
+        passages: [
+          { start_chapter: 3, start_verse: 16, end_chapter: 3, end_verse: 21, reference: "John 3:16-21" },
+        ],
+      }),
+    ],
+    KJV: [verseNote({ text: "KJV's own made-up note." })],
+    NET: [verseNote({ text: "NET's made-up note." })],
+  };
+
+  function useV8World(showNotesFrom: string[] = []) {
+    let me = {
+      id: 1,
+      username: "tester",
+      is_admin: true,
+      last_translation: null,
+      last_book: null,
+      last_chapter: null,
+      theme: null,
+      show_notes_from: showNotesFrom,
+      created_at: "2026-01-01T00:00:00Z",
+    };
+    const patches: Record<string, unknown>[] = [];
+    server.use(
+      http.get("/api/v1/auth/me", () => HttpResponse.json({ user: me })),
+      http.patch("/api/v1/auth/me", async ({ request }) => {
+        const body = (await request.json()) as Record<string, unknown>;
+        patches.push(body);
+        me = { ...me, ...body };
+        return HttpResponse.json({ user: me });
+      }),
+      http.get("/api/v1/translations", () => HttpResponse.json({ translations: TRANSLATIONS })),
+      http.get("/api/v1/read/:translation/:book/:chapter", ({ params }) => {
+        const t = String(params.translation);
+        const chapter = Number(params.chapter);
+        const body = readResponse([], t);
+        body.chapter = chapter;
+        // John 3 reads each translation's wording; any other chapter says where the reader is.
+        body.verses[0]!.text = chapter === 3 ? (TEXT[t] ?? "") : `${t} reading JHN ${chapter}`;
+        return HttpResponse.json(body);
+      }),
+      http.get("/api/v1/notes/:translation/:book/:chapter", ({ params }) =>
+        HttpResponse.json(NOTES[String(params.translation)] ?? []),
+      ),
+    );
+    return patches;
+  }
+
+  /** The verse's note markers, by accessible name, in reading order. */
+  function markerNames(): string[] {
+    return screen
+      .queryAllByRole("button", { name: /(note|Note) \d/ })
+      .map((b) => b.getAttribute("aria-label") ?? "");
+  }
+
+  it("offers one checkbox per notes source, in Concord's order, none for a Bible without notes", async () => {
+    useV8World();
+    renderReader(); // reading KJV, which has notes of its own
+
+    expect(await screen.findByLabelText("Show EMB notes")).not.toBeChecked();
+    const labels = screen
+      .getAllByRole("checkbox")
+      .map((c) => c.closest("label")?.textContent)
+      .filter((t) => t?.startsWith("Show "));
+    expect(labels).toEqual(["Show EMB notes", "Show NET notes"]);
+    expect(screen.queryByLabelText("Show ESV notes")).not.toBeInTheDocument(); // note_count 0
+    expect(screen.queryByLabelText("Show KJV notes")).not.toBeInTheDocument(); // being read
+  });
+
+  it("shows a study Bible's own notes while reading it, and offers the other source", async () => {
+    useV8World();
+    const user = userEvent.setup();
+    renderReader();
+
+    await screen.findByLabelText("Show EMB notes");
+    await user.selectOptions(screen.getByLabelText("Translation"), "EMB");
+    const marker = await screen.findByRole("button", { name: "Study Note 1" });
+    expect(screen.queryByLabelText("Show EMB notes")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Show NET notes")).toBeInTheDocument();
+
+    await user.click(marker);
+    expect(await screen.findByRole("heading", { name: "A made-up heading" })).toBeInTheDocument();
+    expect(screen.getByText("Covers John 3:16-21")).toBeInTheDocument();
+    expect(screen.getByText("made-up").tagName).toBe("EM");
+    expect(screen.queryByText(/^From /)).not.toBeInTheDocument(); // EMB's own note
+  });
+
+  it("borrows a study Bible's note when ticked, saves the list, and a ref: link jumps", async () => {
+    const patches = useV8World();
+    const user = userEvent.setup();
+    renderReader();
+
+    await user.click(await screen.findByLabelText("Show EMB notes"));
+    await waitFor(() => expect(patches).toContainEqual({ show_notes_from: ["EMB"] }));
+    // A verse-level note stays at the start of the verse, after KJV's own.
+    await waitFor(() =>
+      expect(markerNames()).toEqual(["Translator's note 1", "Study Note 2 (from EMB)"]),
+    );
+
+    await user.click(screen.getByRole("button", { name: "Study Note 2 (from EMB)" }));
+    // Says where it came from; no words to quote for a note at the start of its verse.
+    expect(await screen.findByText("From EMB")).toBeInTheDocument();
+    expect(screen.queryByText(/EMB reads/)).not.toBeInTheDocument();
+
+    // The ref: link jumps the reader to John 4, like a cross-reference button.
+    await user.click(screen.getByRole("button", { name: "chapter 4" }));
+    expect(await screen.findByText("KJV reading JHN 4")).toBeInTheDocument();
+  });
+
+  it("orders notes at one spot: the translation's own, then sources in checkbox order", async () => {
+    useV8World(["NET", "EMB"]); // ticked NET first — the checkbox order still decides
+    renderReader();
+
+    await waitFor(() =>
+      expect(markerNames()).toEqual([
+        "Translator's note 1",
+        "Study Note 2 (from EMB)",
+        "Translator's note 3 (from NET)",
+      ]),
+    );
+  });
+
+  it("unticking one source keeps the other", async () => {
+    const patches = useV8World(["EMB", "NET"]);
+    const user = userEvent.setup();
+    renderReader();
+
+    await waitFor(() => expect(markerNames()).toHaveLength(3));
+    await user.click(screen.getByLabelText("Show EMB notes"));
+    await waitFor(() =>
+      expect(markerNames()).toEqual(["Translator's note 1", "Translator's note 2 (from NET)"]),
+    );
+    await waitFor(() => expect(patches).toContainEqual({ show_notes_from: ["NET"] }));
+  });
+
+  it("ignores a stored source Concord no longer has notes for", async () => {
+    useV8World(["OLD", "EMB"]);
+    renderReader();
+
+    await waitFor(() =>
+      expect(markerNames()).toEqual(["Translator's note 1", "Study Note 2 (from EMB)"]),
+    );
+    expect(screen.queryByLabelText("Show OLD notes")).not.toBeInTheDocument();
+  });
+
+  it("shows the notes-unavailable notice when a borrowed source can't be reached", async () => {
+    useV8World(["EMB"]);
+    server.use(
+      http.get("/api/v1/notes/:translation/:book/:chapter", ({ params }) =>
+        String(params.translation) === "EMB"
+          ? HttpResponse.json({ detail: { code: "CONCORD_UNREACHABLE" } }, { status: 502 })
+          : HttpResponse.json(NOTES[String(params.translation)] ?? []),
       ),
     );
     renderReader();

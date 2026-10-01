@@ -1,20 +1,22 @@
 import type { TranslatorNote } from "@/schemas";
 
 /**
- * Borrowing NET's translator's notes onto another translation (ADR 0004).
+ * Borrowing another Bible's notes onto the translation being read (ADR 0004, generalised to any
+ * notes source by ADR 0005 — NET's translator's notes, a study Bible's notes, …).
  *
- * A note's `char_offset` is a point anchor into NET's OWN verse text — just after the word or
- * phrase it comments on — and it doesn't carry that word. Concord has no English word alignment,
- * so placing the note in (say) the ESV is songbird's best guess, made as honestly as possible:
+ * A note's `char_offset` is a point anchor into its source's OWN verse text — just after the word
+ * or phrase it comments on — and it doesn't carry that word. Concord has no English word
+ * alignment, so placing the note in (say) the ESV is songbird's best guess, made as honestly as
+ * possible:
  *
- * 1. Take the NET words just before the anchor.
+ * 1. Take the source's words just before the anchor.
  * 2. Look for the last 3 of them in the other translation's verse, then the last 2, then the last
  *    1 — punctuation and case ignored. A match is used only when it occurs EXACTLY once (once a
  *    phrase is ambiguous, every shorter one is too, so the search stops there).
  * 3. No confident match → the marker sits at the end of the verse. A note anchored at the very
- *    start of NET's verse (no words before it — a verse-level note) sits at the start.
+ *    start of its source's verse (no words before it — a verse-level note) sits at the start.
  *
- * The note always carries the NET words it's about (`borrowed.phrase`), so the popover can show
+ * The note always carries the source's words it's about (`borrowed.phrase`), so the popover can show
  * what it refers to wherever the marker landed. Notes join verses on the canonical verse number
  * (invariant 4); nothing here is stored. Pure + testable.
  */
@@ -34,13 +36,15 @@ export function noteSources(translations: { id: string; note_count?: number | nu
   return translations.some((t) => t.id === NOTES_SOURCE) ? [NOTES_SOURCE] : [];
 }
 
-/** A translator's note as the reader shows it — its own, or borrowed from {@link NOTES_SOURCE}. */
+/** A note as the reader shows it — the translation's own, or borrowed from a notes source. */
 export type ShownNote = TranslatorNote & {
   borrowed?: {
-    /** The translation the note came from, e.g. "NET". */
+    /** The translation the note came from, e.g. "NET" or "EMB". */
     from: string;
     /** Up to six of that translation's words ending at the anchor ("…be subject to rulers and"). */
     phrase: string;
+    /** The source's place in the reader's checkbox order (0 first): orders notes at one spot. */
+    rank: number;
   };
 };
 
@@ -80,12 +84,13 @@ function matchedOffset(before: Word[], target: Word[]): number | null {
   return null;
 }
 
-/** Place one note from `sourceText` (NET's verse) into `targetText` (the verse being read). */
+/** Place one note from `sourceText` (its source's verse) into `targetText` (the verse being read). */
 export function placeBorrowedNote(
   note: TranslatorNote,
   sourceText: string,
   targetText: string,
   from: string = NOTES_SOURCE,
+  rank = 0,
 ): ShownNote {
   const before = words(sourceText).filter((w) => w.end <= note.char_offset);
   const offset =
@@ -99,7 +104,7 @@ export function placeBorrowedNote(
       ? `${before.length > PHRASE_WORDS ? "…" : ""}${sourceText.slice(first.start, last.end)}`
       : "";
 
-  return { ...note, char_offset: offset, borrowed: { from, phrase } };
+  return { ...note, char_offset: offset, borrowed: { from, phrase, rank } };
 }
 
 interface VerseLike {
@@ -108,15 +113,16 @@ interface VerseLike {
 }
 
 /**
- * Place a chapter's NET notes onto the verses being read, grouped by verse number. A note whose
- * verse the target translation doesn't have (or has no text for) is left out — there's nothing
- * to attach it to.
+ * Place a chapter's notes from one source onto the verses being read, grouped by verse number. A
+ * note whose verse the target translation doesn't have (or has no text for) is left out — there's
+ * nothing to attach it to.
  */
 export function borrowNotes(
   notes: TranslatorNote[],
   sourceVerses: VerseLike[],
   targetVerses: VerseLike[],
   from: string = NOTES_SOURCE,
+  rank = 0,
 ): Map<number, ShownNote[]> {
   const sourceText = new Map(sourceVerses.map((v) => [v.verse, v.text ?? ""]));
   const targetText = new Map(targetVerses.map((v) => [v.verse, v.text]));
@@ -124,7 +130,7 @@ export function borrowNotes(
   for (const note of notes) {
     const target = targetText.get(note.verse);
     if (!target) continue;
-    const placed = placeBorrowedNote(note, sourceText.get(note.verse) ?? "", target, from);
+    const placed = placeBorrowedNote(note, sourceText.get(note.verse) ?? "", target, from, rank);
     const list = byVerse.get(note.verse);
     if (list) list.push(placed);
     else byVerse.set(note.verse, [placed]);
