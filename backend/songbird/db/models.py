@@ -101,10 +101,12 @@ class User(Base):
     # UI colour-scheme preference, per profile (#60): "light" | "dark" | "system". Null = follow
     # the OS until the user picks. songbird's own domain — no Concord involvement.
     theme: Mapped[str | None] = mapped_column(String(16), nullable=True)
-    # Reader toggle: also show NET's translator's notes while reading another translation. Only the
-    # preference lives here — the notes and NET's text come from Concord at request time.
-    show_net_notes: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, default=False, server_default="0"
+    # The Bibles whose notes the reader also shows while reading another translation — translation
+    # codes, e.g. ["NET", "EMB"] (ADR 0005; replaced the NET-only `show_net_notes` in 0015). Only
+    # the preference lives here: the notes and the source's text come from Concord at request
+    # time. ASSIGN A NEW LIST when changing this: a plain JSON column is not mutation-tracked.
+    show_notes_from: Mapped[list[str]] = mapped_column(
+        JSON, nullable=False, default=list, server_default=text("'[]'")
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=_utcnow

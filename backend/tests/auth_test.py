@@ -262,17 +262,19 @@ async def test_patch_me_rejects_unknown_theme(
     assert resp.status_code == 422
 
 
-async def test_me_show_net_notes_defaults_off(
+async def test_me_show_notes_from_defaults_empty(
     make_concord: type[FakeConcordClient],
     unauth_client: Callable[[FakeConcordClient], httpx.AsyncClient],
 ) -> None:
     async with unauth_client(make_concord()) as client:
         await client.post("/api/v1/auth/register", json=CREDS)
         me = await client.get("/api/v1/auth/me")
-    assert me.json()["user"]["show_net_notes"] is False
+    user = me.json()["user"]
+    assert user["show_notes_from"] == []
+    assert "show_net_notes" not in user  # replaced by the list (ADR 0005)
 
 
-async def test_patch_me_sets_show_net_notes_and_does_not_clobber_others(
+async def test_patch_me_sets_show_notes_from_and_does_not_clobber_others(
     make_concord: type[FakeConcordClient],
     unauth_client: Callable[[FakeConcordClient], httpx.AsyncClient],
 ) -> None:
@@ -282,23 +284,77 @@ async def test_patch_me_sets_show_net_notes_and_does_not_clobber_others(
             "/api/v1/auth/me",
             json={"last_translation": "ESV", "last_book": "TIT", "theme": "dark"},
         )
-        patch = await client.patch("/api/v1/auth/me", json={"show_net_notes": True})
+        patch = await client.patch("/api/v1/auth/me", json={"show_notes_from": ["EMB", "NET"]})
         assert patch.status_code == 200
         me = await client.get("/api/v1/auth/me")
     user = me.json()["user"]
-    # The toggle persists; the fields this partial patch didn't send survive.
-    assert user["show_net_notes"] is True
+    # The list persists; the fields this partial patch didn't send survive.
+    assert user["show_notes_from"] == ["EMB", "NET"]
     assert (user["last_translation"], user["last_book"], user["theme"]) == ("ESV", "TIT", "dark")
 
 
-async def test_patch_me_rejects_non_boolean_show_net_notes(
+async def test_patch_me_show_notes_from_replaces_the_list_and_can_empty_it(
     make_concord: type[FakeConcordClient],
     unauth_client: Callable[[FakeConcordClient], httpx.AsyncClient],
 ) -> None:
     async with unauth_client(make_concord()) as client:
         await client.post("/api/v1/auth/register", json=CREDS)
-        resp = await client.patch("/api/v1/auth/me", json={"show_net_notes": "yes"})
-    assert resp.status_code == 422
+        await client.patch("/api/v1/auth/me", json={"show_notes_from": ["EMB", "NET"]})
+        await client.patch("/api/v1/auth/me", json={"show_notes_from": ["NET"]})
+        assert (await client.get("/api/v1/auth/me")).json()["user"]["show_notes_from"] == ["NET"]
+        await client.patch("/api/v1/auth/me", json={"show_notes_from": []})
+        me = await client.get("/api/v1/auth/me")
+    assert me.json()["user"]["show_notes_from"] == []
+
+
+async def test_patch_me_normalizes_show_notes_from(
+    make_concord: type[FakeConcordClient],
+    unauth_client: Callable[[FakeConcordClient], httpx.AsyncClient],
+) -> None:
+    async with unauth_client(make_concord()) as client:
+        await client.post("/api/v1/auth/register", json=CREDS)
+        patch = await client.patch(
+            "/api/v1/auth/me", json={"show_notes_from": ["net", "EMB", "NET", "emb"]}
+        )
+    # Upper-cased, de-duplicated, first occurrence's order kept.
+    assert patch.json()["user"]["show_notes_from"] == ["NET", "EMB"]
+
+
+async def test_patch_me_rejects_a_malformed_show_notes_from(
+    make_concord: type[FakeConcordClient],
+    unauth_client: Callable[[FakeConcordClient], httpx.AsyncClient],
+) -> None:
+    async with unauth_client(make_concord()) as client:
+        await client.post("/api/v1/auth/register", json=CREDS)
+        bad: list[object] = [
+            True,  # the old boolean shape
+            "NET",  # a bare string, not a list
+            [""],  # an empty code
+            [" NET"],  # whitespace isn't a code
+            ["X" * 17],  # longer than any translation code
+            [7],  # not a string
+            ["C"] * 33,  # more codes than any Concord has sources
+        ]
+        statuses = [
+            (await client.patch("/api/v1/auth/me", json={"show_notes_from": b})).status_code
+            for b in bad
+        ]
+        me = await client.get("/api/v1/auth/me")
+    assert statuses == [422] * len(bad)
+    assert me.json()["user"]["show_notes_from"] == []
+
+
+async def test_patch_me_ignores_the_retired_show_net_notes(
+    make_concord: type[FakeConcordClient],
+    unauth_client: Callable[[FakeConcordClient], httpx.AsyncClient],
+) -> None:
+    # A browser tab still running the previous release may send the old field; it's ignored, not
+    # an error, and changes nothing.
+    async with unauth_client(make_concord()) as client:
+        await client.post("/api/v1/auth/register", json=CREDS)
+        patch = await client.patch("/api/v1/auth/me", json={"show_net_notes": True})
+    assert patch.status_code == 200
+    assert patch.json()["user"]["show_notes_from"] == []
 
 
 def test_argon2_hash_verifies() -> None:

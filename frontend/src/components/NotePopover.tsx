@@ -22,8 +22,8 @@ interface NotePopoverProps {
  * (Greek/Hebrew Unicode renders natively) — and its cross-references as buttons that jump the
  * reader via the existing canonical navigation. Positioning, dismissal and scrolling a long note
  * live in the shared {@link Popover} shell; the kind/close row stays pinned while it scrolls. A
- * note borrowed from NET says where it came from and quotes the NET words it's about, since its
- * marker in this translation is a best-guess placement.
+ * note borrowed from another Bible names it ("From EMB", the code on its checkbox) and quotes
+ * that Bible's words it's about, since its marker in this translation is a best-guess placement.
  */
 export function NotePopover({ note, anchor, onClose, onJump }: NotePopoverProps): JSX.Element {
   const kind = noteKindLabel(note);
@@ -45,7 +45,7 @@ export function NotePopover({ note, anchor, onClose, onJump }: NotePopoverProps)
       </div>
       {note.borrowed && (
         <p className="mb-1 text-xs text-gray-500 dark:text-gray-400">
-          From the {note.borrowed.from} Bible
+          From {note.borrowed.from}
           {note.borrowed.phrase && (
             <>
               {" "}

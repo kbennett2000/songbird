@@ -646,9 +646,9 @@ export const userSchema = z.object({
   // UI colour scheme (#60): "light" | "dark" | "system". Null/absent until the user picks → the
   // app follows the OS. Tolerant (optional) so older fixtures parse.
   theme: z.string().nullable().optional(),
-  // Reader toggle: also show NET's translator's notes on other translations. Optional so older
-  // fixtures parse (absent = off).
-  show_net_notes: z.boolean().optional(),
+  // The Bibles whose notes the reader also shows on other translations (ADR 0005), e.g.
+  // ["NET", "EMB"]. Optional so older fixtures parse (absent = none).
+  show_notes_from: z.array(z.string()).optional(),
   created_at: z.string(),
 });
 export const authEnvelopeSchema = z.object({

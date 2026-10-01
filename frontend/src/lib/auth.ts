@@ -51,8 +51,8 @@ export async function saveTheme(theme: "light" | "dark" | "system"): Promise<Use
   return authEnvelopeSchema.parse(data).user;
 }
 
-/** Persist the reader's show-NET-notes toggle on the profile. Returns the updated user. */
-export async function saveShowNetNotes(showNetNotes: boolean): Promise<User> {
-  const data = await apiRequest<unknown>("PATCH", "/auth/me", { show_net_notes: showNetNotes });
+/** Persist which Bibles' notes the reader shows on other translations (the whole list). */
+export async function saveShowNotesFrom(codes: string[]): Promise<User> {
+  const data = await apiRequest<unknown>("PATCH", "/auth/me", { show_notes_from: codes });
   return authEnvelopeSchema.parse(data).user;
 }

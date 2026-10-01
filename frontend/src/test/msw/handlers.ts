@@ -10,7 +10,7 @@ const DEFAULT_USER = {
   last_book: null,
   last_chapter: null,
   theme: null,
-  show_net_notes: false,
+  show_notes_from: [] as string[],
   created_at: "2026-01-01T00:00:00Z",
 };
 
@@ -33,7 +33,7 @@ export const defaultHandlers = [
       last_translation?: string;
       last_book?: string;
       last_chapter?: number;
-      show_net_notes?: boolean;
+      show_notes_from?: string[];
     };
     return HttpResponse.json({
       user: {
@@ -41,7 +41,7 @@ export const defaultHandlers = [
         last_translation: body.last_translation ?? null,
         last_book: body.last_book ?? null,
         last_chapter: body.last_chapter ?? null,
-        show_net_notes: body.show_net_notes ?? false,
+        show_notes_from: body.show_notes_from ?? [],
       },
     });
   }),

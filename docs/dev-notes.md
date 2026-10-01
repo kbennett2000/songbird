@@ -4,6 +4,69 @@ A running log of per-slice decisions, gotchas, and how each slice was verified. 
 
 ---
 
+## v1.8 slice A2 — notes from any source
+
+- **Date:** 2026-10-01
+- **Branch:** `slice/v1.8-a2-notes-from-any-source` (stacked on A1)
+- **Spec:** `docs/v1.8/STUDY-BIBLE-SPEC.md` §3 ("Sources" and "Borrowing"); decision in
+  [ADR 0005](adr/0005-borrow-notes-from-any-source.md).
+
+### Why
+
+ADR 0004 built "Show NET notes" for the one translation that had notes, and said generalising it
+would take "a small migration and a source picker". Concord v8 now reports `note_count` per
+translation, and a study Bible (EMB) has notes of its own. This is that generalisation.
+
+### What landed
+
+- **Sources:** `noteSources()` returns every translation with `note_count > 0`, in Concord's order.
+  Against a Concord without `note_count`, it returns NET alone when offered.
+- **One checkbox per source**, hidden while that source is being read.
+- **The preference** is now `users.show_notes_from`, a JSON list using the same pattern as
+  `sermon_source_videos.suggestions`.
+  - Migration 0015 turns `show_net_notes = 1` into `["NET"]` and drops the boolean.
+  - `PATCH /auth/me` takes the whole list, upper-cased and de-duplicated, at most 32 codes of 1–16
+    characters.
+- **Borrowing** uses `useQueries` with two module-level combiners: one for each source's notes,
+  one for its chapter text. Their stable identity lets TanStack Query hand back the same combined
+  result while nothing has changed, so the per-verse merge doesn't recompute on every render.
+- **Order at one spot** comes from `borrowed.rank`, the source's checkbox index. Marker keys now
+  name their source, because two sources' ordinals can collide.
+- **The popover** reads "From EMB" / "From NET", the code on the checkbox. Before, it read "From
+  the NET Bible".
+
+### Gotchas
+
+- **An earlier migration seeds a user named `default`**, so a migration test that inserts users by
+  id collides with it. The test identifies its own rows by name.
+- **The migration test runs Alembic in a subprocess.** Alembic's `env.py` calls `fileConfig()` and
+  reads songbird's cached settings; in-process, both would leak into the rest of the suite.
+- **The checkbox shows ticked one tick after the click**, not during it. The cached user is updated
+  at once, but TanStack Query notifies React on the next tick, so Playwright's `check()` reports
+  "did not change its state". No person can see the delay, and the NET slice behaved the same.
+  Browser scripts should click, then wait for the checked state.
+
+### How it was verified
+
+- `make check`: 550 passed. That includes migration 0015 run for real on a scratch database:
+  0014 → head → 0014 → head, with NET on, NET off, `["EMB", "NET"]`, `["EMB"]` and a new profile.
+- `make check-frontend`: 411 passed across 45 files; eslint, tsc and the build clean.
+- **Today's behavior against a Concord without the new fields, in a browser** (headless Chromium
+  through the real UI, a throwaway account and database):
+  - *The pinned `concord:v1.2.0` image*, in a throwaway container: no notes checkboxes (it has no
+    NET), no markers, no notes notice, Search unchanged, no page errors.
+  - *The live LAN Concord, still pre-v8* (EMB's text loaded, NET's notes present, no
+    `note_count`):
+    - only "Show NET notes" is offered, and EMB is not a source;
+    - ticking it puts 71 NET markers on KJV John 3 and saves `["NET"]`;
+    - reading NET shows its own notes with no checkbox, and "Show NET notes" works on EMB too;
+    - Search badges by type and names no Bible;
+    - no page errors.
+
+    The only visible change is the intended "From NET · NET reads …".
+
+---
+
 ## v1.8 slice A1 — the note view (a study Bible's notes, shown properly)
 
 - **Date:** 2026-10-01
