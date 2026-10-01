@@ -26,6 +26,12 @@ This project follows [Keep a Changelog](https://keepachangelog.com/) and
   KJV or any other translation. Each note lands on the same words when songbird can find them, and
   otherwise at the end of the verse. Every note says it's from NET and quotes NET's wording.
   songbird remembers the setting.
+- **A study Bible's notes, shown the way the book prints them.** When your Scripture engine carries
+  a study Bible's notes (the Every Man's Bible is the first), tapping one shows what kind of note it
+  is, its heading and the verses it covers, with its paragraphs, italics and lists intact. A blue
+  reference inside a note takes you straight to that passage, and a long note scrolls. On the
+  Search page these notes carry their own labels, and each says which Bible it came from when more
+  than one Bible has notes.
 
 ## [1.7.0] — 2026-09-07
 
