@@ -48,6 +48,28 @@ describe("ChartViewer", () => {
     ).toBeInTheDocument();
   });
 
+  it("calls it a picture when it isn't a chart", () => {
+    vi.spyOn(HTMLDialogElement.prototype, "showModal");
+    render(
+      <ChartViewer
+        src={SRC}
+        title="A made-up caption"
+        alt="Chart: A made-up chart"
+        noun="picture"
+        onClose={vi.fn()}
+      />,
+    );
+    expect(screen.getByText("Loading the picture…")).toBeInTheDocument();
+    expect(
+      screen.getByRole("group", { name: "Picture: use the arrow keys to move around" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Any words in the picture are part of it and aren’t available as text."),
+    ).toBeInTheDocument();
+    fireEvent.error(screen.getByAltText("Chart: A made-up chart"));
+    expect(screen.getByText(/Couldn’t load the picture \(is Concord/)).toBeInTheDocument();
+  });
+
   it("says it's loading until the picture arrives, then shows it at its fitted size", () => {
     renderViewer();
     expect(screen.getByText("Loading the chart…")).toBeInTheDocument();

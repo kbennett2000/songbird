@@ -107,6 +107,19 @@ read it, zoom in:
 **Fit** shows the whole chart again. **Close** (or the Esc key) takes you back to the note. If a
 picture ever says it couldn't load, tap **Try again**.
 
+**A book's introduction.** A study Bible also introduces each of its books: what the book is
+about, who wrote it, an outline, key people and passages, and often a timeline. While you read a
+Bible that has these, an **Introduction** button sits beside the chapter's title, on every chapter
+of the book. Tap it, and the introduction opens over the page.
+- **The blue references** inside it take you straight to that passage.
+- **The picture** (in the Every Man's Bible, how long the book takes to read) opens full-screen
+  when you tap it or **⤢ Open larger**.
+- **To get back,** tap **Close** at the top, **← Back to** at the end, or press Esc. You'll be on
+  the same line you left.
+
+Reading a different translation with that study Bible's notes ticked? The button names it, for
+example **EMB introduction**, so you can still read it.
+
 **Another Bible's notes, in the translation you're reading.** Open **Settings**. Under **Notes from
 other Bibles** there's a box for each Bible that has notes, such as **NET** or **EMB**:
 

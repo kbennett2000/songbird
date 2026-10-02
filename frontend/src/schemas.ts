@@ -9,6 +9,9 @@ export const translationSchema = z.object({
   // How many notes Concord has loaded for this translation (Concord v8). Above 0 = a notes
   // source. Null/absent from a Concord that predates it — see noteSources().
   note_count: z.number().nullable().optional(),
+  // How many documents (book introductions …) Concord has for it (Concord ADR-0012). Above 0 = it
+  // can offer a book's introduction. Null/absent from a Concord that predates it — no documents.
+  document_count: z.number().nullable().optional(),
 });
 
 export const translationsResponseSchema = z.object({
@@ -34,6 +37,42 @@ export const healthResponseSchema = z.object({
 });
 
 export type Translation = z.infer<typeof translationSchema>;
+
+// A translation's documents (Concord ADR-0012), passed through by songbird, which stores none. A
+// book introduction's `book` is its USFM code; the other kinds have none.
+export const documentSummarySchema = z.object({
+  slug: z.string(),
+  kind: z.string(),
+  title: z.string(),
+  book: z.string().nullable(),
+  ordinal: z.number(),
+});
+export const documentsResponseSchema = z.object({
+  translation: z.string(),
+  total: z.number(),
+  documents: z.array(documentSummarySchema),
+});
+export type DocumentSummary = z.infer<typeof documentSummarySchema>;
+
+// One document: Markdown carrying `ref:` links and `![alt](asset:NAME)` pictures, with each
+// picture's pixel size so its frame can be laid out before it loads.
+export const documentImageSchema = z.object({
+  name: z.string(),
+  media_type: z.string(),
+  width: z.number(),
+  height: z.number(),
+});
+export const documentSchema = z.object({
+  translation: z.string(),
+  slug: z.string(),
+  kind: z.string(),
+  title: z.string(),
+  book: z.string().nullable(),
+  text: z.string(),
+  images: z.array(documentImageSchema),
+});
+export type DocumentImage = z.infer<typeof documentImageSchema>;
+export type BibleDocument = z.infer<typeof documentSchema>;
 export type HealthResponse = z.infer<typeof healthResponseSchema>;
 
 // --- Reader + annotations (Slice 1) ---

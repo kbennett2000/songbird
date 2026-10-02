@@ -7,8 +7,16 @@ interface ChartPictureProps {
   alt: string;
   /** The button's name ("Open the chart larger: Abram Moves On"). */
   label: string;
-  /** `note`: the full width of the note box. `thumb`: a small preview on the Search page. */
-  size: "note" | "thumb";
+  /**
+   * `note`: the full width of the note box. `thumb`: a small preview on the Search page.
+   * `figure`: a picture in a page of text (a book's introduction), as wide as the column allows
+   * and shaped like the picture itself (`aspect`).
+   */
+  size: "note" | "thumb" | "figure";
+  /** A figure's pixel size, so its frame has the picture's shape before it loads. */
+  aspect?: { width: number; height: number };
+  /** What its words call it: a chart (the default), or a picture. */
+  noun?: "chart" | "picture";
   /** Open the large view; given the button, so focus can come back to it. */
   onOpen: (button: HTMLButtonElement) => void;
   /** Move focus to the picture when it appears (the note reopening after the large view). */
@@ -20,6 +28,7 @@ type Status = "loading" | "loaded" | "failed";
 const FRAME = {
   note: "h-48 w-full",
   thumb: "h-20 w-28 shrink-0",
+  figure: "w-full",
 } as const;
 
 /**
@@ -36,6 +45,8 @@ export function ChartPicture({
   alt,
   label,
   size,
+  aspect,
+  noun = "chart",
   onOpen,
   autoFocus = false,
 }: ChartPictureProps): JSX.Element {
@@ -53,18 +64,23 @@ export function ChartPicture({
     return () => cancelAnimationFrame(frame);
   }, [autoFocus]);
 
-  const note = size === "note";
+  // A note's picture and a figure are big enough to say what's happening; a thumbnail isn't.
+  const roomy = size !== "thumb";
+  const thePicture = noun === "chart" ? "the chart’s picture" : "the picture";
   return (
     <div
       data-chart-picture={status}
       aria-live="polite"
       className={`relative overflow-hidden rounded bg-white ring-1 ring-gray-200 dark:ring-gray-600 ${FRAME[size]}`}
+      style={
+        size === "figure" && aspect
+          ? { aspectRatio: `${aspect.width} / ${aspect.height}`, maxWidth: aspect.width }
+          : undefined
+      }
     >
       {status === "failed" ? (
         <div className="flex h-full flex-col items-center justify-center gap-1 bg-gray-100 dark:bg-gray-700 p-2 text-center text-xs text-gray-700 dark:text-gray-200">
-          <p>
-            {note ? "Couldn’t load the chart’s picture (is Concord reachable?)." : "Couldn’t load."}
-          </p>
+          <p>{roomy ? `Couldn’t load ${thePicture} (is Concord reachable?).` : "Couldn’t load."}</p>
           <button
             type="button"
             className="font-medium text-blue-700 dark:text-blue-300 hover:underline"
@@ -89,7 +105,7 @@ export function ChartPicture({
             key={attempt}
             src={url}
             alt={alt}
-            loading={note ? "eager" : "lazy"}
+            loading={size === "thumb" ? "lazy" : "eager"}
             decoding="async"
             draggable={false}
             onLoad={() => setStatus("loaded")}
@@ -98,10 +114,11 @@ export function ChartPicture({
           />
           {status === "loading" && (
             <span className="absolute inset-0 flex items-center justify-center bg-gray-100 dark:bg-gray-700 text-xs text-gray-600 dark:text-gray-300">
-              {note ? "Loading the chart…" : "Loading…"}
+              {roomy ? `Loading the ${noun}…` : "Loading…"}
             </span>
           )}
-          {status === "loaded" && note && (
+          {/* A figure is too short to carry a label over it; its caption says it instead. */}
+          {status === "loaded" && size === "note" && (
             <span
               aria-hidden="true"
               className="absolute bottom-1 right-1 rounded bg-black/65 px-1.5 py-0.5 text-xs font-medium text-white group-hover:bg-black/80"

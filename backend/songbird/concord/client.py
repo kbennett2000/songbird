@@ -19,6 +19,8 @@ from songbird.concord.schemas import (
     Chapter,
     ConcordHealth,
     CrossRefResponse,
+    Document,
+    DocumentsResponse,
     HeadingsResponse,
     JourneyDetail,
     JourneysResponse,
@@ -613,6 +615,50 @@ class ConcordClient:
             cache_control=response.headers.get("cache-control"),
             vary=response.headers.get("vary"),
         )
+
+    async def list_documents(
+        self, translation: str, *, kind: str | None = None, book: str | None = None
+    ) -> DocumentsResponse:
+        """A translation's documents — book introductions and the like — from Concord's
+        `/v1/translations/{translation}/documents` (ADR-0012); songbird stores none. A known
+        translation with none is a normal empty 200. A 400 (an unknown kind or book) or a 404 (an
+        unknown translation, or a Concord that predates documents) is a not-found, not
+        unreachability."""
+        params = {k: v for k, v in (("kind", kind), ("book", book)) if v is not None}
+        try:
+            response = await self._client.get(
+                f"/v1/translations/{quote(translation, safe='')}/documents", params=params
+            )
+            response.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code in (400, 404):
+                raise ConcordNotFoundError(
+                    f"Concord has no such documents (in {translation})"
+                ) from exc
+            raise ConcordUnreachableError(self._base_url, exc) from exc
+        except httpx.HTTPError as exc:
+            raise ConcordUnreachableError(self._base_url, exc) from exc
+        return DocumentsResponse.model_validate(response.json())
+
+    async def get_document(self, translation: str, slug: str) -> Document:
+        """One document by its slug, from Concord's
+        `/v1/translations/{translation}/documents/{slug}` (ADR-0012); songbird stores none. A 404
+        (an unknown translation or slug, or a Concord that predates documents) is a not-found;
+        anything else is unreachability."""
+        try:
+            response = await self._client.get(
+                f"/v1/translations/{quote(translation, safe='')}/documents/{quote(slug, safe='')}"
+            )
+            response.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code in (400, 404):
+                raise ConcordNotFoundError(
+                    f"Concord has no document '{slug}' (in {translation})"
+                ) from exc
+            raise ConcordUnreachableError(self._base_url, exc) from exc
+        except httpx.HTTPError as exc:
+            raise ConcordUnreachableError(self._base_url, exc) from exc
+        return Document.model_validate(response.json())
 
     async def get_headings(self, translation: str, book: str, chapter: int) -> HeadingsResponse:
         """Section headings for a whole chapter in one translation, from Concord (songbird

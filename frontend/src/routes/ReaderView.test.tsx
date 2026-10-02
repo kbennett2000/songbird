@@ -1884,3 +1884,240 @@ describe("ReaderView — notes from any source (Concord v8)", () => {
     expect(await screen.findByText(/Translator.*notes unavailable/)).toBeInTheDocument();
   });
 });
+
+describe("ReaderView — a book's introduction (Concord v8 documents)", () => {
+  // Made-up Bibles and text only — never a real study Bible's introduction.
+  const COUNTS: Record<string, { note_count?: number; document_count?: number }> = {
+    EMB: { note_count: 3, document_count: 2 },
+    KJV: { note_count: 0, document_count: 0 },
+    NET: { note_count: 5, document_count: 0 },
+  };
+  const INTRO_TEXT =
+    "## A MADE-UP HEADING\n\nMade-up words. See [chapter 4](ref:JHN.4).\n\n" +
+    "![A made-up caption](asset:made-up-jhn.jpg)\n\n- 1000 B.C.\\\n  **A MADE-UP EVENT**";
+
+  let me: Record<string, unknown> = {};
+
+  /** The reader as RequireAuth hands it over (the profile already loaded), at `entry`. */
+  function renderReader(entry = "/read") {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    client.setQueryData(["auth", "me"], me);
+    const result = render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter initialEntries={[entry]}>
+          <ReaderView />
+          <AddressProbe />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+    return { ...result, address: () => screen.getByTestId("address").textContent };
+  }
+
+  /**
+   * Reading `reading` at `book` 1… with `ticked` Bibles' notes on. EMB has introductions to John
+   * and Luke (not Acts). `older`: a Concord that sends no counts. Returns the documents asked for.
+   */
+  function useDocumentsWorld({
+    reading = "EMB",
+    ticked = [] as string[],
+    book = "JHN",
+    chapter = 3,
+    older = false,
+    failDocument = false,
+  } = {}) {
+    const asked: string[] = [];
+    me = {
+      id: 1,
+      username: "tester",
+      is_admin: true,
+      last_translation: reading,
+      last_book: book,
+      last_chapter: chapter,
+      theme: null,
+      show_notes_from: ticked,
+      created_at: "2026-01-01T00:00:00Z",
+    };
+    const user = me;
+    server.use(
+      http.get("/api/v1/auth/me", () => HttpResponse.json({ user })),
+      http.get("/api/v1/translations", () =>
+        HttpResponse.json({
+          translations: Object.entries(COUNTS).map(([id, counts]) => ({
+            id,
+            name: id,
+            language: "en",
+            versification: "standard",
+            attribution: null,
+            ...(older ? {} : counts),
+          })),
+        }),
+      ),
+      http.get("/api/v1/notes/:translation/:book/:chapter", () => HttpResponse.json([])),
+      http.get("/api/v1/translations/:translation/documents", ({ params, request }) => {
+        asked.push(`${String(params.translation)} ${new URL(request.url).search}`);
+        return HttpResponse.json({
+          translation: String(params.translation),
+          book: null,
+          kind: "book-introduction",
+          total: 2,
+          documents: ["JHN", "LUK"].map((b, i) => ({
+            slug: `introduction-${b.toLowerCase()}`,
+            kind: "book-introduction",
+            title: `Made-up ${b}`,
+            book: b,
+            ordinal: i + 1,
+          })),
+        });
+      }),
+      http.get("/api/v1/translations/:translation/documents/:slug", ({ params }) => {
+        asked.push(`${String(params.translation)} ${String(params.slug)}`);
+        if (failDocument) {
+          return HttpResponse.json(
+            { detail: { code: "CONCORD_UNREACHABLE", message: "down" } },
+            { status: 502 },
+          );
+        }
+        return HttpResponse.json({
+          translation: String(params.translation),
+          slug: String(params.slug),
+          kind: "book-introduction",
+          title: "Made-up John",
+          book: "JHN",
+          ordinal: 2,
+          text: INTRO_TEXT,
+          images: [{ name: "made-up-jhn.jpg", media_type: "image/jpeg", width: 1024, height: 180 }],
+        });
+      }),
+    );
+    return asked;
+  }
+
+  it("offers the book's introduction while reading a Bible that has one, and opens it", async () => {
+    const asked = useDocumentsWorld();
+    const user = userEvent.setup();
+    renderReader();
+
+    const button = await screen.findByRole("button", { name: "Introduction to John" });
+    expect(button).toHaveTextContent(/^Introduction$/);
+    await user.click(button);
+
+    const view = await screen.findByRole("dialog", { name: "Made-up John" });
+    expect(view.tagName).toBe("DIALOG");
+    expect(within(view).queryByText(/From EMB/)).not.toBeInTheDocument(); // it's the Bible read
+    expect(
+      await within(view).findByRole("heading", { name: "A MADE-UP HEADING", level: 3 }),
+    ).toBeInTheDocument();
+    // The picture, shaped like itself before it loads, opens larger.
+    expect(
+      within(view).getByRole("button", { name: "Open the picture larger: A made-up caption" }),
+    ).toBeInTheDocument();
+    expect(document.querySelector("[data-chart-picture]")).toHaveStyle({
+      aspectRatio: "1024 / 180",
+    });
+    // The timeline's date and event, each on its own line.
+    expect(view.querySelectorAll("li [data-poetry-line]")).toHaveLength(2);
+    expect(within(view).getByRole("button", { name: "← Back to JHN 3" })).toBeInTheDocument();
+    expect(asked).toEqual(["EMB ?kind=book-introduction", "EMB introduction-jhn"]);
+
+    // Close: back to the reader, focus on the button that opened it — without scrolling the page
+    // to it, so the reader stays on the line it was at.
+    const focus = vi.spyOn(HTMLElement.prototype, "focus");
+    await user.click(within(view).getByRole("button", { name: "Close" }));
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog", { name: "Made-up John" })).not.toBeInTheDocument(),
+    );
+    await waitFor(() =>
+      expect(document.activeElement).toBe(
+        screen.getByRole("button", { name: "Introduction to John" }),
+      ),
+    );
+    expect(focus).toHaveBeenCalledWith({ preventScroll: true });
+    focus.mockRestore();
+
+    // The next chapter offers it too, without asking for the list again.
+    await user.click(screen.getByRole("button", { name: "Next chapter" }));
+    expect(await screen.findByText(/JHN 4:16/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Introduction to John" })).toBeInTheDocument();
+    expect(asked.filter((a) => a.includes("?kind"))).toHaveLength(1);
+  });
+
+  it("names a ticked Bible's introduction by its Bible while reading another", async () => {
+    useDocumentsWorld({ reading: "KJV", ticked: ["EMB"] });
+    const user = userEvent.setup();
+    renderReader();
+
+    const button = await screen.findByRole("button", { name: "EMB's introduction to John" });
+    expect(button).toHaveTextContent("EMB introduction");
+    await user.click(button);
+    const view = await screen.findByRole("dialog", { name: "Made-up John" });
+    expect(within(view).getByText(/From EMB/)).toBeInTheDocument();
+  });
+
+  it("closes on Escape (the dialog's own cancel, then close)", async () => {
+    useDocumentsWorld();
+    const user = userEvent.setup();
+    renderReader();
+    await user.click(await screen.findByRole("button", { name: "Introduction to John" }));
+    const view = (await screen.findByRole("dialog", { name: "Made-up John" })) as HTMLDialogElement;
+    // happy-dom doesn't turn Escape into cancel + close as a browser does; play that part.
+    fireEvent(view, new Event("cancel"));
+    view.close();
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog", { name: "Made-up John" })).not.toBeInTheDocument(),
+    );
+  });
+
+  it("a ref: link closes the view and jumps the reader, the address following", async () => {
+    useDocumentsWorld();
+    const user = userEvent.setup();
+    const { address } = renderReader("/read?book=JHN&chapter=3");
+    await user.click(await screen.findByRole("button", { name: "Introduction to John" }));
+    await user.click(await screen.findByRole("button", { name: "chapter 4" }));
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog", { name: "Made-up John" })).not.toBeInTheDocument(),
+    );
+    expect(await screen.findByText(/JHN 4:16/)).toBeInTheDocument();
+    await waitFor(() => expect(address()).toBe("?book=JHN&chapter=4"));
+  });
+
+  it("says when the introduction couldn't load, and asks again", async () => {
+    useDocumentsWorld({ failDocument: true });
+    const user = userEvent.setup();
+    renderReader();
+    await user.click(await screen.findByRole("button", { name: "Introduction to John" }));
+    const view = await screen.findByRole("dialog", { name: "John" }); // the book's own name
+    expect(
+      await within(view).findByText("Couldn’t load the introduction (is Concord reachable?)"),
+    ).toBeInTheDocument();
+
+    useDocumentsWorld(); // Concord is back
+    await user.click(within(view).getByRole("button", { name: "Try again" }));
+    expect(
+      await within(view).findByRole("heading", { name: "A MADE-UP HEADING", level: 3 }),
+    ).toBeInTheDocument();
+  });
+
+  it("offers nothing for a book with no introduction", async () => {
+    const asked = useDocumentsWorld({ book: "ACT", chapter: 1 });
+    renderReader();
+    expect(await screen.findByText(/ACT 1:16/)).toBeInTheDocument();
+    await waitFor(() => expect(asked).toEqual(["EMB ?kind=book-introduction"]));
+    await waitFor(() =>
+      expect(screen.queryByRole("button", { name: /introduction to/i })).not.toBeInTheDocument(),
+    );
+  });
+
+  it("offers nothing for a Bible without documents, or against an older Concord", async () => {
+    const asked = useDocumentsWorld({ reading: "KJV", ticked: ["NET"] });
+    const { unmount } = renderReader();
+    expect(await screen.findByText(/JHN 3:16/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /introduction to/i })).not.toBeInTheDocument();
+    unmount();
+
+    const askedOlder = useDocumentsWorld({ reading: "EMB", ticked: ["EMB"], older: true });
+    renderReader();
+    expect(await screen.findByText(/JHN 3:16/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /introduction to/i })).not.toBeInTheDocument();
+    expect([...asked, ...askedOlder]).toEqual([]); // nothing asked of Concord
+  });
+});

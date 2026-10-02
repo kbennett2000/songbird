@@ -11,6 +11,23 @@ interface NoteMarkdownProps {
   text: string;
   /** Jump the reader to a `ref:` link's passage — the same jump a cross-reference button makes. */
   onJump: (book: string, chapter: number, verse: number | null) => void;
+  /**
+   * Render headings as real heading elements: `#` and `##` as `h{headingBase}`, `###` and below
+   * one level deeper — for a page-like view (a book's introduction). Without it they are lines
+   * with a heading's look, as in a note box.
+   */
+  headingBase?: number;
+  /**
+   * Place a picture: a paragraph that is only `![alt](asset:NAME)` becomes what this returns.
+   * Without it (and for any other image) the alt text shows.
+   */
+  renderImage?: (name: string, alt: string) => ReactNode;
+}
+
+interface RenderContext {
+  jump: (target: RefTarget) => void;
+  headingBase?: number;
+  renderImage?: (name: string, alt: string) => ReactNode;
 }
 
 /** The tokens between an opening token at `start` and its matching close, and where it ends. */
@@ -114,13 +131,34 @@ function poetryLines(tokens: MarkdownToken[]): MarkdownToken[][] | null {
   return wordLines >= 2 ? lines : null;
 }
 
-function renderBlocks(tokens: MarkdownToken[], jump: (target: RefTarget) => void): ReactNode[] {
+/** The `asset:` picture a paragraph consists of, if that's all it is. */
+function assetPicture(inline: MarkdownToken[]): { name: string; alt: string } | null {
+  const parts = inline.filter((t) => !(t.type === "text" && t.content.trim() === ""));
+  const image = parts.length === 1 ? parts[0]! : null;
+  const src = image?.type === "image" ? (image.attrGet("src") ?? "") : "";
+  return src.startsWith("asset:") && src.length > "asset:".length
+    ? { name: src.slice("asset:".length), alt: image!.content }
+    : null;
+}
+
+function renderBlocks(tokens: MarkdownToken[], ctx: RenderContext): ReactNode[] {
+  const { jump } = ctx;
   const out: ReactNode[] = [];
   for (let i = 0; i < tokens.length; ) {
     const t = tokens[i]!;
     const key = `b${i}`;
     if (t.nesting === 1) {
       const { inner, end } = enclosed(tokens, i);
+      const picture =
+        ctx.renderImage && t.type === "paragraph_open" && inner[0]?.type === "inline"
+          ? assetPicture(inner[0].children ?? [])
+          : null;
+      if (picture) {
+        // A picture on its own is a block of its own (a figure), never inside a <p>.
+        out.push(<Fragment key={key}>{ctx.renderImage!(picture.name, picture.alt)}</Fragment>);
+        i = end;
+        continue;
+      }
       const lines =
         t.type === "paragraph_open" && inner.length === 1 && inner[0]!.type === "inline"
           ? poetryLines(inner[0]!.children ?? [])
@@ -133,7 +171,7 @@ function renderBlocks(tokens: MarkdownToken[], jump: (target: RefTarget) => void
               {renderInline(line, jump)}
             </span>
           ))
-        : renderBlocks(inner, jump);
+        : renderBlocks(inner, ctx);
       if (t.type === "paragraph_open") {
         // A tight list's paragraphs are hidden: their words sit straight in the list item.
         out.push(
@@ -164,10 +202,15 @@ function renderBlocks(tokens: MarkdownToken[], jump: (target: RefTarget) => void
         );
       } else if (t.type === "heading_open") {
         const level = Number(t.tag.slice(1));
+        const Tag = (
+          ctx.headingBase === undefined
+            ? "p"
+            : `h${Math.min(6, ctx.headingBase + (level <= 2 ? 0 : 1))}`
+        ) as "p";
         out.push(
-          <p key={key} data-md-heading={level} className={headingClass(level)}>
+          <Tag key={key} data-md-heading={level} className={headingClass(level)}>
             {children}
-          </p>,
+          </Tag>,
         );
       } else out.push(<div key={key}>{children}</div>);
       i = end;
@@ -189,16 +232,22 @@ function renderBlocks(tokens: MarkdownToken[], jump: (target: RefTarget) => void
 }
 
 /**
- * A note's Markdown, rendered read-only: paragraphs, emphasis, lists, block quotes, headings (as
- * lines with a look per level), poetry (hanging-indented lines), code and rules. A `ref:` link becomes a button that jumps the reader; no other
- * link is clickable, and no HTML is ever injected (see `lib/noteMarkdown.ts`).
+ * A note's Markdown, rendered read-only: paragraphs, emphasis, lists, block quotes, headings (with a
+ * look per level), poetry (hanging-indented lines), code and rules — and, where the caller places
+ * them, `asset:` pictures. A `ref:` link becomes a button that jumps the reader; no other link is
+ * clickable, and no HTML is ever injected (see `lib/noteMarkdown.ts`).
  */
-export function NoteMarkdown({ text, onJump }: NoteMarkdownProps): JSX.Element {
+export function NoteMarkdown({
+  text,
+  onJump,
+  headingBase,
+  renderImage,
+}: NoteMarkdownProps): JSX.Element {
   const tokens = useMemo(() => parseNoteMarkdown(text), [text]);
   const jump = (target: RefTarget) => onJump(target.book, target.chapter, target.verse);
   return (
     <div className="flex flex-col gap-2 break-words text-gray-800 dark:text-gray-100">
-      {renderBlocks(tokens, jump)}
+      {renderBlocks(tokens, { jump, headingBase, renderImage })}
     </div>
   );
 }

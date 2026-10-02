@@ -55,9 +55,11 @@ _REQUIRED_ENDPOINTS = {
     ("GET", "/v1/places/{}"),
     ("GET", "/v1/places/{}/verses"),
     ("GET", "/v1/verses/{}"),
-    # Not yet: ("GET", "/v1/translations/{}/assets/{}"), a chart's picture (v1.8 slice B, Concord
-    # ADR-0012). The pinned v1.2.0's OpenAPI predates it; it joins this list in slice E, when the
-    # pin moves to Concord's v8 release. Until then songbird's own tests cover it.
+    # Not yet: ("GET", "/v1/translations/{}/assets/{}"), a chart's picture (v1.8 slice B), and
+    # ("GET", "/v1/translations/{}/documents") and ("GET", "/v1/translations/{}/documents/{}"), a
+    # book's introduction (v1.8 slice C1), all Concord ADR-0012. The pinned v1.2.0's OpenAPI
+    # predates them; they join this list in slice E, when the pin moves to Concord's v8 release.
+    # Until then songbird's own tests cover them.
 }
 
 _PARAM = re.compile(r"\{[^}]+\}")

@@ -67,4 +67,26 @@ describe("ChartPicture", () => {
     expect(frame().className).toContain("w-28");
     expect(screen.getByAltText("Chart: A made-up chart")).toHaveAttribute("loading", "lazy");
   });
+
+  it("comes as a figure in a page of text, shaped like its picture and called a picture", () => {
+    render(
+      <ChartPicture
+        src={SRC}
+        alt="A made-up caption"
+        label="Open the picture larger: A made-up caption"
+        size="figure"
+        aspect={{ width: 1024, height: 180 }}
+        noun="picture"
+        onOpen={vi.fn()}
+      />,
+    );
+    // The frame has the picture's shape before it loads, so the text never shifts under it.
+    expect(frame()).toHaveStyle({ aspectRatio: "1024 / 180", maxWidth: "1024px" });
+    expect(frame().className).toContain("w-full");
+    expect(screen.getByText("Loading the picture…")).toBeInTheDocument();
+    fireEvent.error(screen.getByAltText("A made-up caption"));
+    expect(
+      screen.getByText("Couldn’t load the picture (is Concord reachable?)."),
+    ).toBeInTheDocument();
+  });
 });

@@ -4,6 +4,141 @@ A running log of per-slice decisions, gotchas, and how each slice was verified. 
 
 ---
 
+## v1.8 slice C1 — a book's introduction in the reader
+
+- **Date:** 2026-10-02
+- **Branch:** `slice/v1.8-introductions`
+- **Spec:** `docs/v1.8/STUDY-BIBLE-SPEC.md` §5 (new), §1, §2 and §7; `docs/v1/SPEC.md` §12,
+  "Book introductions".
+
+### Why
+
+Concord now serves a translation's documents (its ADR-0012, V8-S5). On Kris's Concord, EMB has 66
+book introductions and every other Bible none. Front matter, the reading plan and the author notes
+aren't loaded yet, so slice C splits: C1 (this) is the introductions, and C2, the About page, waits
+for them.
+
+Their shape, surveyed across all 66 without keeping any text:
+- `##` headings only (10 or 11 each) and flat lists. 64 have block quotes.
+- 42 use backslash hard breaks: poetry inside quotes, and the timelines (36 have one).
+- **Exactly one picture each,** a wide banner about 1024×160–198 (the book's reading time).
+- No tables, no HTML, and no links but `ref:`.
+
+### What landed
+
+- **API:**
+  - `document_count` on translations.
+  - `GET /api/v1/translations/{translation}/documents?kind=&book=` and `.../documents/{slug}`
+    pass Concord through (`ConcordClient.list_documents`, `get_document`).
+  - A 400 or 404 is a 404, an outage a 502, and `.` / `..` are refused before any call.
+  - No caching headers: the browser keeps them in React Query's memory for the session
+    (`staleTime: Infinity`; Concord's documents are immutable).
+- **`lib/introductions.ts`:**
+  - `introductionSources`: the Bible read, then the ticked ones, each with documents.
+  - The list and document query options.
+  - `introductionFor`: the open book's entry in a list.
+- **The reader:** after **Notes ▾**, an **Introduction** or **EMB introduction** button per source.
+  It is hidden only when its list loaded without this book.
+- **`BookIntroduction`:** a native modal `<dialog>` filling the window, as the chart viewer is.
+  - Header, a 65-character column, `NoteMarkdown` with `headingBase={3}`, the picture, and
+    **← Back to …** at the end.
+  - Loading, failure (with Try again), and none.
+  - A `ref:` link unmounts it and navigates.
+  - Close, Escape and Back close it, and focus returns to the button with `preventScroll`.
+- **`NoteMarkdown`:** two optional props, so the note box is unchanged.
+  - `headingBase`: real heading elements.
+  - `renderImage`: a paragraph that is only an `asset:` picture becomes a block of its own.
+- **`ChartPicture`:** gains `size="figure"` (a frame of the picture's shape) and `noun="picture"`.
+  **`ChartViewer`** gains `noun`.
+- **No new dependency, and no database change.**
+- **No screenshot in the repo:** every introduction is EMB's.
+
+### Decisions
+
+- **A view over the reader, not a page of its own.** The reader stays mounted, so closing returns
+  to the exact line; a separate route would remount it and lose the scroll. Android's Back still
+  closes it (a modal dialog's cancel).
+- **The button shows while its list loads, or if it failed.** EMB has all 66, so it appears at once
+  with nothing shifting, and a failure is shown in the view rather than hidden (invariant 3).
+- **The picture's "⤢ Open larger" sits in its caption, not on it.** At phone width the banner is
+  358×65, and the overlay used for charts covered part of it. The caption's copy is a
+  pointer-and-finger shortcut (`aria-hidden`, no tab stop); the picture itself is the keyboard's
+  button.
+
+### Gotchas
+
+- **React passes a dialog's `close` event up the React tree,** though the browser's doesn't bubble.
+  The picture's viewer is a dialog inside the introduction's, so closing it also fired the
+  introduction's `onClose`. The handler checks `e.target === e.currentTarget`.
+- **Focusing the button on close scrolled the page up to it.** The first browser pass found this:
+  the reader, scrolled 400 px down, was back at 0 after closing. The fix is
+  `focus({ preventScroll: true })`; a test spies on it.
+- **A jump must not focus the button** (that would scroll away from the verse). So a link unmounts
+  the open dialog, which takes it out of the top layer without a close or a focus restore.
+- **Prettier on `ReaderView.test.tsx`** (not Prettier-clean before) reformatted unrelated lines. It
+  was restored and only the new block kept.
+
+### The slice before this, on the server
+
+PR #150 (the five reading fixes) was deployed to Kris's server on 2026-10-02 with no migration.
+- The live `index.html` names the image's `assets/index-J4HVr8Za.js`.
+- Before deploying, a throwaway container of the old image (empty database, over an SSH tunnel)
+  gave the "before", and one of the new image the "after", measured with the same script. Numbers
+  only; the before and after screenshots went to Kris, not the repo.
+
+| | Before | After |
+|---|---|---|
+| EMB Genesis 35:21's article, marker 633 px down a 390×844 screen | below, 165 px tall (11.5 boxfuls) | above, 619 px tall (3.1) |
+| NET Psalm 23:6's two markers | 0 px apart | 3.8 px |
+| EMB Job 4:1: title / `##` / `###` / bold lead-in | 14/600, 14/600, 14/600, 14/700 | 16/700, 15/600 + rule, 11.9/600 capitals, 14/700 |
+| EMB Genesis 1:18's topic at 390 px: a wrapped line's second part | flush left (0 px) | 21 px in |
+| KJV Genesis 1, Jump to "John 3:16", then reload | address stays `?book=GEN&chapter=1`, reload opens Genesis 1 | `?book=JHN&chapter=3&verse=16`, reload opens John 3 |
+
+- **Light and dark** gave the same numbers, and there were no page errors.
+
+### How it was verified
+
+- **Backend:** `documents_test.py` (20):
+  - The routes: the list and a document pass through, with filters forwarded; 404, outage 502,
+    dot segments, signed out.
+  - `document_count` passes through, and is null from an older Concord.
+  - The client: URL, params, encoding, 400/404 → NotFound, 500 and a dropped connection →
+    Unreachable.
+- **Frontend:**
+  - `introductions.test.ts` (4).
+  - `BookIntroduction.test.tsx` (7): loading, then loaded; from another Bible; a jump and the way
+    back; the picture, its viewer and focus back; the caption's shortcut; a failure and Try again;
+    none.
+  - `NoteMarkdown.test.tsx`: `headingBase`, placed pictures, alt text without a placer.
+  - `ChartPicture` / `ChartViewer`: the figure and the picture wording.
+  - `ReaderView.test.tsx` (7):
+    - the button on EMB, named by its Bible on KJV
+    - open, then Close with focus back without scrolling
+    - the next chapter asks for no new list
+    - Escape
+    - a `ref:` jump and the address
+    - a failure, then Try again
+    - none for a book without one, for a Bible without documents, or from an older Concord
+- **The gate:** `make check` and `make check-frontend` green (counts in the PR).
+- **In a browser, before the PR:** a local build against Kris's Concord, with a scratch database,
+  in headless Chromium. Genesis, Isaiah and Philemon, on EMB and on KJV with EMB ticked, at
+  1280×800 and 390×844, light and dark: 24 cases.
+  - **The button:** "Introduction" on EMB, "EMB introduction" on KJV. None on KJV with NET ticked.
+  - **The view:**
+    - "Loading the introduction…" first.
+    - `##` headings as h3, at 17 px / 600 with a rule; text at 16 / 28 px.
+    - The column is 595 px on a desktop and 390 on a phone.
+    - Genesis has 9 timeline entries and Isaiah 12, with 26 poetry lines in Isaiah's quotes.
+  - **The picture:** loaded, 563×100–103 on a desktop and 358×64–65 on a phone. Its viewer opens
+    fitted (100%, or 38% on a phone). Escape closes only the viewer, with focus back on the picture.
+  - **Closing:** Escape, Close and Back each leave the reader at the same scroll position, with
+    focus on the button.
+  - **A link:** closes the view, and the address follows.
+  - **Overall:** no sideways scroll and no page errors. The phone's title row wraps
+    **EMB introduction** beside **Notes ▾**, with no overflow.
+
+---
+
 ## v1.8 follow-up 4 — five reading fixes
 
 - **Date:** 2026-10-02

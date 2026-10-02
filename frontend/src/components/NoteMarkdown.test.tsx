@@ -150,3 +150,47 @@ describe("NoteMarkdown — poetry", () => {
     expect(lines(container)).toHaveLength(2);
   });
 });
+
+describe("NoteMarkdown — in a page of its own", () => {
+  it("renders headings as real headings from headingBase, one level deeper for ###", () => {
+    render(
+      <NoteMarkdown
+        text={"## A MADE-UP SECTION\n\n### A made-up subsection\n\nWords."}
+        onJump={vi.fn()}
+        headingBase={3}
+      />,
+    );
+    const section = screen.getByRole("heading", { name: "A MADE-UP SECTION", level: 3 });
+    const subsection = screen.getByRole("heading", { name: "A made-up subsection", level: 4 });
+    // The same looks as in a note box.
+    expect(section).toHaveClass("border-b");
+    expect(subsection).toHaveClass("uppercase");
+  });
+
+  it("places an asset: picture that stands alone, as a block of its own", () => {
+    const renderImage = vi.fn((name: string, alt: string) => (
+      <figure data-testid="figure">
+        {name} / {alt}
+      </figure>
+    ));
+    const { container } = render(
+      <NoteMarkdown
+        text={"Before.\n\n![A made-up caption](asset:made-up.jpg)\n\nAfter ![inline](asset:x.png)."}
+        onJump={vi.fn()}
+        renderImage={renderImage}
+      />,
+    );
+    expect(renderImage).toHaveBeenCalledWith("made-up.jpg", "A made-up caption");
+    expect(screen.getByTestId("figure")).toHaveTextContent("made-up.jpg / A made-up caption");
+    expect(screen.getByTestId("figure").closest("p")).toBeNull(); // never inside a paragraph
+    // A picture in the middle of words, or any other image, is still its alt text.
+    expect(container).toHaveTextContent("After inline.");
+    expect(renderImage).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows an asset: picture's alt text where nothing places pictures (a note box)", () => {
+    const { container } = renderMd("![A made-up caption](asset:made-up.jpg)");
+    expect(container.querySelector("figure, img")).toBeNull();
+    expect(container).toHaveTextContent("A made-up caption");
+  });
+});

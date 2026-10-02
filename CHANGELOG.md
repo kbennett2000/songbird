@@ -18,6 +18,14 @@ This project follows [Keep a Changelog](https://keepachangelog.com/) and
 ## [Unreleased]
 
 ### Added
+- **A book's introduction, one tap from the text.** A study Bible such as the Every Man's Bible
+  introduces each of its 66 books: what it's about, who wrote it, when, an outline, key people and
+  passages, how long it takes to read, and for many books a timeline. While you read that Bible, an
+  **Introduction** button beside the chapter's title opens the book's introduction over the page.
+  Its references take you to the passage, its picture opens full-screen, and **Close** puts you
+  back on the line you left. Reading another translation with that Bible's notes ticked, the button
+  names it (**EMB introduction**). songbird fetches each introduction from your Scripture engine as
+  you open it and keeps no copy.
 - **Charts you can read.** A study Bible's charts, such as the 44 in the Every Man's Bible, now
   show their picture when you open them, both while you read that Bible and when you borrow its
   notes into another translation. A chart's words are part of the picture, so tap it to see it
