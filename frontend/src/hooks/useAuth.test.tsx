@@ -77,4 +77,61 @@ describe("useAuth", () => {
     });
     await waitFor(() => expect(result.current.isAuthenticated).toBe(false));
   });
+
+  describe("a change of who is signed in drops everything cached for the last person", () => {
+    // Notes, sermons and searches are per user. Before, logout cleared only the chapter and tag
+    // caches (and a key no query uses), so the next person to sign in on the same tab saw the
+    // last person's notes on Home and Browse until the refetch landed.
+    function seeded() {
+      const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      client.setQueryData(["browse", []], [{ id: 7, note_markdown: "someone else's note" }]);
+      client.setQueryData(["browse-sermon", []], [{ id: 8 }]);
+      client.setQueryData(["note-search", "grace"], [{ id: 7 }]);
+      client.setQueryData(["translations"], []);
+      const wrap = ({ children }: { children: ReactNode }) => (
+        <QueryClientProvider client={client}>{children}</QueryClientProvider>
+      );
+      return { client, wrap };
+    }
+
+    function cachedKeys(client: QueryClient) {
+      return client
+        .getQueryCache()
+        .getAll()
+        .map((q) => JSON.stringify(q.queryKey));
+    }
+
+    it("on logout", async () => {
+      server.use(http.get("/api/v1/auth/me", () => HttpResponse.json({ user: USER })));
+      const { client, wrap } = seeded();
+      const { result } = renderHook(() => useAuth(), { wrapper: wrap });
+      await waitFor(() => expect(result.current.isAuthenticated).toBe(true));
+
+      await act(async () => {
+        await result.current.logout();
+      });
+
+      expect(cachedKeys(client)).toEqual([JSON.stringify(["auth", "me"])]);
+      expect(client.getQueryData(["auth", "me"])).toBeNull();
+    });
+
+    it("on login", async () => {
+      server.use(
+        http.get("/api/v1/auth/me", () =>
+          HttpResponse.json({ detail: { code: "NOT_AUTHENTICATED", message: "no" } }, { status: 401 }),
+        ),
+        http.post("/api/v1/auth/login", () => HttpResponse.json({ user: USER })),
+      );
+      const { client, wrap } = seeded();
+      const { result } = renderHook(() => useAuth(), { wrapper: wrap });
+      await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+      await act(async () => {
+        await result.current.login({ username: "kris", password: "supersecret" });
+      });
+
+      expect(cachedKeys(client)).toEqual([JSON.stringify(["auth", "me"])]);
+      await waitFor(() => expect(result.current.user?.username).toBe("kris"));
+    });
+  });
 });

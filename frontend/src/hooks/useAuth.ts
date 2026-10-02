@@ -1,10 +1,19 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { type QueryClient, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { ApiError } from "@/lib/api";
 import { type Credentials, fetchMe, login, logout, register } from "@/lib/auth";
 import type { User } from "@/schemas";
 
 const ME_KEY = ["auth", "me"];
+
+/**
+ * Drop everything cached except the signed-in user. Notes, sermons and search results belong to
+ * one person, so none of them may outlive a change of who is signed in; the Concord data that
+ * goes with them is cheap to fetch again.
+ */
+function dropCachedData(queryClient: QueryClient): void {
+  queryClient.removeQueries({ predicate: (query) => query.queryKey[0] !== ME_KEY[0] });
+}
 
 export interface UseAuth {
   user: User | undefined;
@@ -36,24 +45,21 @@ export function useAuth(): UseAuth {
     retry: false,
   });
 
-  const loginMutation = useMutation({
-    mutationFn: login,
-    onSuccess: (user) => queryClient.setQueryData(ME_KEY, user),
-  });
+  const signedIn = (user: User) => {
+    dropCachedData(queryClient);
+    queryClient.setQueryData(ME_KEY, user);
+  };
 
-  const registerMutation = useMutation({
-    mutationFn: register,
-    onSuccess: (user) => queryClient.setQueryData(ME_KEY, user),
-  });
+  const loginMutation = useMutation({ mutationFn: login, onSuccess: signedIn });
+
+  const registerMutation = useMutation({ mutationFn: register, onSuccess: signedIn });
 
   const logoutMutation = useMutation({
     mutationFn: logout,
     onSuccess: () => {
-      // Drop the session-scoped cache so another login starts clean.
+      // So another login starts clean.
       queryClient.setQueryData(ME_KEY, null);
-      queryClient.removeQueries({ queryKey: ["chapter"] });
-      queryClient.removeQueries({ queryKey: ["annotations"] });
-      queryClient.removeQueries({ queryKey: ["tags"] });
+      dropCachedData(queryClient);
     },
   });
 
