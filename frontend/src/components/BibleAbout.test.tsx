@@ -213,6 +213,24 @@ describe("BibleAbout — a document", () => {
     expect(onList.defaultPrevented).toBe(false);
   });
 
+  it("steps back on Escape's key press every time, before the browser makes it a close", async () => {
+    useDocuments();
+    const user = userEvent.setup();
+    renderAbout();
+    // Chrome lets a page refuse a dialog's close only twice; the key press has no such limit.
+    for (const name of [/Made-up copyright/, /Made-up team/, /Made-up copyright/]) {
+      await user.click(await screen.findByRole("button", { name }));
+      const dialog = screen.getByRole("dialog", { name: /Made-up (copyright|team)/ });
+      expect(fireEvent.keyDown(dialog.querySelector("[tabindex='-1']")!, { key: "Escape" })).toBe(
+        false,
+      );
+      expect(await screen.findByRole("dialog", { name: "Made-up Bible" })).toBeInTheDocument();
+    }
+    // On the list, the key press is left alone, so the browser closes the page.
+    const list = screen.getByRole("dialog", { name: "Made-up Bible" });
+    expect(fireEvent.keyDown(list, { key: "Escape" })).toBe(true);
+  });
+
   it("jumps from a ref: link, and has both ways back at the end", async () => {
     useDocuments();
     const user = userEvent.setup();

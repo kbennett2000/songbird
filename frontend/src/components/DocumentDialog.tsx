@@ -65,6 +65,14 @@ export function DocumentDialog({
       aria-labelledby={titleId}
       // Only this dialog's own events: React passes a picture viewer's (a dialog inside this one)
       // up the tree too, though the browser's cancel and close events don't bubble.
+      // Escape steps back on its key press, before it becomes a close: Chrome lets a page refuse
+      // a dialog's `cancel` only twice, then closes it anyway. Android's Back has no key press,
+      // so it still comes as a `cancel`. A picture viewer inside handles its own Escape.
+      onKeyDown={(e) => {
+        if (e.key !== "Escape" || e.defaultPrevented || e.nativeEvent.isComposing) return;
+        if ((e.target as Element).closest("dialog") !== e.currentTarget) return;
+        if (onCancel?.()) e.preventDefault();
+      }}
       onCancel={(e) => {
         if (e.target === e.currentTarget && onCancel?.()) e.preventDefault();
       }}

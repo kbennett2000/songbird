@@ -110,6 +110,15 @@ This project follows [Keep a Changelog](https://keepachangelog.com/) and
   tab after you, the home page and Browse notes could briefly show your notes before theirs
   loaded. Now songbird forgets your notes and searches as soon as you sign out, and again when
   anyone signs in.
+- **A reference keeps its brackets on its line.** In a study Bible's lists, such as the Verse Finder
+  in **About EMB**, a reference in brackets could wrap so that "(" ended one line and the reference
+  began the next, or ")" sat alone. On a phone that happened in almost half the Verse Finder's
+  entries. A reference now wraps together with the brackets and the full stop or comma that touch
+  it, in notes, introductions and the About page alike.
+- **Escape keeps stepping back on the About page.** On a computer, pressing Escape in one of a
+  Bible's documents takes you back to its list. The third time in a row, the whole page closed
+  instead, because the browser stops a page from refusing a close after twice. Escape now steps
+  back every time, and closes the page only from the list.
 
 ## [1.7.0] — 2026-09-07
 
