@@ -62,18 +62,56 @@ describe("TopicDetailView", () => {
     expect(screen.getByText(/reader-at/)).toHaveTextContent("verse=8");
   });
 
-  it("renders a see_also redirect linking to the target topic (no verse list)", async () => {
+  it("renders a see_also redirect linking to the target topic, by its name (no verse list)", async () => {
     server.use(
-      http.get("/api/v1/topics/:id", () =>
-        HttpResponse.json(detail({ id: "charity", name: "Charity", see_also: "love" })),
+      http.get("/api/v1/topics/:id", ({ params }) =>
+        params.id === "charity"
+          ? HttpResponse.json(detail({ id: "charity", name: "Charity", see_also: "love" }))
+          : HttpResponse.json(detail({ id: "love", name: "LOVE" })),
       ),
     );
     renderDetail("charity");
 
-    const link = await screen.findByRole("link", { name: /See love/ });
+    // The target's name, not its id (Concord's ids are slugs such as "love" or "vf-56").
+    const link = await screen.findByRole("link", { name: "See LOVE" });
     expect(link).toHaveAttribute("href", "/topics/love");
     // A redirect carries no verses — the Verses section isn't rendered.
     expect(screen.queryByRole("heading", { name: /Verses/ })).not.toBeInTheDocument();
+  });
+
+  it("keeps the target's id when Concord lacks the target, and the link still goes there", async () => {
+    server.use(
+      http.get("/api/v1/topics/:id", ({ params }) =>
+        params.id === "made-up-a"
+          ? HttpResponse.json(detail({ id: "made-up-a", name: "MADE-UP A", see_also: "gone" }))
+          : HttpResponse.json({ detail: { code: "NOT_FOUND" } }, { status: 404 }),
+      ),
+    );
+    renderDetail("made-up-a");
+
+    const link = await screen.findByRole("link", { name: "See gone" });
+    expect(link).toHaveAttribute("href", "/topics/gone");
+  });
+
+  it("names the topic's index beside its section when Concord sends one", async () => {
+    server.use(
+      http.get("/api/v1/topics/:id", () =>
+        HttpResponse.json(detail({ name: "Made-up a", source: "Second Made-up Index" })),
+      ),
+      http.get("/api/v1/topics/:id/verses", () => HttpResponse.json([])),
+    );
+    renderDetail();
+    expect(await screen.findByText("God · Second Made-up Index")).toBeInTheDocument();
+  });
+
+  it("shows only the section from an older Concord, which sends no source", async () => {
+    server.use(
+      http.get("/api/v1/topics/:id", () => HttpResponse.json(detail())),
+      http.get("/api/v1/topics/:id/verses", () => HttpResponse.json([])),
+    );
+    renderDetail();
+    const section = await screen.findByText("God");
+    expect(section.textContent).toBe("God");
   });
 
   it("shows a not-found message for an unknown topic (404)", async () => {

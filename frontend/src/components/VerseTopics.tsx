@@ -15,8 +15,8 @@ interface VerseTopicsProps {
 
 /** A verse's topics — Concord's curated topical index (songbird owns none). Two levels in one
  * panel: the verse's topics, then (drilling into one) that topic's verses, each jump-able back
- * into the reader. User-invoked, so an outage shows an inline error (unlike the silent headings
- * overlay). */
+ * into the reader. Each names its topical index when Concord sends one (Concord ADR-0013).
+ * User-invoked, so an outage shows an inline error (unlike the silent headings overlay). */
 export function VerseTopics({
   book,
   chapter,
@@ -39,6 +39,11 @@ export function VerseTopics({
             ← Topics
           </button>
           <h3 className="mt-1 font-semibold">{selectedTopic.name}</h3>
+          {selectedTopic.source && (
+            <p className="text-xs text-gray-400 dark:text-gray-500">
+              {selectedTopic.section} · {selectedTopic.source}
+            </p>
+          )}
         </div>
         <TopicVerseList
           topicId={selectedTopic.see_also ?? selectedTopic.id}
@@ -92,6 +97,7 @@ function TopicList({
             <span className="block font-medium text-blue-700 dark:text-blue-400">{topic.name}</span>
             <span className="mt-0.5 block text-xs text-gray-400 dark:text-gray-500">
               {topic.section}
+              {topic.source && ` · ${topic.source}`}
             </span>
           </button>
         </li>
