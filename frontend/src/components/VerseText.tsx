@@ -30,15 +30,18 @@ export function VerseText({ text, notes, onOpenNote, lookOf }: VerseTextProps): 
 
   return (
     <span>
-      {segments.map((seg) => {
+      {segments.map((seg, i) => {
         if (seg.kind === "text") return <span key={seg.key}>{seg.text}</span>;
         const look = lookOf(seg.note);
+        // Markers side by side get a gap, or two plain numbers read as one ("1" "2" → "12"). The
+        // first of a run, and a marker after words, sit exactly where they always have.
+        const gap = segments[i - 1]?.kind === "marker" ? " ml-[0.3em]" : "";
         return (
           <button
             key={seg.key}
             type="button"
             data-note-look={look.id}
-            className={`align-super font-sans text-[0.7em] font-medium hover:underline ${look.colour}`}
+            className={`align-super font-sans text-[0.7em] font-medium hover:underline ${look.colour}${gap}`}
             onClick={(e) => onOpenNote(seg.note, e.currentTarget)}
             aria-label={`${markerName(seg.note)} ${seg.number}${
               seg.note.borrowed ? ` (from ${seg.note.borrowed.from})` : ""
