@@ -6,12 +6,19 @@ cross-references — a bad/unknown ref or topic id is a not-found (404), not unr
 from fastapi import APIRouter, Depends
 
 from songbird.api.deps import get_concord_client
-from songbird.api.schemas import TopicDetail, TopicsPageOut, TopicSummary, TopicVerse
+from songbird.api.schemas import (
+    TopicDetail,
+    TopicSourceOut,
+    TopicsPageOut,
+    TopicSummary,
+    TopicVerse,
+)
 from songbird.concord.client import (
     ConcordClient,
     ConcordNotFoundError,
     ConcordUnreachableError,
 )
+from songbird.concord.schemas import TopicSummary as ConcordTopicSummary
 from songbird.core.errors import ErrorCode, raise_http
 
 router = APIRouter(prefix="/api/v1", tags=["topics"])
@@ -32,10 +39,7 @@ async def verse_topics(
         raise_http(404, ErrorCode.NOT_FOUND, str(exc))
     except ConcordUnreachableError as exc:
         raise_http(502, ErrorCode.CONCORD_UNREACHABLE, str(exc))
-    return [
-        TopicSummary(id=t.id, name=t.name, section=t.section, see_also=t.see_also)
-        for t in result.topics
-    ]
+    return [_summary(t) for t in result.topics]
 
 
 @router.get("/topics/{topic_id}/verses", response_model=list[TopicVerse])
@@ -75,23 +79,27 @@ async def topic_verses(
 async def browse_topics(
     q: str | None = None,
     section: str | None = None,
+    source: str | None = None,
     limit: int = 50,
     offset: int = 0,
     concord: ConcordClient = Depends(get_concord_client),
 ) -> TopicsPageOut:
-    """Browse the whole topical index with optional name (`q`) / section filters, paginated.
-    A bad filter → 404; unreachable → 502."""
+    """Browse the whole topical index with optional name (`q`) / section / source filters,
+    paginated, in Concord's order. A bad filter (an unknown source included) → 404; unreachable
+    → 502."""
     try:
-        page = await concord.list_topics(q=q, section=section, limit=limit, offset=offset)
+        page = await concord.list_topics(
+            q=q, section=section, source=source, limit=limit, offset=offset
+        )
     except ConcordNotFoundError as exc:
         raise_http(404, ErrorCode.NOT_FOUND, str(exc))
     except ConcordUnreachableError as exc:
         raise_http(502, ErrorCode.CONCORD_UNREACHABLE, str(exc))
-    topics = [
-        TopicSummary(id=t.id, name=t.name, section=t.section, see_also=t.see_also)
-        for t in page.topics
-    ]
-    return TopicsPageOut(topics=topics, total=page.total)
+    return TopicsPageOut(
+        topics=[_summary(t) for t in page.topics],
+        total=page.total,
+        sources=[TopicSourceOut(source=s.source, total=s.total) for s in page.sources],
+    )
 
 
 @router.get("/topics/{topic_id}", response_model=TopicDetail)
@@ -111,5 +119,12 @@ async def topic_detail(
         name=detail.name,
         section=detail.section,
         see_also=detail.see_also,
+        source=detail.source,
         verse_count=detail.verse_count,
+    )
+
+
+def _summary(t: ConcordTopicSummary) -> TopicSummary:
+    return TopicSummary(
+        id=t.id, name=t.name, section=t.section, see_also=t.see_also, source=t.source
     )

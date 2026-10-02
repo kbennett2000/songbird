@@ -557,6 +557,7 @@ class TopicSummary(BaseModel):
     name: str
     section: str
     see_also: str | None
+    source: str | None  # its topical index (Concord ADR-0013); null from an older Concord
 
 
 class TopicVerse(BaseModel):
@@ -577,12 +578,22 @@ class TopicDetail(TopicSummary):
     verse_count: int
 
 
+class TopicSourceOut(BaseModel):
+    """One topical index and how many topics match the browse's search and section in it."""
+
+    source: str
+    total: int
+
+
 class TopicsPageOut(BaseModel):
     """One page of the topics browse — `total` lets the client paginate ("Load more"). Mirrors
-    PlacesPageOut: the client tracks limit/offset itself, so they aren't echoed here."""
+    PlacesPageOut: the client tracks limit/offset itself, so they aren't echoed here. `sources`
+    is every topical index Concord has loaded with its count, in Concord's order; [] from a
+    Concord that predates ADR-0013."""
 
     topics: list[TopicSummary]
     total: int
+    sources: list[TopicSourceOut]
 
 
 class WordTokenOut(BaseModel):

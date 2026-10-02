@@ -136,16 +136,19 @@ export async function fetchTopicVerses(
 export interface TopicFilters {
   q?: string;
   section?: string;
+  /** One topical index, by the name Concord gives it in `sources`. */
+  source?: string;
   limit?: number;
   offset?: number;
 }
 
-/** One page of the topical-index browse — filter by name (`q`) / section, paginated
- * (`{ topics, total }`). Modeled on browsePlaces. */
+/** One page of the topical-index browse — filter by name (`q`) / section / source, paginated
+ * (`{ topics, total, sources }`). Modeled on browsePlaces. */
 export async function fetchTopics(filters: TopicFilters = {}): Promise<TopicsPage> {
   const params = new URLSearchParams();
   if (filters.q) params.set("q", filters.q);
   if (filters.section) params.set("section", filters.section);
+  if (filters.source) params.set("source", filters.source);
   params.set("limit", String(filters.limit ?? 50));
   params.set("offset", String(filters.offset ?? 0));
   const data = await apiRequest<unknown>("GET", `/topics?${params.toString()}`);

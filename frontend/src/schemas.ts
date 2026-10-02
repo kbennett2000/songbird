@@ -328,12 +328,14 @@ export const crossReferenceSchema = z.object({
 export const crossReferencesSchema = z.array(crossReferenceSchema);
 
 // A topic from Concord's curated topical index (songbird owns none). `see_also` is another
-// topic's id for a "See X" redirect (those carry no verses of their own), else null.
+// topic's id for a "See X" redirect (those carry no verses of their own), else null. `source`
+// names its topical index (Concord ADR-0013); null or absent from an older Concord.
 export const topicSummarySchema = z.object({
   id: z.string(),
   name: z.string(),
   section: z.string(),
   see_also: z.string().nullable(),
+  source: z.string().nullish(),
 });
 export const topicSummariesSchema = z.array(topicSummarySchema);
 
@@ -349,10 +351,13 @@ export const topicVerseSchema = z.object({
 export const topicVersesSchema = z.array(topicVerseSchema);
 
 // One page of the topics browse — `total` lets the view paginate ("Load more"). Mirrors
-// placesPageSchema: no limit/offset in the body (the view tracks those itself).
+// placesPageSchema: no limit/offset in the body (the view tracks those itself). `sources` is
+// every topical index Concord has loaded, with how many topics match the search and section in
+// each, in Concord's order; empty from an older Concord.
 export const topicsPageSchema = z.object({
   topics: topicSummariesSchema,
   total: z.number(),
+  sources: z.array(z.object({ source: z.string(), total: z.number() })).default([]),
 });
 
 // A single topic's full record (browse detail) — the summary fields + its verse count.

@@ -63,7 +63,14 @@ async def test_verse_topics_pass_through(
     rows = resp.json()
     assert len(rows) == 2
 
-    assert rows[0] == {"id": "love", "name": "Love", "section": "God", "see_also": None}
+    # `source` is null from a Concord that predates topic sources (ADR-0013).
+    assert rows[0] == {
+        "id": "love",
+        "name": "Love",
+        "section": "God",
+        "see_also": None,
+        "source": None,
+    }
     # A see_also redirect row passes through verbatim (the target topic id).
     assert rows[1]["id"] == "charity"
     assert rows[1]["see_also"] == "love"
@@ -192,13 +199,20 @@ async def test_browse_topics_pass_through_and_filters(
         resp = await client.get("/api/v1/topics?q=lov&section=God&limit=10&offset=20")
     assert resp.status_code == 200
     body = resp.json()
-    # The page-out is {topics, total} — mirrors PlacesPageOut, no limit/offset echoed.
-    assert set(body.keys()) == {"topics", "total"}
+    # The page-out is {topics, total, sources} — mirrors PlacesPageOut, no limit/offset echoed.
+    assert set(body.keys()) == {"topics", "total", "sources"}
+    assert body["sources"] == []  # an older Concord lists no sources
     assert body["total"] == 42
     assert [t["id"] for t in body["topics"]] == ["love", "charity"]
     assert body["topics"][1]["see_also"] == "love"
-    # The q / section / limit / offset all reached Concord (passthrough).
-    assert fake.last_list_topics == {"q": "lov", "section": "God", "limit": 10, "offset": 20}
+    # The q / section / limit / offset all reached Concord (passthrough); no source was asked.
+    assert fake.last_list_topics == {
+        "q": "lov",
+        "section": "God",
+        "source": None,
+        "limit": 10,
+        "offset": 20,
+    }
 
 
 async def test_browse_topics_defaults(
@@ -210,8 +224,14 @@ async def test_browse_topics_defaults(
     async with client_for(fake) as client:
         resp = await client.get("/api/v1/topics")
     assert resp.status_code == 200
-    assert resp.json() == {"topics": [], "total": 0}
-    assert fake.last_list_topics == {"q": None, "section": None, "limit": 50, "offset": 0}
+    assert resp.json() == {"topics": [], "total": 0, "sources": []}
+    assert fake.last_list_topics == {
+        "q": None,
+        "section": None,
+        "source": None,
+        "limit": 50,
+        "offset": 0,
+    }
 
 
 async def test_browse_topics_bad_filter_404(
@@ -250,6 +270,7 @@ async def test_topic_detail_pass_through(
         "name": "Charity",
         "section": "Virtues",
         "see_also": "love",
+        "source": None,
         "verse_count": 0,
     }
 

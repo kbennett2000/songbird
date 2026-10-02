@@ -4,6 +4,110 @@ A running log of per-slice decisions, gotchas, and how each slice was verified. 
 
 ---
 
+## v1.8 slice D — topics by source
+
+- **Date:** 2026-10-02
+- **Branch:** `slice/v1.8-topics-by-source`
+- **Spec:** `docs/v1.8/STUDY-BIBLE-SPEC.md` §7 (new), §1, §2 and §9 (Rules and Acceptance are now
+  §8 and §9); `docs/v1/SPEC.md` §12, "Topics by source".
+
+### Why
+
+Concord's ADR-0013 (V8-S6) loads a second topical index beside Nave's: EMB's Tyndale Verse Finder,
+183 topics with ids `vf-1` to `vf-183`, 8 of them "see" redirects. Every topic now carries
+`source`, and `/v1/topics` lists every index with its count (`sources`) and takes `?source=`.
+songbird dropped all of it, since its routes rebuild each topic field by field.
+
+Surveyed without keeping any text:
+- **Of 594 "see" redirects** (586 Nave's, 8 Verse Finder), **143 of Nave's point to a topic
+  Concord lacks** (ADR-0013 says so too). A Nave's id is a lower-case slug, so "See nebo" was
+  the id, not a name.
+- **The pinned v1.2.0** sends `see_also` but no `source` or `sources`, and has no `?source=`.
+- **Concord's order is by name, binary,** so a page or a verse's topics mix the indexes. The order
+  of Exodus 21:22's four topics changed while this slice was being built (the Verse Finder's moved
+  from third to second); songbird shows whatever Concord sends.
+
+### What landed
+
+- **API:**
+  - `source` on every topic (verse topics, browse, detail).
+  - `sources` on the browse page.
+  - `?source=` forwarded only when given (`ConcordClient.list_topics`).
+  - An unknown source's 400 is a 404, as any bad topics filter already was.
+  - A topic's verses route is unchanged: Concord's page-level `source` there isn't modelled, since
+    the page gets it from the detail.
+- **Topics page:**
+  - With more than one source, a **From:** row of pills (All, then each source with its count, in
+    Concord's order), modelled on the study-note search's, and each row's quiet line names its
+    source.
+  - The last sources reported are kept in state, so the pills stay while a new choice loads (no
+    other screen uses `placeholderData`).
+  - With a source chosen, the empty message names it.
+- **A topic's page:**
+  - The source beside the section.
+  - A "see" link fetches its target (`["topic", id]`, the target page's own cache entry) and shows
+    its name: "See …" while it loads, and the id when Concord lacks the target or fails.
+- **The Reader's ※ panel:** each topic's quiet line, and the drilled-in heading's, name the source.
+- **No new dependency, no database change, no screenshot in the repo.**
+
+### Decisions
+
+- **The "see" fix applies on any Concord** (Kris's call). Against v1.2.0 it is the one visible
+  change: a Nave's "see" shows its target's name in capitals.
+- **Row labels and pills only with more than one source; a topic's page and the reader name the
+  source whenever Concord sends one.** On a list of 5,000 rows a lone index's name is noise; on one
+  topic it says where it's from.
+- **All has no count.** The line above the list already says "50 of 5502".
+- **The filter isn't in the address,** as the search and section aren't.
+
+### Gotchas
+
+- **`ruff format` on `tests/conftest.py`** reflowed two unrelated lines (the gate formats only
+  `songbird/`). The file was restored and only the new parameter kept. `lib/reader.ts` and
+  `TopicsView.test.tsx` weren't Prettier-clean before and were left so.
+- **A test that a filter "stays while loading" passed without the fix,** because MSW answered
+  before the assertion. It now holds the chosen source's answer until it has looked.
+- **Playwright can't `check()` a pill's radio:** it's `sr-only` under its label. Click the label,
+  as a person does.
+
+### The slice before this, on the server
+
+PR #153 (follow-up 5: brackets and Escape) is live: `main` at `946eb93`, and the live
+`index.html` names the image's `assets/index-CnpCusPf.js`. No migration. On a throwaway container of
+that image, no Verse Finder reference has a bracket alone at 390 or 1280 px, and Escape steps back
+through four documents in a row.
+
+### How it was verified
+
+- **Backend:** `topic_sources_test.py` (10): the source on verse topics, browse and detail;
+  `sources` in Concord's order; `?source=` forwarded; an unknown source a 404; the client sending
+  `source` only when asked, parsing it and its absence, and mapping a 400 and a 500. The
+  `topics_test.py` exact-match checks now include `source: null` and `sources: []`.
+- **Frontend:**
+  - `TopicsView.test.tsx` (+4): the pills and counts with two sources, Concord's order kept, a
+    choice sent and shown; the pills staying while a choice loads (held response); the named empty
+    message; none and no labels with one source or an older Concord, with no `source` ever asked.
+  - `TopicDetailView.test.tsx` (+3, 1 changed): "See" + the target's name; the id when the target
+    is a 404; the source line, and the section alone from an older Concord.
+  - `VerseTopics.test.tsx` (+2): the source on each topic and in the drilled-in heading; the
+    section alone from an older Concord.
+- **The gate:** `make check` and `make check-frontend` green (counts in the PR).
+- **In a browser, before the PR:** a local build against Kris's Concord, with a scratch database,
+  in headless Chromium, at 1280×800 and 390×844, light and dark (4 runs, a script comparing the page
+  with songbird's own API answers):
+  - **Topics:** the first 50 rows in Concord's order; pills "All", "Nave's Topical Bible (5,319)",
+    "Tyndale Verse Finder (183)"; every row labelled.
+  - **Choosing the Verse Finder:** its rows in Concord's order, "50 of 183", and **Load more** stays
+    in it. A search for "pray" gives counts 4 and 1, matching Concord.
+  - **`vf-1`:** "A · Tyndale Verse Finder" and its 12 verses.
+  - **`vf-122`:** "See" + `vf-56`'s name, which opens it. `abarim` reads "See NEBO", and
+    `admonition` (a target Concord lacks) "See wicked-warned", each with "A · Nave's Topical Bible".
+  - **Exodus 21:22's ※ panel:** its four topics name their sources in Concord's order; the Verse
+    Finder's opens on its 12 verses with its source under the heading.
+  - **Overall:** no sideways scroll and no page errors. On a phone the pills take two rows.
+
+---
+
 ## v1.8 follow-up 5 — two fixes found looking at the Verse Finder
 
 - **Date:** 2026-10-02

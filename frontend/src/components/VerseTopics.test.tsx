@@ -26,6 +26,40 @@ function renderPanel(onJump = vi.fn()) {
 }
 
 describe("VerseTopics", () => {
+  it("names each topic's index beside its section, and in the drilled-in heading", async () => {
+    // Made-up topics and indexes only: a study Bible's topic names are its own text.
+    server.use(
+      http.get("/api/v1/verse-topics/:book/:chapter/:verse", () =>
+        HttpResponse.json([
+          { ...topic("made-up-a", "MADE-UP A", "M"), source: "First Made-up Index" },
+          { ...topic("mx-1", "Made-up b", "M"), source: "Second Made-up Index" },
+        ]),
+      ),
+    );
+    const user = userEvent.setup();
+    renderPanel();
+
+    expect(await screen.findByText("M · First Made-up Index")).toBeInTheDocument();
+    expect(screen.getByText("M · Second Made-up Index")).toBeInTheDocument();
+    await user.click(screen.getByText("Made-up b"));
+    expect(await screen.findByRole("heading", { name: "Made-up b" })).toBeInTheDocument();
+    expect(screen.getByText("M · Second Made-up Index")).toBeInTheDocument();
+  });
+
+  it("shows only the section from an older Concord, which sends no source", async () => {
+    server.use(
+      http.get("/api/v1/verse-topics/:book/:chapter/:verse", () =>
+        HttpResponse.json([topic("made-up-a", "MADE-UP A", "M")]),
+      ),
+    );
+    const user = userEvent.setup();
+    renderPanel();
+    expect((await screen.findByText("M")).textContent).toBe("M");
+    await user.click(screen.getByText("MADE-UP A"));
+    expect(await screen.findByRole("heading", { name: "MADE-UP A" })).toBeInTheDocument();
+    expect(screen.queryByText(/ · /)).not.toBeInTheDocument();
+  });
+
   it("lists a verse's topics (name + section), then drills into a topic's verses", async () => {
     server.use(
       http.get("/api/v1/verse-topics/:book/:chapter/:verse", () =>

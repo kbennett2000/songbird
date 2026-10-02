@@ -14,6 +14,7 @@ Appended to every note and every notes-search hit (Concord ADR-0011):
   - *Live since Concord V8-S4 (ADR-0012):* a chart's `image` names one of its own translation's images, e.g. `chart-01.jpg`, and every other note's is null. Notes-search hits carry `image` and `title` too.
 - `type` may now also be `article` or `chart`.
 - Markdown text may carry `ref:` links, `[words](ref:TARGET)`, where TARGET is one of `JHN.3` · `GEN.12-14` · `JHN.3.16` · `JHN.3.16-18` · `JHN.3.16-4.2` (USFM code, then chapter, then verse).
+  - *Since Concord V8-S6b (2 Oct 2026):* EMB's 26 Perspectives boxes (notes labelled "Perspectives") have their passage and their saying in italics, each closed before a hard break, with the punctuation at either edge outside the italics; the reference and the attribution stay upright.
 
 And on `GET /v1/translations`, each entry has `note_count` (0 when none).
 
@@ -22,12 +23,17 @@ And `GET /v1/translations/{translation}/assets/{name}` (Concord ADR-0012) return
 And `GET /v1/translations/{translation}/documents?kind=&book=` and `GET /v1/translations/{translation}/documents/{slug}` (Concord ADR-0012, V8-S5): a translation's documents — `front-matter`, `reading-plan`, `book-introduction` and `about` — with `document_count` on each `/v1/translations` entry.
 - The list is `{translation, book, kind, total, documents: [{slug, kind, title, book, ordinal}]}`, with no paging; `book` is a book introduction's USFM code and null for the other kinds. An unknown kind or book is a `400`, an unknown translation a `404`.
 - One document is `{translation, slug, kind, title, book, ordinal, text, images: [{name, media_type, width, height}]}`. `text` is always Markdown (CommonMark): `##` headings, flat lists, block quotes, hard breaks written as a backslash before the line end, `ref:` links, and pictures written `![alt](asset:NAME)`, served by the assets endpoint. `images` lists them with their pixel size. An unknown slug is a `404`.
-- Both are immutable. EMB has 73 (Concord V8-S5b and V8-S5c):
+- Both are immutable. EMB has 74 (Concord V8-S5b, V8-S5c and V8-S6b):
   - 66 book introductions, each with one picture (its reading time) and, in 36 of them, a timeline (a flat list whose items are a date, a hard break, then the event in bold);
-  - 5 front matter (`front-matter-1` … `-5`: the copyright page, two introductions, the contributors, the translation team);
+  - 6 front matter (`front-matter-1` … `-5`: the copyright page, two introductions, the contributors, the translation team; and `front-matter-6`, the Tyndale Verse Finder as printed: about 95 KB, 183 `##` topics, an italic "see" or "see also" line in brackets under 29 of them, and 1,286 list items, each a statement and then its reference in brackets as a `ref:` link);
   - a reading plan (`reading-plan-1`: 365 days, each a `##` date over a list of 4 readings as `ref:` links; a month's first day is in capitals, "JANUARY 1"; a reading that crosses into the next book is two links in one item);
   - an about (`about-1`: Personal Gold's author notes and credits).
-  None of the last seven places a picture.
+  None of the last eight places a picture.
+
+And on the topics endpoints (Concord ADR-0013, V8-S6a): every topic carries `source`, its topical index by name, on `/v1/topics`, `/v1/topics/{id}`, `/v1/topics/{id}/verses` (at the page's top level) and `/v1/verses/{ref}/topics`.
+- `/v1/topics` also returns `sources`: every loaded index with how many of its topics match the same `q` and `section` (0 included), ordered by name, and the echoed `source` filter. It takes `?source=`, an index's exact name; an unknown name is a `400` with code `unknown_source`.
+- Order stays by name, then id, in binary collation, so a list or a verse's topics may mix the indexes (all-capitals names sort before mixed-case ones with the same first letter).
+- Kris's Concord has two: "Nave's Topical Bible" (5,319 topics, names in capitals) and "Tyndale Verse Finder" (183 topics, ids `vf-1` … `vf-183`, names in ordinary case, 8 of them "see" redirects). The Verse Finder's statements and its "see also" pointers between topics with verses of their own don't fit the topics data; they are in `front-matter-6` above.
 
 A Concord that predates v8 sends none of these. songbird must behave exactly as it does today against one (the pinned image is v1.2.0), so every new field is optional.
 
@@ -42,7 +48,7 @@ A Concord that predates v8 sends none of these. songbird must behave exactly as 
 | D | Topics by source | The Topics page and verse topics show each topic's source, with a filter (after Concord's Verse Finder slice) | Verse Finder beside Nave's |
 | E | Pin bump + release | Concord pin moved to its v8 release, the contract fixture refreshed and extended to the new fields and the assets endpoint, songbird 1.8.0 | — |
 
-Slices B–E get their detail when their Concord slice lands. Slice B's is §4, C1's is §5 and C2's is §6.
+Slices B–E get their detail when their Concord slice lands. Slice B's is §4, C1's is §5, C2's is §6 and D's is §7.
 
 ## 3. Slice A — notes from any source
 
@@ -159,13 +165,40 @@ A study Bible prints more than its notes and introductions: front matter (a copy
 
 **An older Concord.** The pinned v1.2.0 sends no `document_count`: no button, no Settings section, and nothing asks it for documents.
 
-## 7. Rules that hold for every slice
+## 7. Slice D — topics by source
+
+Nave's was songbird's only topical index. Concord can now load more than one, each keeping its own topics (nothing is merged): beside Nave's, EMB brings the Tyndale Verse Finder. The topics screens say which index each topic comes from and let the Topics page show one at a time.
+
+**The API, through songbird.** Passed through at request time; songbird stores nothing (invariants 1 and 5).
+- `source` on every topic: a verse's topics (`/api/v1/verse-topics/{book}/{chapter}/{verse}`), the browse (`/api/v1/topics`) and a topic (`/api/v1/topics/{id}`). It is null from an older Concord.
+- `GET /api/v1/topics` gains `sources` (Concord's list, each `{source, total}`; `[]` from an older Concord) and `?source=`, which reaches Concord only when given. An unknown source is a `404`, as any bad topics filter is.
+- A topic's verses (`/api/v1/topics/{id}/verses`) are unchanged: the topic's page takes the source from the topic itself.
+
+**The Topics page.**
+- When `sources` has more than one entry, a **From:** row of pills like the study-note search's (§3): **All**, then each index with its count, "Nave's Topical Bible (5,319)", in Concord's order. The counts follow the search and the section. A choice applies at once, and the pills stay on screen while its first page loads.
+- In the same case, each row's quiet line names its index: "A · Tyndale Verse Finder".
+- With an index chosen, an empty result names it: "No Tyndale Verse Finder topics match."
+- The rows are Concord's pages in Concord's order; songbird never re-sorts them.
+- With one index, or none (an older Concord): no pills, no labels, and no `source` is ever asked for.
+
+**A topic's page.**
+- The quiet line under its name names its index ("L · Tyndale Verse Finder") when Concord sends one.
+- **A "see" topic names its target.** It used to show the target's id ("See vf-56"; a Nave's id is a lower-case slug). Now the target topic is fetched, from the same cache its own page uses, and the link reads "See" and its name. While it loads, "See …". When Concord lacks the target (143 of Nave's "see" topics point to one it lacks) or the fetch fails, the id, as before, so the link still goes where it did.
+- The "see" fix holds on any Concord (Kris's call, 2 Oct 2026). Against v1.2.0 it is the one visible change: a Nave's "see" topic shows its target's name in capitals.
+
+**The reader's topics.** Each topic's quiet line in the ※ panel, and the drilled-in topic's, names its index ("A · Nave's Topical Bible") when Concord sends one.
+
+**An older Concord.** The pinned v1.2.0 sends no `source` or `sources`: no pills, no labels, and `?source=` is never sent.
+
+**Not in this slice.** A way to get around the Verse Finder as printed (`front-matter-6`, 106 screens on a phone, read through the About page): a jump-to-letter bar was suggested on 2 Oct 2026 and waits for Kris's call.
+
+## 8. Rules that hold for every slice
 
 - songbird stores nothing from Concord: no note text, no images, no documents (invariants 1 and 5). Its database gains only preferences.
 - The Concord pin stays at v1.2.0 until slice E. Until then the contract test keeps validating against the pinned fixture, and the new fields are covered by songbird's own tests.
 - No new dependency without a reason (CLAUDE.md).
 
-## 8. Acceptance
+## 9. Acceptance
 
 **Slice A.**
 
@@ -175,4 +208,6 @@ On Kris's server, with Concord serving EMB's notes: reading EMB shows its textua
 
 **Slice C1.** On Kris's server, with Concord serving EMB's introductions, open Genesis, Isaiah and Philemon on EMB and on KJV with EMB ticked, at desktop and phone width. The reader offers each book's introduction (named by its Bible on KJV), which opens in its own view with its headings, lists, quotes, timeline and picture readable on a phone. Its links jump the reader, and closing it returns to the same place. Against a Concord without documents (the pinned v1.2.0), everything behaves as before.
 
-**Slice C2.** On Kris's server, with Concord serving EMB's front matter, reading plan and about, open EMB's About page on EMB and on KJV with EMB ticked, and from Settings, at desktop and phone width, in light and dark. Each of the five front-matter pieces, Personal Gold's author notes and the reading plan read in full. The plan reaches its first day, a day in June and its last day without scrolling the year, and a reading that crosses into the next book jumps to each half. Closing returns to the same place. Against a Concord without documents (the pinned v1.2.0), everything behaves as before and nothing offers an About page.
+**Slice C2.** On Kris's server, with Concord serving EMB's front matter, reading plan and about, open EMB's About page on EMB and on KJV with EMB ticked, and from Settings, at desktop and phone width, in light and dark. Each of the six front-matter pieces (the sixth, the Verse Finder, since Concord V8-S6b), Personal Gold's author notes and the reading plan read in full. The plan reaches its first day, a day in June and its last day without scrolling the year, and a reading that crosses into the next book jumps to each half. Closing returns to the same place. Against a Concord without documents (the pinned v1.2.0), everything behaves as before and nothing offers an About page.
+
+**Slice D.** On Kris's server, with Concord serving the Verse Finder beside Nave's, at desktop and phone width, in light and dark. The Topics page offers All, Nave's and the Verse Finder with their counts; choosing the Verse Finder lists its topics in Concord's order, each naming its index, and a search updates the counts. `vf-1` names its index; a Verse Finder "see" topic and a Nave's one show their targets' names. Exodus 21:22's topics in the reader name their indexes. Against a Concord without sources (the pinned v1.2.0), the Topics page, a topic and the reader's topics look as before, with no pills and no labels, and no source is ever asked for.

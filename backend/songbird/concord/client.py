@@ -341,14 +341,19 @@ class ConcordClient:
         section: str | None = None,
         limit: int = 50,
         offset: int = 0,
+        source: str | None = None,
     ) -> TopicsResponse:
-        """One page of the topical index browse (`/v1/topics`) — filter by name (`q`) / section,
-        paginated. A 400/404 (e.g. unknown section filter) is a client error, not unreachability."""
+        """One page of the topical index browse (`/v1/topics`) — filter by name (`q`) / section /
+        source, paginated. A 400/404 (e.g. an unknown section or source) is a client error, not
+        unreachability. `source` is sent only when given, so a Concord that predates ADR-0013
+        never sees it."""
         params: dict[str, str] = {"limit": str(limit), "offset": str(offset)}
         if q:
             params["q"] = q
         if section:
             params["section"] = section
+        if source:
+            params["source"] = source
         try:
             response = await self._client.get("/v1/topics", params=params)
             response.raise_for_status()

@@ -403,6 +403,15 @@ in the same visit returns to where it was left (in memory only). Its `ref:` link
 or from Settings open it. No API change: it reads the documents passthrough above. Specified in
 `docs/v1.8/STUDY-BIBLE-SPEC.md` §6.
 
+**Topics by source (v1.8).** Concord may load more than one topical index (Nave's, and a study
+Bible's own, such as the Tyndale Verse Finder). Each topic carries its `source`, which songbird
+passes through on every topic, with the browse's `sources` (each index and its count) and a
+`?source=` filter; nothing is stored. When there is more than one index, the Topics page offers a
+filter (All, then each index with its count) and each row names its index, in Concord's order; a
+topic's page and the reader's topics name it too. A "see" topic shows the name of the topic it
+points to. Against a Concord without sources, the pages look as they did. Specified in
+`docs/v1.8/STUDY-BIBLE-SPEC.md` §7.
+
 **Keyword Scripture search.** Alongside semantic search, a **keyword/semantic toggle** on the
 Search screen. Keyword search proxies Concord's `/v1/search` (`GET /api/v1/keyword-search`) for
 exact word/phrase matches with highlighted snippets; semantic search finds by meaning. When a
