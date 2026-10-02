@@ -30,6 +30,8 @@ from songbird.concord.schemas import (
     Chapter,
     ConcordHealth,
     CrossRefResponse,
+    Document,
+    DocumentsResponse,
     HeadingsResponse,
     JourneyDetail,
     JourneysResponse,
@@ -98,6 +100,8 @@ class FakeConcordClient:
         place_types: list[str] | None = None,
         random: RandomVerse | None = None,
         asset: ConcordAsset | None = None,
+        documents: DocumentsResponse | None = None,
+        document: Document | None = None,
         error: Exception | None = None,
         base_url: str = "http://concord.test",
     ) -> None:
@@ -141,7 +145,14 @@ class FakeConcordClient:
         self._place_types = place_types or []
         self._random = random
         self._asset = asset
+        self._documents = documents
+        self._document = document
         self._error = error
+        # Every `list_documents` call (translation, kind, book) and `get_document` call
+        # (translation, slug), so a test can prove what reached Concord — and that a refused slug
+        # never did.
+        self.documents_calls: list[tuple[str, str | None, str | None]] = []
+        self.document_calls: list[tuple[str, str]] = []
         # Every `get_asset` call (translation, name, if_none_match), so a test can prove what
         # reached Concord — and that a refused name never did.
         self.asset_calls: list[tuple[str, str, str | None]] = []
@@ -400,6 +411,26 @@ class FakeConcordClient:
         if self._asset is None:
             raise ConcordNotFoundError(f"Concord has no image '{name}' (in {translation})")
         return self._asset
+
+    async def list_documents(
+        self, translation: str, *, kind: str | None = None, book: str | None = None
+    ) -> DocumentsResponse:
+        self.documents_calls.append((translation, kind, book))
+        if self._error is not None:
+            raise self._error
+        return (
+            self._documents
+            if self._documents is not None
+            else DocumentsResponse(translation=translation, book=book, kind=kind, total=0, documents=[])
+        )
+
+    async def get_document(self, translation: str, slug: str) -> Document:
+        self.document_calls.append((translation, slug))
+        if self._error is not None:
+            raise self._error
+        if self._document is None:
+            raise ConcordNotFoundError(f"Concord has no document '{slug}' (in {translation})")
+        return self._document
 
     async def get_headings(self, translation: str, book: str, chapter: int) -> HeadingsResponse:
         if self._error is not None:
