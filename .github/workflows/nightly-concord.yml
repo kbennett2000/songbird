@@ -6,8 +6,9 @@
 # The Concord image is public on GHCR (the same one `docker compose up` pulls), so no registry
 # auth is needed. If it is ever made private, add a docker/login-action step with a GHCR token.
 #
-# Concord version: pinned literally below. Slice 2 unifies this with docker-compose.yml's pin so
-# there is one named value across the repo.
+# Concord version: pinned literally below, the same as docker-compose.yml's bundled engine. The
+# contract test (backend/tests/concord_contract_test.py) fails if either names a version other
+# than its fixture's, so the three move together.
 
 name: Nightly Concord contract
 
@@ -25,7 +26,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       concord:
-        image: ghcr.io/kbennett2000/concord:v1.1.0
+        image: ghcr.io/kbennett2000/concord:v1.3.0
         ports:
           - 8000:8000
         options: >-

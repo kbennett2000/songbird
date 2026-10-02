@@ -4,7 +4,7 @@ Concord v8 appends `label`, `title`, `text_format`, `passages` and `image` (a ch
 live since Concord ADR-0012) to every note and notes-search hit, and `note_count` to every
 translation. songbird validates Concord's JSON into its own models
 and re-maps notes field by field, so each new field has to be carried at both layers or it's
-silently dropped. A Concord that predates v8 (the pinned v1.2.0 image) sends none of them, and
+silently dropped. A Concord that predates v8 (v1.2.0 and before) sends none of them, and
 songbird must answer exactly as before, with the new keys null or empty.
 
 Made-up note text only — never a real study Bible's notes.
