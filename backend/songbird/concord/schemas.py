@@ -86,6 +86,9 @@ class TopicSummary(BaseModel):
     name: str
     section: str
     see_also: str | None = None
+    # The topical index it comes from ("Nave's Topical Bible", "Tyndale Verse Finder": Concord
+    # ADR-0013). None = a Concord that predates the field.
+    source: str | None = None
 
 
 class VerseTopicsResponse(BaseModel):
@@ -119,9 +122,18 @@ class TopicVersesResponse(BaseModel):
     verses: list[TopicVerse]
 
 
+class TopicSourceCount(BaseModel):
+    """One topical index Concord has loaded, and how many of its topics match the browse's `q`
+    and `section` (0 included) — whatever `source` filter the page itself was asked for."""
+
+    source: str
+    total: int
+
+
 class TopicsResponse(BaseModel):
     """A page of the topics browse: the echoed filter/pagination state, total count, and
-    summaries. `total` drives pagination."""
+    summaries. `total` drives pagination. `source` (the echoed filter) and `sources` (every
+    loaded index, ordered by name) come from Concord ADR-0013; an older Concord sends neither."""
 
     q: str | None = None
     section: str | None = None
@@ -129,6 +141,8 @@ class TopicsResponse(BaseModel):
     offset: int
     total: int
     topics: list[TopicSummary]
+    source: str | None = None
+    sources: list[TopicSourceCount] = []
 
 
 class TopicDetail(BaseModel):
@@ -139,6 +153,7 @@ class TopicDetail(BaseModel):
     section: str
     see_also: str | None = None
     verse_count: int
+    source: str | None = None  # None = a Concord that predates ADR-0013
 
 
 class WordTokenOut(BaseModel):

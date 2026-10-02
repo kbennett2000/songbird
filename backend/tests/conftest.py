@@ -256,10 +256,12 @@ class FakeConcordClient:
         section: str | None = None,
         limit: int = 50,
         offset: int = 0,
+        source: str | None = None,
     ) -> TopicsResponse:
         self.last_list_topics = {
             "q": q,
             "section": section,
+            "source": source,
             "limit": limit,
             "offset": offset,
         }

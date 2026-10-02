@@ -59,7 +59,9 @@ _REQUIRED_ENDPOINTS = {
     # ("GET", "/v1/translations/{}/documents") and ("GET", "/v1/translations/{}/documents/{}"), a
     # book's introduction (v1.8 slice C1), all Concord ADR-0012. The pinned v1.2.0's OpenAPI
     # predates them; they join this list in slice E, when the pin moves to Concord's v8 release.
-    # Until then songbird's own tests cover them.
+    # Until then songbird's own tests cover them. Likewise `/v1/topics`'s `?source=` filter and
+    # the `source` / `sources` fields (v1.8 slice D, Concord ADR-0013): the paths are here, but
+    # v1.2.0 has neither, so `topic_sources_test.py` covers them until slice E.
 }
 
 _PARAM = re.compile(r"\{[^}]+\}")
