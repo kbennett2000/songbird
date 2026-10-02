@@ -131,7 +131,9 @@ docker compose up
 
 Whatever translations your Concord serves are the ones songbird will show.
 
-Either way, the app’s **Status** page names the exact Concord it is reading and lists every translation it found there.
+**A study Bible you own works the same way.** If your Concord carries one (the Every Man’s Bible is the first), songbird shows its notes beside the verses, its charts, each book’s introduction, and its front matter and reading plan. The engine that comes with songbird has none, because a study Bible is copyrighted too. You load your own into Concord 1.3.0 or later; [Concord’s guide shows how](https://github.com/kbennett2000/concord#your-own-study-bible).
+
+Either way, the app’s **Status** page (on **Settings**, at the top right of every page) names the exact Concord it is reading and lists every translation it found there.
 
 That same `.env` file is where the rest of songbird’s settings live, and there are only a few. To let songbird follow a church’s YouTube channel you give it a free key from Google — the [User’s Guide walks you through getting one](docs/USER-GUIDE.md#following-a-churchs-youtube-channel), and without one that feature is simply switched off:
 
@@ -175,7 +177,7 @@ If another program on your computer is already using port 8077, songbird can’t
 
 <br>
 
-Open the **Status** page in songbird. It names the Concord it’s reading and lists every translation that Concord carries — and that list is everything songbird can offer.
+Open **Settings**, then **Status**, in songbird. It names the Concord it’s reading and lists every translation that Concord carries — and that list is everything songbird can offer.
 
 If the one you want isn’t there, it isn’t missing from songbird; it isn’t in that Concord. The engine that ships with songbird carries the public-domain translations only. To read others, point songbird at a Concord that has them by setting `CONCORD_BASE_URL` in your `.env` file (see *How it works* above), then start it again.
 </details>
@@ -187,7 +189,7 @@ If the one you want isn’t there, it isn’t missing from songbird; it isn’t 
 
 songbird needs its Scripture engine running. If you started everything with the command from step 3, both run together automatically. If you see this error, the engine may still be starting (wait a moment and refresh) or may have been stopped — start it again with that same command.
 
-The **Status** page in songbird shows the exact address it’s trying, which is the quickest way to see what it’s looking for.
+The **Status** page in songbird (under **Settings**) shows the exact address it’s trying, which is the quickest way to see what it’s looking for.
 </details>
 
 <br>

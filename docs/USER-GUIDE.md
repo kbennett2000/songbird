@@ -87,12 +87,18 @@ footnotes. If you ever see **small raised numbers** sprinkled through the text, 
 phrase. **The standard songbird setup includes none of these,** so most readers won't see them at all
 — there's nothing missing if your text is clean.
 
-**A study Bible's notes.** Some Scripture engines also carry a study Bible, such as the Every Man's
-Bible. When you read it, its notes appear as small raised numbers too, each in a little square, and
-you tap them the same way. These notes can say more. Each one starts with what kind of note it is, like *Study Note* or *Textual Note*,
-and some have a heading and the verses they cover. The text keeps the book's own paragraphs, italics
-and lists. **A reference shown in blue is a link:** tap it and the reader jumps to that passage. A
-long note scrolls inside its box.
+**A study Bible's notes.** A study Bible prints a lot around the text: notes, charts, an
+introduction to each book, a reading plan. If you've loaded one you own, such as the Every Man's
+Bible, into your own Scripture engine
+([Concord's guide shows how](https://github.com/kbennett2000/concord#your-own-study-bible)),
+songbird shows all of it. **The standard songbird setup includes no study Bible,** so until you
+load one, the next few paragraphs won't apply.
+
+When you read that Bible, its notes appear as small raised numbers too, each in a little square,
+and you tap them the same way. These notes can say more. Each one starts with what kind of note it
+is, like *Study Note* or *Textual Note*, and some have a heading and the verses they cover. The
+text keeps the book's own paragraphs, italics and lists. **A reference shown in blue is a link:**
+tap it and the reader jumps to that passage. A long note scrolls inside its box.
 
 **Charts.** A study Bible also prints charts, and they come as notes too. Tap the mark and you'll see
 the chart's title, the verses it covers and a small picture of the chart. Its words are part of
@@ -125,11 +131,6 @@ more: **About EMB**. It opens the pages the Bible prints before Genesis and at t
 copyright page, its introductions, the people who made it, a one-year reading plan, and notes on
 its authors. Tap one to read it. **‹** at the top takes you back to the list.
 
-**A long index has a row of letters.** The Every Man's Bible's *Verse Finder* lists its themes from
-A to Z, and on a phone it runs to about a hundred screens. Under its title is a row of letters: tap
-one to go straight to the themes that start with it. The row stays put while you scroll, and it
-only shows the letters the index uses.
-
 **The reading plan opens on today's date,** marked **Today**, with its four readings. Tap a
 reading and the Bible opens at that passage. When you're done, tap **About EMB** again: you're
 back on the same day, ready for the next reading. To look at another day:
@@ -140,6 +141,11 @@ back on the same day, ready for the next reading. To look at another day:
 One thing to know: when a day's reading runs from the end of one book into the next, each half is
 its own link. The second one opens at the first verse of the next book, where that part of the
 reading begins.
+
+**A long index has a row of letters.** The Every Man's Bible's *Verse Finder* lists its themes from
+A to Z, and on a phone it runs to about a hundred screens. Under its title is a row of letters: tap
+one to go straight to the themes that start with it. The row stays put while you scroll, and it
+only shows the letters the index uses.
 
 **To get back to your reading,** tap **Close**, or **← Back to** at the end of the page. You'll be
 on the same line you left. The same pages are on **Settings** too, under **About these Bibles**.
@@ -396,9 +402,9 @@ one jump-able, with a *← Topics* link to step back:
 
 ![Drilled into the "Condescension of God" topic, showing the verses gathered under it](screenshots/topics-drill.png)
 
-It's a way to read *across* Scripture by idea, not just straight through. If your Scripture engine
-has a study Bible's own index of themes as well, each topic says which index it comes from, under its
-name: *Nave's Topical Bible* (the standard one) or, with EMB, the *Tyndale Verse Finder*.
+It's a way to read *across* Scripture by idea, not just straight through. Each topic says which
+index it comes from, under its name: *Nave's Topical Bible*, the standard one, or a study Bible's own
+index of themes if your Scripture engine has one as well, such as EMB's *Tyndale Verse Finder*.
 
 **Original language (ℵ).** The **ℵ** panel opens the verse in the language it was first written —
 Hebrew in the Old Testament, Greek in the New — word by word:
