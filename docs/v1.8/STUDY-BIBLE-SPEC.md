@@ -22,7 +22,12 @@ And `GET /v1/translations/{translation}/assets/{name}` (Concord ADR-0012) return
 And `GET /v1/translations/{translation}/documents?kind=&book=` and `GET /v1/translations/{translation}/documents/{slug}` (Concord ADR-0012, V8-S5): a translation's documents — `front-matter`, `reading-plan`, `book-introduction` and `about` — with `document_count` on each `/v1/translations` entry.
 - The list is `{translation, book, kind, total, documents: [{slug, kind, title, book, ordinal}]}`, with no paging; `book` is a book introduction's USFM code and null for the other kinds. An unknown kind or book is a `400`, an unknown translation a `404`.
 - One document is `{translation, slug, kind, title, book, ordinal, text, images: [{name, media_type, width, height}]}`. `text` is always Markdown (CommonMark): `##` headings, flat lists, block quotes, hard breaks written as a backslash before the line end, `ref:` links, and pictures written `![alt](asset:NAME)`, served by the assets endpoint. `images` lists them with their pixel size. An unknown slug is a `404`.
-- Both are immutable. Only book introductions exist so far: EMB's 66, each with one picture (its reading time) and, in 36 of them, a timeline (a flat list whose items are a date, a hard break, then the event in bold).
+- Both are immutable. EMB has 73 (Concord V8-S5b and V8-S5c):
+  - 66 book introductions, each with one picture (its reading time) and, in 36 of them, a timeline (a flat list whose items are a date, a hard break, then the event in bold);
+  - 5 front matter (`front-matter-1` … `-5`: the copyright page, two introductions, the contributors, the translation team);
+  - a reading plan (`reading-plan-1`: 365 days, each a `##` date over a list of 4 readings as `ref:` links; a month's first day is in capitals, "JANUARY 1"; a reading that crosses into the next book is two links in one item);
+  - an about (`about-1`: Personal Gold's author notes and credits).
+  None of the last seven places a picture.
 
 A Concord that predates v8 sends none of these. songbird must behave exactly as it does today against one (the pinned image is v1.2.0), so every new field is optional.
 
@@ -33,11 +38,11 @@ A Concord that predates v8 sends none of these. songbird must behave exactly as 
 | A | Notes from any source | §3 | A study Bible's notes on every translation, shown properly |
 | B | Charts | Images in the note view (after Concord's images slice) | Charts in the reader |
 | C1 | Introductions | A book's introduction from the reader (§5) | Book introductions |
-| C2 | About | An About page for a Bible's front matter and reading plan (after Concord loads them) | Front matter and reading plan |
+| C2 | About | A Bible's About page: its front matter, reading plan and notes on the edition (§6) | Front matter and reading plan |
 | D | Topics by source | The Topics page and verse topics show each topic's source, with a filter (after Concord's Verse Finder slice) | Verse Finder beside Nave's |
 | E | Pin bump + release | Concord pin moved to its v8 release, the contract fixture refreshed and extended to the new fields and the assets endpoint, songbird 1.8.0 | — |
 
-Slices B–E get their detail when their Concord slice lands. Slice B's is §4, and C1's is §5.
+Slices B–E get their detail when their Concord slice lands. Slice B's is §4, C1's is §5 and C2's is §6.
 
 ## 3. Slice A — notes from any source
 
@@ -126,13 +131,39 @@ A study Bible introduces each of its books: what it's about, who wrote it, when,
 
 **An older Concord.** The pinned v1.2.0 sends no `document_count` and has no documents endpoints: no button appears and nothing calls them.
 
-## 6. Rules that hold for every slice
+## 6. Slice C2 — About
+
+A study Bible prints more than its notes and introductions: front matter (a copyright page, introductions to the edition and the translation, its contributors and translators), a reading plan, and notes about the edition. These are read once in a while, not beside a verse, so they get a page of their own: the Bible's **About** page.
+
+**The API.** Nothing new: slice C1's passthrough (§5) serves every kind. The page reads a Bible's whole list (`GET /api/v1/translations/{translation}/documents`, no filter) and one document at a time. songbird stores nothing (invariants 1 and 5).
+
+**Which Bibles have one.** A Bible whose `document_count` is above 0 and whose list holds any `front-matter`, `reading-plan` or `about` document. Its whole list is asked for once a session and shared by the reader and Settings. A Concord that sends no `document_count` is asked nothing, and nothing offers an About page.
+
+**Where it's offered.**
+- **The reader:** an **About EMB** button in the chapter's title row, right after that Bible's introduction button, for the Bible being read and each ticked under *Notes from other Bibles* (the Bibles that offer introductions, §5). It always names its Bible. It shows while its list loads or if it failed (the page then says so), and is hidden once the list has none of the three kinds.
+- **Settings:** a section, **About these Bibles**, between *Notes from other Bibles* and *Appearance*: one row per such Bible, "About EMB ›", with its name and what's inside ("Front matter · Reading plan · About the edition"). No such Bible, no section.
+
+**The page.** A native modal `<dialog>` that fills the window, as the introduction does (the shared `DocumentDialog`); what it opens over stays mounted underneath.
+- **The list** (where it opens): "About EMB" over the Bible's name, which names the dialog. Groups in this order, each a small-capitals heading over its documents in Concord's order: **Front matter**, **Reading plan**, **About the edition**. Book introductions and kinds songbird doesn't know aren't listed. Each document is a row at least 44 px tall.
+- **A document:** a **‹** button ("Back to About EMB") before the title, "Front matter · EMB" over the title (which may take two lines), and **Close**. The body is the introduction's reading column (§5): headings as `<h3>`, lists, quotes, poetry, pictures if any. The contributors' role-over-names lines read as poetry; the team list as divisions, book labels and lists of people.
+- **The reading plan,** when every `##` heading is a month and a day in calendar order, shows one month at a time; otherwise it shows as any other document.
+  - A bar under the title that never scrolls away: **Month** and **Day** (native selects) and **Today**. It opens on today's month (the device's date), scrolled to today, which has a blue bar and a **Today** tag. Today on 29 February goes to the 28th.
+  - Each day: its date ("January 1", whatever case the plan wrote it in) over its readings, beside them from 640 px; one reading per line, no bullets. "← September" and "November →" end each month.
+  - Only the month on the page is drawn. Nothing about what's been read is stored: it is a page to read, not a tracker.
+- **Getting back:** **Close**, or "← Back to Genesis 13" (on Settings, "← Back to Settings") at the end of the list and of each document, closes the page; focus goes back to what opened it, without scrolling the reader. Escape and Android's Back step back one level: from a document to the list (its row gets focus), then out. "‹ About EMB" at a document's end also goes to the list.
+- **Reopening** from the reader in the same visit comes back to the document left, and on a plan to the month and the day whose reading was tapped. This is held in the reader's memory, never stored.
+- **A `ref:` link** closes the page and jumps the reader there, in the Bible being read; the address follows. From Settings, it opens the reader there (`/read?book=&chapter=&verse=`), in the Bible last read. A link goes to the start of its passage, so the second half of a reading that crosses books (a link from the next book's first verse to where the day ends) opens at that first verse, where that part starts.
+- **States:** while the list loads, "Loading EMB's front matter and reading plan…"; if it fails, "Couldn't load EMB's front matter and reading plan (is Concord reachable?)" with **Try again**; a list with none of the three kinds (only in the moment before it arrives), "EMB has no front matter, reading plan or notes on the edition." A document: "Loading Contributors…", or "Couldn't load Contributors (is Concord reachable?)" with **Try again**.
+
+**An older Concord.** The pinned v1.2.0 sends no `document_count`: no button, no Settings section, and nothing asks it for documents.
+
+## 7. Rules that hold for every slice
 
 - songbird stores nothing from Concord: no note text, no images, no documents (invariants 1 and 5). Its database gains only preferences.
 - The Concord pin stays at v1.2.0 until slice E. Until then the contract test keeps validating against the pinned fixture, and the new fields are covered by songbird's own tests.
 - No new dependency without a reason (CLAUDE.md).
 
-## 7. Acceptance
+## 8. Acceptance
 
 **Slice A.**
 
@@ -141,3 +172,5 @@ On Kris's server, with Concord serving EMB's notes: reading EMB shows its textua
 **Slice B.** On Kris's server, with Concord serving EMB's charts, open these on EMB and on KJV with EMB ticked, at desktop and phone width: Genesis 13 (the chart at the end of verse 4), Jeremiah 1 (verse 3) and Psalm 9 (verse 1). Each chart shows its picture in its note, opens large, zooms until its words can be read, and closes back to the note. A chart in the study-note search opens from its thumbnail. Against a Concord without pictures (the pinned v1.2.0), everything behaves as before.
 
 **Slice C1.** On Kris's server, with Concord serving EMB's introductions, open Genesis, Isaiah and Philemon on EMB and on KJV with EMB ticked, at desktop and phone width. The reader offers each book's introduction (named by its Bible on KJV), which opens in its own view with its headings, lists, quotes, timeline and picture readable on a phone. Its links jump the reader, and closing it returns to the same place. Against a Concord without documents (the pinned v1.2.0), everything behaves as before.
+
+**Slice C2.** On Kris's server, with Concord serving EMB's front matter, reading plan and about, open EMB's About page on EMB and on KJV with EMB ticked, and from Settings, at desktop and phone width, in light and dark. Each of the five front-matter pieces, Personal Gold's author notes and the reading plan read in full. The plan reaches its first day, a day in June and its last day without scrolling the year, and a reading that crosses into the next book jumps to each half. Closing returns to the same place. Against a Concord without documents (the pinned v1.2.0), everything behaves as before and nothing offers an About page.

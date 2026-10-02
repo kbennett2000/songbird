@@ -392,6 +392,17 @@ opens in the chart viewer. Its `ref:` links jump the reader. songbird passes the
 through from Concord at request time (`GET /api/v1/translations/{translation}/documents` and
 `.../documents/{slug}`) and stores nothing. Specified in `docs/v1.8/STUDY-BIBLE-SPEC.md` §5.
 
+**A study Bible's About page (v1.8).** A Bible whose documents include front matter, a reading
+plan or notes on the edition has an About page: **About EMB** in the chapter's title row (after
+that Bible's introduction button, for the Bible being read or a ticked one) and a row under
+*About these Bibles* on Settings. It opens in the same full-window view as an introduction, on a
+list of those documents grouped by kind; each opens in full. A reading plan laid out by date shows
+a month at a time, with Month, Day and Today, and opens on today; nothing about what's been read is
+stored. Escape and Back step from a document to the list, then close; reopening it from the reader
+in the same visit returns to where it was left (in memory only). Its `ref:` links jump the reader,
+or from Settings open it. No API change: it reads the documents passthrough above. Specified in
+`docs/v1.8/STUDY-BIBLE-SPEC.md` §6.
+
 **Keyword Scripture search.** Alongside semantic search, a **keyword/semantic toggle** on the
 Search screen. Keyword search proxies Concord's `/v1/search` (`GET /api/v1/keyword-search`) for
 exact word/phrase matches with highlighted snippets; semantic search finds by meaning. When a
@@ -443,7 +454,8 @@ it and the reader's bar: the "Show ⟨code⟩ notes" checkboxes, the light/dark 
 Sources and Status links. `/settings` lists every notes source (whatever is being read) with one
 line on what a tick does, offers Light / Dark / Match this device, and links to Sermon sources and
 Status, which stay their own pages with a "‹ Settings" link back; the Settings link is highlighted
-on all three. A choice saves to the profile as it's made (`PATCH /api/v1/auth/me`); no new table or
+on all three. When a Bible has an About page (v1.8, below), an *About these Bibles* section opens
+it over Settings. A choice saves to the profile as it's made (`PATCH /api/v1/auth/me`); no new table or
 column. When Concord's translation list can't be loaded, Settings and the reader's Notes menu say
 so instead of showing an empty list (invariant 3).
 
