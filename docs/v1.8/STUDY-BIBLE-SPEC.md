@@ -19,6 +19,11 @@ And on `GET /v1/translations`, each entry has `note_count` (0 when none).
 
 And `GET /v1/translations/{translation}/assets/{name}` (Concord ADR-0012) returns an image: its bytes (a JPEG or PNG) with a strong `ETag`, `Cache-Control: public, max-age=31536000, immutable` and `Vary: Origin`, a `304` on `If-None-Match`, and a `404` for an unknown translation or a name it lacks.
 
+And `GET /v1/translations/{translation}/documents?kind=&book=` and `GET /v1/translations/{translation}/documents/{slug}` (Concord ADR-0012, V8-S5): a translation's documents — `front-matter`, `reading-plan`, `book-introduction` and `about` — with `document_count` on each `/v1/translations` entry.
+- The list is `{translation, book, kind, total, documents: [{slug, kind, title, book, ordinal}]}`, with no paging; `book` is a book introduction's USFM code and null for the other kinds. An unknown kind or book is a `400`, an unknown translation a `404`.
+- One document is `{translation, slug, kind, title, book, ordinal, text, images: [{name, media_type, width, height}]}`. `text` is always Markdown (CommonMark): `##` headings, flat lists, block quotes, hard breaks written as a backslash before the line end, `ref:` links, and pictures written `![alt](asset:NAME)`, served by the assets endpoint. `images` lists them with their pixel size. An unknown slug is a `404`.
+- Both are immutable. Only book introductions exist so far: EMB's 66, each with one picture (its reading time) and, in 36 of them, a timeline (a flat list whose items are a date, a hard break, then the event in bold).
+
 A Concord that predates v8 sends none of these. songbird must behave exactly as it does today against one (the pinned image is v1.2.0), so every new field is optional.
 
 ## 2. Slices
@@ -27,11 +32,12 @@ A Concord that predates v8 sends none of these. songbird must behave exactly as 
 |---|---|---|---|
 | A | Notes from any source | §3 | A study Bible's notes on every translation, shown properly |
 | B | Charts | Images in the note view (after Concord's images slice) | Charts in the reader |
-| C | Introductions + About | A book's introduction from the reader; an About page for a Bible's front matter and reading plan (after Concord's documents slice) | Book intros, front matter and reading plan |
+| C1 | Introductions | A book's introduction from the reader (§5) | Book introductions |
+| C2 | About | An About page for a Bible's front matter and reading plan (after Concord loads them) | Front matter and reading plan |
 | D | Topics by source | The Topics page and verse topics show each topic's source, with a filter (after Concord's Verse Finder slice) | Verse Finder beside Nave's |
 | E | Pin bump + release | Concord pin moved to its v8 release, the contract fixture refreshed and extended to the new fields and the assets endpoint, songbird 1.8.0 | — |
 
-Slices B–E get their detail when their Concord slice lands. Slice B's is §4.
+Slices B–E get their detail when their Concord slice lands. Slice B's is §4, and C1's is §5.
 
 ## 3. Slice A — notes from any source
 
@@ -94,16 +100,44 @@ EMB has 44 charts. Each is a note of type `chart`, label "Chart", with a title, 
 
 **An older Concord.** The pinned v1.2.0 sends no `image` and no assets endpoint, so no frame appears and nothing calls it: everything behaves as before.
 
-## 5. Rules that hold for every slice
+## 5. Slice C1 — book introductions
+
+A study Bible introduces each of its books: what it's about, who wrote it, when, an outline that links into the text, key people and ideas, passages worth memorising, how long it takes to read (a picture), and often a timeline. Introductions run to a few hundred words, too long for the note box, so they get a view of their own.
+
+**The API, through songbird.** Both pass through from Concord at request time, behind the login; songbird stores nothing (invariants 1 and 5).
+- `GET /api/v1/translations/{translation}/documents?kind=&book=`: Concord's list, filters forwarded.
+- `GET /api/v1/translations/{translation}/documents/{slug}`: one document. `.` and `..` are refused before any call.
+- An unknown translation, kind, book or slug, or a Concord that predates documents, is a `404`; an unreachable Concord is a `502` `CONCORD_UNREACHABLE` (invariant 3).
+- `document_count` passes through on `/api/v1/translations`. The picture comes through the assets route (§4).
+
+**Where the reader offers it.** A Bible offers its introductions when its `document_count` is above 0: the Bible being read, then each Bible ticked under *Notes from other Bibles*, in that order.
+- Each such Bible's whole list of book introductions is asked for once a session, so moving through the chapters asks for nothing more.
+- The chapter's title row gains a button after **Notes ▾**, on every chapter of the book: **Introduction** for the Bible being read, **EMB introduction** for a ticked one. Its name is "Introduction to Genesis" or "EMB's introduction to Genesis".
+- The button shows while its list is loading or if it failed (the view then says so), and is hidden only once the list says the book has none.
+- A Concord that sends no `document_count` offers nothing, and nothing asks it for documents.
+
+**The view.** A native modal `<dialog>` that fills the window over the reader, as the chart viewer does; the reader stays mounted underneath.
+- **Header:** "Introduction", plus "· From EMB" when it's another Bible's, then the title (the book's name) as the dialog's name, and **Close**.
+- **Body:** its own scroll (`overscroll-contain`), one column of at most 65 characters, 16 px text on a 28 px line. The Markdown renders as in a note (§3), with `##` as real `<h3>` headings. Lists, quotes, poetry (a hanging indent) and the timeline's entries (a date, then the event on its own line) read as they do in notes, with list items spaced apart.
+- **The picture** sits in a frame of its own shape (from `images`), as wide as the column and at most its own width, on white in both themes. Under it: its caption (the alt text) and **⤢ Open larger**. Tapping either opens the chart viewer (§4), worded for a picture; closing that returns focus to the picture.
+- **Getting back:** **Close**, Escape, Android's Back, or **← Back to Genesis 13** at the end close it. The reader is where it was, and focus returns to the button without scrolling. Opening the view closes any open note box.
+- **A `ref:` link** closes the view and jumps the reader there, and the address follows.
+- **States:** while it loads, the header shows the book's name and the body says "Loading the introduction…". If Concord fails: "Couldn't load the introduction (is Concord reachable?)" with **Try again**; the picture fails on its own, as a chart does. A book with none (only reachable in the moment before the list arrives): "EMB has no introduction to Genesis."
+
+**An older Concord.** The pinned v1.2.0 sends no `document_count` and has no documents endpoints: no button appears and nothing calls them.
+
+## 6. Rules that hold for every slice
 
 - songbird stores nothing from Concord: no note text, no images, no documents (invariants 1 and 5). Its database gains only preferences.
 - The Concord pin stays at v1.2.0 until slice E. Until then the contract test keeps validating against the pinned fixture, and the new fields are covered by songbird's own tests.
 - No new dependency without a reason (CLAUDE.md).
 
-## 6. Acceptance
+## 7. Acceptance
 
 **Slice A.**
 
 On Kris's server, with Concord serving EMB's notes: reading EMB shows its textual and study notes with their labels, passages and formatting; ticking "Show EMB notes" on another translation shows them there; "Show NET notes" still works, including on EMB; a `ref:` link jumps; the Search page labels EMB's notes. Against a Concord without the new fields, everything behaves as before.
 
 **Slice B.** On Kris's server, with Concord serving EMB's charts, open these on EMB and on KJV with EMB ticked, at desktop and phone width: Genesis 13 (the chart at the end of verse 4), Jeremiah 1 (verse 3) and Psalm 9 (verse 1). Each chart shows its picture in its note, opens large, zooms until its words can be read, and closes back to the note. A chart in the study-note search opens from its thumbnail. Against a Concord without pictures (the pinned v1.2.0), everything behaves as before.
+
+**Slice C1.** On Kris's server, with Concord serving EMB's introductions, open Genesis, Isaiah and Philemon on EMB and on KJV with EMB ticked, at desktop and phone width. The reader offers each book's introduction (named by its Bible on KJV), which opens in its own view with its headings, lists, quotes, timeline and picture readable on a phone. Its links jump the reader, and closing it returns to the same place. Against a Concord without documents (the pinned v1.2.0), everything behaves as before.

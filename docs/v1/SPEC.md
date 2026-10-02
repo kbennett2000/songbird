@@ -383,6 +383,15 @@ comes from Concord at request time through `GET /api/v1/translations/{translatio
 which keeps Concord's caching (made `private`) and stores nothing. Specified in
 `docs/v1.8/STUDY-BIBLE-SPEC.md` §4.
 
+**Book introductions (v1.8).** When the Bible being read, or one ticked under *Notes from other
+Bibles*, has documents (`document_count` above 0), the chapter's title row offers the open book's
+introduction: **Introduction**, or **EMB introduction** for a ticked Bible. It opens in a modal
+view that fills the window over the reader, which stays where it was underneath. The view has
+real headings, the note renderer's lists, quotes, poetry and timeline, and its picture, which
+opens in the chart viewer. Its `ref:` links jump the reader. songbird passes the documents
+through from Concord at request time (`GET /api/v1/translations/{translation}/documents` and
+`.../documents/{slug}`) and stores nothing. Specified in `docs/v1.8/STUDY-BIBLE-SPEC.md` §5.
+
 **Keyword Scripture search.** Alongside semantic search, a **keyword/semantic toggle** on the
 Search screen. Keyword search proxies Concord's `/v1/search` (`GET /api/v1/keyword-search`) for
 exact word/phrase matches with highlighted snippets; semantic search finds by meaning. When a
