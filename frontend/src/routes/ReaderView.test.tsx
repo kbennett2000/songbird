@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
 import { MemoryRouter } from "react-router-dom";
@@ -1686,6 +1686,55 @@ describe("ReaderView — notes from any source (Concord v8)", () => {
     expect(screen.getByText("Covers John 3:16-21")).toBeInTheDocument();
     expect(screen.getByText("made-up").tagName).toBe("EM");
     expect(screen.queryByText(/^From /)).not.toBeInTheDocument(); // EMB's own note
+  });
+
+  it("opens a chart large from its note, and closing it brings the note back", async () => {
+    useV8World(["EMB"]);
+    // Reading KJV with EMB's notes borrowed: EMB has a chart (made-up title and picture name).
+    server.use(
+      http.get("/api/v1/notes/:translation/:book/:chapter", ({ params }) =>
+        HttpResponse.json(
+          String(params.translation) === "EMB"
+            ? [
+                verseNote({
+                  type: "chart",
+                  label: "Chart",
+                  title: "A made-up chart",
+                  text: "[John 3:16](ref:JHN.3.16)",
+                  text_format: "markdown",
+                  image: "chart-99.png",
+                }),
+              ]
+            : [],
+        ),
+      ),
+    );
+    const user = userEvent.setup();
+    renderReader();
+
+    await user.click(await screen.findByRole("button", { name: "Chart 1 (from EMB)" }));
+    const picture = await screen.findByAltText("Chart: A made-up chart");
+    // EMB's picture, though the reader is on KJV.
+    expect(picture).toHaveAttribute("src", "/api/v1/translations/EMB/assets/chart-99.png");
+    fireEvent.load(picture);
+    await user.click(screen.getByRole("button", { name: "Open the chart larger: A made-up chart" }));
+
+    const viewer = await screen.findByRole("dialog", { name: "A made-up chart" });
+    expect(viewer.tagName).toBe("DIALOG");
+    // The note's popover is closed while the chart is open.
+    expect(screen.queryByRole("dialog", { name: "Chart — John 3:16" })).not.toBeInTheDocument();
+
+    await user.click(within(viewer).getByRole("button", { name: "Close" }));
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog", { name: "A made-up chart" })).not.toBeInTheDocument(),
+    );
+    // The note is back at its marker, with focus on its picture.
+    expect(await screen.findByRole("dialog", { name: "Chart — John 3:16" })).toBeInTheDocument();
+    await waitFor(() =>
+      expect(document.activeElement).toBe(
+        screen.getByRole("button", { name: "Open the chart larger: A made-up chart" }),
+      ),
+    );
   });
 
   it("borrows a study Bible's note when ticked, saves the list, and a ref: link jumps", async () => {

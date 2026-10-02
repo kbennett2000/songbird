@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
@@ -405,6 +405,61 @@ describe("SearchView", () => {
     // "Open in reader" jumps to the verse (no translation switch in the link).
     await user.click(screen.getByRole("link", { name: "Open in reader" }));
     expect(await screen.findByText(/book=JHN&chapter=3&verse=16/)).toBeInTheDocument();
+  });
+
+  it("shows a chart hit with its title and a thumbnail that opens it large", async () => {
+    server.use(
+      http.get("/api/v1/keyword-search", () => HttpResponse.json([])),
+      http.get("/api/v1/annotations", () => HttpResponse.json([])),
+      http.get("/api/v1/study-notes-search", () =>
+        HttpResponse.json(notesPage([
+          {
+            book: "GEN",
+            chapter: 12,
+            verse: 20,
+            reference: "Genesis 12:20",
+            translation: "EMB",
+            type: "chart",
+            label: "Chart",
+            text_format: "markdown",
+            snippet: "[<mark>Genesis</mark> 12:10-20](ref:GEN.12.10-20)",
+            title: "A made-up chart",
+            image: "chart-99.png",
+          },
+          {
+            book: "JHN",
+            chapter: 3,
+            verse: 16,
+            reference: "John 3:16",
+            translation: "NET",
+            type: "sn",
+            snippet: "A made-up note on <mark>Genesis</mark>.",
+          },
+        ])),
+      ),
+    );
+    const user = userEvent.setup();
+    renderSearch();
+    await user.click(screen.getByRole("tab", { name: "Keyword" }));
+    await user.type(screen.getByLabelText("Search query"), "Genesis");
+    await user.click(screen.getByRole("button", { name: "Search" }));
+
+    const results = await screen.findByRole("region", { name: "Study notes results" });
+    expect(within(results).getByText("Chart")).toBeInTheDocument();
+    expect(within(results).getByText("A made-up chart")).toBeInTheDocument();
+    const thumb = within(results).getByAltText("Chart: A made-up chart");
+    expect(thumb).toHaveAttribute("src", "/api/v1/translations/EMB/assets/chart-99.png");
+    expect(thumb).toHaveAttribute("loading", "lazy");
+    // Only the chart has a picture.
+    expect(within(results).getAllByRole("img")).toHaveLength(1);
+
+    fireEvent.load(thumb);
+    const open = within(results).getByRole("button", { name: "Open the chart larger: A made-up chart" });
+    await user.click(open);
+    const viewer = await screen.findByRole("dialog", { name: "A made-up chart" });
+    expect(within(viewer).getByText("Genesis 12:20")).toBeInTheDocument();
+    await user.click(within(viewer).getByRole("button", { name: "Close" }));
+    await waitFor(() => expect(document.activeElement).toBe(open));
   });
 
   it("falls back to a neutral 'Note' badge for an unknown note type", async () => {

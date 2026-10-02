@@ -375,6 +375,14 @@ the Notes menu and on Settings. The shape is drawn inside the marker, so the mar
 and the line its height; borrowed markers also name their Bible in their accessible label. Defined
 in `frontend/src/lib/noteLooks.ts`.
 
+**Charts (v1.8).** A study Bible's chart is a note with a picture (its words are inside it). The
+note view shows the picture from the note's own Bible in a fixed frame, and tapping it opens a
+full-window view that zooms (buttons, pinch, double-tap, Ctrl + wheel, keys) until the words can
+be read; a chart hit on the Search page has a thumbnail that opens the same view. The picture
+comes from Concord at request time through `GET /api/v1/translations/{translation}/assets/{name}`,
+which keeps Concord's caching (made `private`) and stores nothing. Specified in
+`docs/v1.8/STUDY-BIBLE-SPEC.md` §4.
+
 **Keyword Scripture search.** Alongside semantic search, a **keyword/semantic toggle** on the
 Search screen. Keyword search proxies Concord's `/v1/search` (`GET /api/v1/keyword-search`) for
 exact word/phrase matches with highlighted snippets; semantic search finds by meaning. When a

@@ -40,6 +40,11 @@ async function readError(response: Response): Promise<ApiError> {
   return new ApiError(response.status, code, message);
 }
 
+/** The browser path of one of songbird's API routes — for what isn't fetched as JSON (a picture). */
+export function apiUrl(path: string): string {
+  return `${API_PREFIX}${path}`;
+}
+
 /**
  * Typed `fetch` wrapper for songbird's own API.
  *

@@ -425,6 +425,10 @@ class TranslatorNote(BaseModel):
     # fail a whole chapter's notes — the client renders only "markdown" as Markdown.
     text_format: str | None = None
     passages: list[NotePassage] = []
+    # The name of one of the note's own translation's images (Concord ADR-0012): a chart's
+    # picture, served at `/v1/translations/{translation}/assets/{image}`. Null for every other note,
+    # and absent from an older Concord.
+    image: str | None = None
 
 
 class NotesResponse(BaseModel):
@@ -478,6 +482,8 @@ class NoteSearchHit(BaseModel):
     snippet: str | None = None  # note text with <mark>…</mark> around the matched term(s)
     label: str | None = None  # Concord v8: the source's own name for the kind of note
     text_format: str | None = None  # "markdown" → the snippet is cut from raw Markdown
+    title: str | None = None  # Concord v8: a heading — a chart's only words outside its picture
+    image: str | None = None  # a chart's picture, as on TranslatorNote
 
 
 class NoteSearchResponse(BaseModel):

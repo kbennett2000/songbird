@@ -801,6 +801,9 @@ class TranslatorNote(BaseModel):
     title: str | None  # a heading
     text_format: str | None  # "markdown" → render `text` as Markdown; null → plain text
     passages: list[NotePassage]  # what the note covers beyond its anchor verse
+    # A chart's picture: an image name of the note's OWN translation, fetched through
+    # `/api/v1/translations/{translation}/assets/{image}`. Null for every other note.
+    image: str | None
 
 
 class SectionHeading(BaseModel):
@@ -832,6 +835,8 @@ class StudyNoteResult(BaseModel):
     snippet: str | None
     label: str | None  # Concord v8: the source's own name for the kind — the badge when set
     text_format: str | None  # "markdown" → the client strips Markdown syntax from the snippet
+    title: str | None  # a heading; the page shows it for a chart, whose words are in its picture
+    image: str | None  # a chart's picture (an image name of `translation`), as on TranslatorNote
 
 
 class StudyNotesPageOut(BaseModel):

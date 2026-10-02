@@ -93,6 +93,19 @@ and some have a heading and the verses they cover. The text keeps the book's own
 and lists. **A reference shown in blue is a link:** tap it and the reader jumps to that passage. A
 long note scrolls inside its box.
 
+**Charts.** A study Bible also prints charts, and they come as notes too. Tap the mark and you'll see
+the chart's title, the verses it covers and a small picture of the chart. Its words are part of
+the picture, so **tap the picture to open it full-screen.** It opens showing the whole chart. To
+read it, zoom in:
+
+- **On a phone or tablet:** pinch with two fingers, or double-tap. Drag with one finger to move
+  around.
+- **On a computer:** use the **+** and **−** buttons (or the + and − keys), double-click, or hold
+  Ctrl while you scroll.
+
+**Fit** shows the whole chart again. **Close** (or the Esc key) takes you back to the note. If a
+picture ever says it couldn't load, tap **Try again**.
+
 **Another Bible's notes, in the translation you're reading.** Open **Settings**. Under **Notes from
 other Bibles** there's a box for each Bible that has notes, such as **NET** or **EMB**:
 
@@ -398,7 +411,8 @@ notes** and through **study notes** — the translators' footnotes from [Reading
 are **only there when your Scripture engine provides them** (the standard setup ships none), so that
 option simply stays quiet until it has something to find. A study Bible's notes are labelled with
 their own kind, like *Study Note*, and when more than one Bible has notes, each result says which
-Bible it came from.
+Bible it came from. A chart shows its title and a small picture; tap the picture to open the chart
+full-screen, just as in the reader.
 
 **More study notes, or just one Bible's.** Study notes come 20 at a time. The line above them says how
 many there are in all (*20 of 242*), and **Load more** at the bottom brings the next 20. When more than

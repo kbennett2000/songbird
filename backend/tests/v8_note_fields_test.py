@@ -1,7 +1,8 @@
 """Concord v8's note fields (ADR-0011) reach the client — and an older Concord still works.
 
-Concord v8 appends `label`, `title`, `text_format` and `passages` to every note and notes-search
-hit, and `note_count` to every translation. songbird validates Concord's JSON into its own models
+Concord v8 appends `label`, `title`, `text_format`, `passages` and `image` (a chart's picture,
+live since Concord ADR-0012) to every note and notes-search hit, and `note_count` to every
+translation. songbird validates Concord's JSON into its own models
 and re-maps notes field by field, so each new field has to be carried at both layers or it's
 silently dropped. A Concord that predates v8 (the pinned v1.2.0 image) sends none of them, and
 songbird must answer exactly as before, with the new keys null or empty.
@@ -85,6 +86,7 @@ async def test_client_parses_a_note_from_an_older_concord() -> None:
     note = (await client.get_notes("NET", "GEN", 12)).notes[0]
     await client.aclose()
     assert (note.label, note.title, note.text_format, note.passages) == (None, None, None, [])
+    assert note.image is None
 
 
 async def test_client_parses_a_v8_note() -> None:
@@ -106,6 +108,28 @@ async def test_client_parses_note_count_and_its_absence() -> None:
     translations = await client.list_translations()
     await client.aclose()
     assert [(t.id, t.note_count) for t in translations] == [("EMB", 7), ("KJV", None)]
+
+
+# A chart as Concord v8 sends one: its words are in its picture, so its text is just its reference.
+_CHART_NOTE: dict[str, object] = {
+    **_OLD_NOTE,
+    "type": "chart",
+    "text": "[Genesis 12:10-20](ref:GEN.12.10-20)",
+    "char_offset": 41,
+    "marker": None,
+    "label": "Chart",
+    "title": "A made-up chart",
+    "text_format": "markdown",
+    "passages": [],
+    "image": "chart-99.png",
+}
+
+
+async def test_client_parses_a_charts_image() -> None:
+    client = _concord(_notes_json(_CHART_NOTE))
+    note = (await client.get_notes("EMB", "GEN", 12)).notes[0]
+    await client.aclose()
+    assert (note.type, note.image) == ("chart", "chart-99.png")
 
 
 # --- songbird's API: the fields reach the browser ---
@@ -161,6 +185,21 @@ async def test_notes_route_answers_as_before_for_an_older_concord(
         None,
         [],
     )
+    assert row["image"] is None  # no picture, so the note view shows none
+
+
+async def test_notes_route_passes_a_charts_image_through(
+    make_concord: type[FakeConcordClient],
+    client_for: Callable[[FakeConcordClient], httpx.AsyncClient],
+) -> None:
+    note = TranslatorNote.model_validate(_CHART_NOTE)
+    concord = make_concord(
+        notes=NotesResponse(translation="EMB", book="GEN", chapter=12, total=1, notes=[note])
+    )
+    async with client_for(concord) as client:
+        resp = await client.get("/api/v1/notes/EMB/GEN/12")
+    row = resp.json()[0]
+    assert (row["type"], row["title"], row["image"]) == ("chart", "A made-up chart", "chart-99.png")
 
 
 async def test_study_notes_search_passes_label_and_format(
@@ -183,6 +222,30 @@ async def test_study_notes_search_passes_label_and_format(
     row = resp.json()["results"][0]
     assert (row["label"], row["text_format"]) == ("Study Note", "markdown")
     assert row["snippet"] == "A *made-up* <mark>study</mark> note."  # stripping is the client's
+    assert (row["title"], row["image"]) == (None, None)  # not sent → null, as from older Concord
+
+
+async def test_study_notes_search_passes_a_charts_title_and_image(
+    make_concord: type[FakeConcordClient],
+    client_for: Callable[[FakeConcordClient], httpx.AsyncClient],
+) -> None:
+    hit = NoteSearchHit(
+        book="GEN",
+        chapter=12,
+        verse=10,
+        reference="Genesis 12:10",
+        translation="EMB",
+        type="chart",
+        snippet="[<mark>Genesis</mark> 12:10-20](ref:GEN.12.10-20)",
+        label="Chart",
+        text_format="markdown",
+        title="A made-up chart",
+        image="chart-99.png",
+    )
+    async with client_for(make_concord(note_search=NoteSearchResponse(hits=[hit]))) as client:
+        resp = await client.get("/api/v1/study-notes-search", params={"q": "Genesis"})
+    row = resp.json()["results"][0]
+    assert (row["title"], row["image"]) == ("A made-up chart", "chart-99.png")
 
 
 async def test_translations_route_passes_note_count_and_null_when_absent(

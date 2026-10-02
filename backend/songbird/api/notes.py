@@ -65,6 +65,7 @@ async def notes_in_chapter(
                 )
                 for p in n.passages
             ],
+            image=n.image,
         )
         for n in result.notes
     ]

@@ -4,6 +4,110 @@ A running log of per-slice decisions, gotchas, and how each slice was verified. 
 
 ---
 
+## v1.8 slice B — charts
+
+- **Date:** 2026-10-02
+- **Branch:** `slice/v1.8-charts`
+- **Spec:** `docs/v1.8/STUDY-BIBLE-SPEC.md` §4 (new), §1 and §6; `docs/v1/SPEC.md` §12, "Charts".
+
+### Why
+
+Concord now stores and serves a translation's pictures (its ADR-0012, V8-S4). EMB has 44 charts:
+notes of type `chart` with a title, passages (on 40), text that is only the chart's reference as a
+`ref:` link, and `image`, a name such as `chart-01.jpg`. Songbird dropped `image` at both layers
+(and zod stripped it), so a chart showed as a title and a link. Its words are inside its picture,
+so the picture has to be readable on a phone.
+
+### What landed
+
+- **API:**
+  - `image` on notes and on study-notes hits, plus `title` on hits.
+  - `GET /api/v1/translations/{translation}/assets/{name}` passes the picture through
+    (`ConcordClient.get_asset`). Concord's ETag, Vary and Cache-Control are kept, with `public` made
+    `private` (Kris's call: songbird serves it only behind its login). It adds `nosniff`, forwards
+    `If-None-Match` and passes the 304 back.
+  - Only JPEG and PNG are relayed; anything else is a 502.
+  - A 404 is a 404, and `.` / `..` are refused before any call.
+  - An outage is a 502 with nothing to cache.
+- **Note view** (`ChartPicture`): the picture comes from the note's own Bible, in a fixed
+  full-width × 12rem frame: loading, loaded or failed, the same size.
+- **Large view** (`ChartViewer`): a native `<dialog>` via `showModal()`, filling the window. It
+  opens fitted and zooms to 3× with − / + / Fit, a pinch, a double-tap or double-click, Ctrl +
+  wheel, and + − 0.
+  - The zoom maths is pure, in `lib/chartZoom.ts`.
+  - Opening it closes the note; closing it reopens the note with focus on the picture
+    (`ReaderView`'s `openChart`).
+- **Search:** a hit with an `image` shows its title and a lazy thumbnail that opens the same view.
+- **`NOTE_TYPE_LABELS`** gains `chart: "Chart"`.
+- **No new dependency, no database change.**
+- **No screenshot in the repo:** every chart is EMB's.
+
+### Decisions
+
+- **The popover closes while the viewer is open,** instead of staying under it. `Popover` closes on
+  any outside mousedown, any outside scroll and any resize, and turning a phone sideways to read a
+  wide chart is a resize. Reopening it afterwards also re-measures it for the new orientation.
+- **Native `<dialog>`, not the app's `Modal`.** `showModal()` gives the top layer (above the
+  popover's z-40), an inert page and focus held inside, plus Escape and Android's Back as `cancel`.
+  `Modal` has no focus trap.
+- **Zoom by resizing the picture inside a scroll box,** not with a CSS transform. Panning, momentum
+  and the arrow keys are then the browser's own. Only the pinch and Ctrl + wheel need listeners, and
+  they are non-passive so the page itself never zooms (`touch-pan-x touch-pan-y` on the box).
+
+### Gotchas
+
+- **`raise_for_status()` raises on a 304** ("Redirect response '304 Not Modified'"), so `get_asset`
+  checks for a 304 first.
+- **StrictMode runs effects twice in dev.** Calling `close()` in the viewer's unmount cleanup would
+  fire `onClose` and shut it the moment it opened. Removing an open dialog from the page already
+  takes it out of the top layer, so there is no close on unmount.
+- **The popover first renders `visibility: hidden` while it measures itself,** and an element inside
+  a hidden one can't take focus. The picture's focus after the viewer closes therefore waits a
+  frame. Only the real browser showed this: happy-dom doesn't compute visibility.
+- **Prettier reformats whole files.** `ReaderView.tsx` and `SearchView.tsx` weren't
+  Prettier-clean before this branch, so only new files were run through it.
+
+### The fix before this, on the server
+
+PR #147 (the brief Concord failures) was deployed to Kris's server on 2026-10-02 with no migration.
+- **Through a throwaway container of the new image:** 36 of 36 requests at the gaps that had given a
+  502 on the old one succeeded.
+- **The branch's client inside that image, with the idle time forced back to 5 s:** 84 of 84 at 4.90
+  to 4.995 s succeeded, and 3 were retried (2 `RemoteProtocolError`, 1 `ReadError`).
+- **The live container then took the new image:** healthy, Concord reachable, 20 Bibles.
+
+### How it was verified
+
+- **Backend:**
+  - `chart_images_test.py` (13 tests): the route's 200 and its headers, 304, 404, the outage,
+    non-images refused, dot segments, signed out; the client's URL, 304 and errors.
+  - `v8_note_fields_test.py`: `image` and `title` through `/notes` and the search, and null from an
+    older Concord.
+- **Frontend:**
+  - `chartZoom.test.ts` (9).
+  - `ChartPicture.test.tsx` (4).
+  - `ChartViewer.test.tsx` (8): modal, focus, fit, buttons to the 3× limit, keys, double-click,
+    Close, Escape, a failure.
+  - `NotePopover.test.tsx`: the order, the source for a borrowed chart, no frame without an image.
+  - `ReaderView.test.tsx`: open, then close back to the note with focus on the picture.
+  - `SearchView.test.tsx`: title, thumbnail, viewer, focus back.
+- **The gate:** `make check` and `make check-frontend` green (counts in the PR).
+- **In a browser, before the PR:** a local build against Kris's Concord, with a scratch database,
+  in headless Chromium.
+  - **Coverage:** Genesis 13, Jeremiah 1 and Psalm 9 on EMB, and on KJV with EMB ticked, at
+    1280×800 and 390×844 (touch), light and dark: 24 cases.
+  - **Placement:** each chart's marker sits at the end of verse 4, 3 and 1 respectively, and
+    borrowed onto KJV it still loads from EMB.
+  - **The note view:** the frame is 262×192, and the popover stays on screen.
+  - **The large view:** fitted at 100%, 98% and 100% on desktop, and 38% on the phone, where two
+    presses of + give 86% (readable) and a CDP pinch 190% with the page's own zoom still 1.
+  - **Closing:** brings the note back.
+  - **Pictures:** every one was 200 `image/jpeg` with `private, max-age=31536000, immutable`.
+  - **Overall:** no page errors, no sideways overflow.
+  - **Found there:** the focus bug above.
+
+---
+
 ## v1.8 fix — the brief Concord failures (a connection closed under a request)
 
 - **Date:** 2026-10-02

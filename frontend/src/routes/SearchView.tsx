@@ -2,6 +2,8 @@ import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { type FormEvent, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 
+import { ChartPicture } from "@/components/ChartPicture";
+import { ChartViewer } from "@/components/ChartViewer";
 import { NoteLookSwatch } from "@/components/NoteLookSwatch";
 import { TopNav } from "@/components/TopNav";
 import { useReadingTranslation } from "@/hooks/useReadingTranslation";
@@ -9,8 +11,9 @@ import { noteSources } from "@/lib/borrowedNotes";
 import { markSegments } from "@/lib/highlight";
 import { noteLook } from "@/lib/noteLooks";
 import { markdownSnippetText } from "@/lib/noteMarkdown";
-import { noteReference, notePreview, readerLink, studyNoteBadge } from "@/lib/notes";
+import { chartWords, noteReference, notePreview, readerLink, studyNoteBadge } from "@/lib/notes";
 import {
+  chartImageUrl,
   fetchBooks,
   keywordSearch,
   searchAnnotations,
@@ -18,7 +21,7 @@ import {
   semanticSearch,
   translationsOptions,
 } from "@/lib/reader";
-import type { KeywordResult, SemanticResult } from "@/schemas";
+import type { KeywordResult, SemanticResult, StudyNoteResult } from "@/schemas";
 
 type Mode = "semantic" | "keyword";
 
@@ -107,6 +110,11 @@ export function SearchView(): JSX.Element {
   // Which Bible's study notes to search: "" is all of them. In-memory, like the page's other
   // choices.
   const [notesFrom, setNotesFrom] = useState("");
+  // A chart opened large from its thumbnail, with the thumbnail to give focus back to.
+  const [openChart, setOpenChart] = useState<{
+    hit: StudyNoteResult & { image: string };
+    opener: HTMLButtonElement;
+  } | null>(null);
   // Semantic mode is meaning-based Scripture only — the scope row and the keyword note searches
   // belong to keyword mode (#66/#67). Selections live in state so they survive the mode toggle.
   const showScripture = mode === "semantic" || scriptureOn;
@@ -491,12 +499,39 @@ export function SearchView(): JSX.Element {
                               Open in reader
                             </Link>
                           </div>
-                          {n.snippet && (
-                            <p className="mt-1 font-serif text-gray-700 dark:text-gray-200">
-                              {highlighted(
-                                n.text_format === "markdown" ? markdownSnippetText(n.snippet) : n.snippet,
-                              )}
-                            </p>
+                          {n.image ? (
+                            // A chart: its words are in its picture, so it shows its title and a
+                            // thumbnail that opens it large. Its snippet is just its reference.
+                            <div className="mt-2 flex items-start gap-3">
+                              <ChartPicture
+                                size="thumb"
+                                src={chartImageUrl(n.translation, n.image)}
+                                {...chartWords(n)}
+                                onOpen={(opener) =>
+                                  setOpenChart({ hit: { ...n, image: n.image! }, opener })
+                                }
+                              />
+                              <div className="min-w-0">
+                                {n.title && (
+                                  <p className="font-semibold text-gray-900 dark:text-gray-50">{n.title}</p>
+                                )}
+                                {n.snippet && (
+                                  <p className="mt-1 font-serif text-gray-700 dark:text-gray-200">
+                                    {highlighted(
+                                      n.text_format === "markdown" ? markdownSnippetText(n.snippet) : n.snippet,
+                                    )}
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                          ) : (
+                            n.snippet && (
+                              <p className="mt-1 font-serif text-gray-700 dark:text-gray-200">
+                                {highlighted(
+                                  n.text_format === "markdown" ? markdownSnippetText(n.snippet) : n.snippet,
+                                )}
+                              </p>
+                            )
                           )}
                         </li>
                       ))}
@@ -524,6 +559,19 @@ export function SearchView(): JSX.Element {
           </div>
         )}
       </main>
+      {openChart && (
+        <ChartViewer
+          src={chartImageUrl(openChart.hit.translation, openChart.hit.image)}
+          title={openChart.hit.title ?? `Chart for ${openChart.hit.reference}`}
+          subtitle={openChart.hit.reference}
+          alt={chartWords(openChart.hit).alt}
+          onClose={() => {
+            const { opener } = openChart;
+            setOpenChart(null);
+            if (opener.isConnected) opener.focus();
+          }}
+        />
+      )}
     </div>
   );
 }
