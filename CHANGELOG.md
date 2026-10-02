@@ -17,43 +17,22 @@ This project follows [Keep a Changelog](https://keepachangelog.com/) and
 
 ## [Unreleased]
 
+## [1.8.0] — 2026-10-02
+
+Study Bibles — a study Bible you own, read the way it's printed.
+
+Most of this release is for a study Bible you own, such as the Every Man's Bible, loaded into your
+own Scripture engine (Concord 1.3.0 or later). songbird fetches its notes, pictures and pages as
+you open them and keeps no copy. The engine that comes with songbird carries no study Bible, so on
+the standard setup those features stay out of sight. The Settings page, the buttons at the end of
+each chapter and the fixes are for everyone.
+
 ### Added
-- **A row of letters for a long index.** The Every Man's Bible's *Verse Finder*, under **About
-  EMB**, lists its themes from A to Z, about a hundred screens on a phone. A row of letters now
-  sits under its title and stays put while you scroll: tap one to go straight to the themes that
-  start with it. Only the letters the index uses are there.
-- **Topics from more than one index.** Besides *Nave's Topical Bible*, your Scripture engine can now
-  load a study Bible's own index of themes; with the Every Man's Bible that is the *Tyndale Verse
-  Finder*. Each topic now says which index it comes from: on the Topics page, on a topic's own page
-  and in the reader's ※ panel. When there's more than one, a **From:** row on the Topics page shows
-  one index at a time, with how many of its topics match your search. The Verse Finder as printed
-  is also under **About EMB**, as its sixth piece of front matter.
-- **A study Bible's front matter and its reading plan.** The Every Man's Bible prints more than
-  notes: a copyright page, an introduction to the Bible and one to its translation, the people who
-  made it, a one-year reading plan, and notes on the authors behind its *Personal Gold* features.
-  An **About EMB** button beside the chapter's title (and a row on Settings) opens them, each in
-  full. The reading plan shows a month at a time and opens on today's date; pick another month or
-  day, or tap a reading to open that passage, then **About EMB** again to come back to the same
-  day. songbird keeps no record of what you've read, and fetches every page from your Scripture
-  engine as you open it, keeping no copy.
-- **A book's introduction, one tap from the text.** A study Bible such as the Every Man's Bible
-  introduces each of its 66 books: what it's about, who wrote it, when, an outline, key people and
-  passages, how long it takes to read, and for many books a timeline. While you read that Bible, an
-  **Introduction** button beside the chapter's title opens the book's introduction over the page.
-  Its references take you to the passage, its picture opens full-screen, and **Close** puts you
-  back on the line you left. Reading another translation with that Bible's notes ticked, the button
-  names it (**EMB introduction**). songbird fetches each introduction from your Scripture engine as
-  you open it and keeps no copy.
-- **Charts you can read.** A study Bible's charts, such as the 44 in the Every Man's Bible, now
-  show their picture when you open them, both while you read that Bible and when you borrow its
-  notes into another translation. A chart's words are part of the picture, so tap it to see it
-  full-screen. Zoom in with a pinch or a double-tap on a phone, or with + and − on a computer, and
-  drag to move around. **Close** brings you back to the note. A chart that turns up on the Search
-  page shows its title and a small picture you can tap the same way. songbird fetches each
-  picture from your Scripture engine as you open it and keeps no copy.
-- **← Prev and Next → buttons at the bottom of each chapter.** When you finish reading a chapter,
-  you can go straight to the next one without scrolling back up. It opens at the top of the page.
-  This works on both the reader and the Compare page.
+- **A study Bible's notes, shown the way the book prints them.** Tap one of its notes and you see
+  what kind of note it is, its title and the verses it covers. Its paragraphs, italics and lists
+  are intact, and its headings stand out from the text. A line of poetry that wraps is indented, so
+  it reads as one line carried over. A blue reference inside a note takes you straight to that
+  passage, and a long note scrolls.
 - **Notes from other Bibles can follow you into the translation you're reading.** The new
   **Settings** page has a box for each Bible that has notes: NET's translator's notes, and a study
   Bible's notes such as the Every Man's Bible's. Tick one, and its notes appear while you read the
@@ -62,22 +41,49 @@ This project follows [Keep a Changelog](https://keepachangelog.com/) and
   and otherwise at the end of the verse. Every note says which Bible it's from and quotes that
   Bible's wording. songbird remembers your choices, and if you'd already switched on NET's notes,
   they stay on.
-- **A study Bible's notes, shown the way the book prints them.** When your Scripture engine carries
-  a study Bible's notes (the Every Man's Bible is the first), tapping one shows what kind of note it
-  is, its heading and the verses it covers, with its paragraphs, italics and lists intact. A blue
-  reference inside a note takes you straight to that passage, and a long note scrolls. On the
-  Search page these notes carry their own labels, and each says which Bible it came from when more
-  than one Bible has notes.
 - **Each Bible's notes have their own look.** With NET's and the Every Man's Bible's notes both
-  showing, you can now tell them apart: NET's are plain violet numbers, as before, and the Every
-  Man's Bible's are rose numbers in a little square. The difference is in the shape as well as the
+  showing, you can tell them apart: NET's are plain violet numbers, as before, and the Every Man's
+  Bible's are rose numbers in a little square. The difference is in the shape as well as the
   colour, so it holds in dark mode and for colour-blind eyes. Settings and the **Notes ▾** menu show
   each Bible's mark beside its name, and an open note names its Bible at the top.
-- **Every study note a search finds, and a choice of whose.** The Search page used to stop at 20 study
-  notes, so the Every Man's Bible's rarely showed up beside NET's far larger set. Now it says how many
-  there are in all (*20 of 242*), and **Load more** brings the next 20. When more than one Bible has
-  notes, a **From:** row lets you search just one Bible's notes, or **All** of them. If your Scripture
-  engine can't be reached, the study notes now say so instead of quietly showing nothing.
+- **Charts you can read.** A study Bible's charts, such as the 44 in the Every Man's Bible, show
+  their picture when you open them, both while you read that Bible and when you borrow its notes
+  into another translation. A chart's words are part of the picture, so tap it to see it
+  full-screen. Zoom in with a pinch or a double-tap on a phone, or with + and − on a computer, and
+  drag to move around. **Close** brings you back to the note. A chart that turns up on the Search
+  page shows its title and a small picture you can tap the same way.
+- **A book's introduction, one tap from the text.** A study Bible such as the Every Man's Bible
+  introduces each of its 66 books: what it's about, who wrote it, when, an outline, key people and
+  passages, how long it takes to read, and for many books a timeline. While you read that Bible, an
+  **Introduction** button beside the chapter's title opens the book's introduction over the page.
+  Its references take you to the passage, its picture opens full-screen, and **Close** puts you
+  back on the line you left. Reading another translation with that Bible's notes ticked, the button
+  names it (**EMB introduction**).
+- **A study Bible's front matter and its reading plan.** The Every Man's Bible prints more than
+  notes: a copyright page, an introduction to the Bible and one to its translation, the people who
+  made it, a one-year reading plan, and notes on the authors behind its *Personal Gold* features.
+  An **About EMB** button beside the chapter's title (and a row on Settings) opens them, each in
+  full. The reading plan shows a month at a time and opens on today's date; pick another month or
+  day, or tap a reading to open that passage, then **About EMB** again to come back to the same
+  day. songbird keeps no record of what you've read.
+- **Topics from more than one index.** Besides *Nave's Topical Bible*, your Scripture engine can
+  carry a study Bible's own index of themes; with the Every Man's Bible that is the *Tyndale Verse
+  Finder*. Each topic says which index it comes from: on the Topics page, on a topic's own page and
+  in the reader's ※ panel. When there's more than one, a **From:** row on the Topics page shows one
+  index at a time, with how many of its topics match your search.
+- **The Verse Finder as printed, with a row of letters.** It's also under **About EMB**, as the
+  last piece of front matter. It lists its themes from A to Z and runs to about a hundred screens on
+  a phone, so a row of letters sits under its title and stays put while you scroll: tap one to go
+  straight to the themes that start with it.
+- **Every study note a search finds, and a choice of whose.** The Search page used to stop at 20
+  study notes, so the Every Man's Bible's rarely showed up beside NET's far larger set. Now it says
+  how many there are in all (*20 of 242*), and **Load more** brings the next 20. When more than one
+  Bible has notes, a **From:** row lets you search just one Bible's notes, or **All** of them. If
+  your Scripture engine can't be reached, the study notes now say so instead of quietly showing
+  nothing.
+- **← Prev and Next → buttons at the bottom of each chapter.** When you finish reading a chapter,
+  you can go straight to the next one without scrolling back up. It opens at the top of the page.
+  This works on both the reader and the Compare page.
 
 ### Changed
 - **A Settings page, and a less crowded top of the screen.** Light or dark, which Bibles' notes to
@@ -93,49 +99,29 @@ This project follows [Keep a Changelog](https://keepachangelog.com/) and
 ### Fixed
 - **A long note opens where there's room to read it.** Tapping a note low on the screen used to
   squeeze it into a small box underneath, even with most of the screen free above. If a note won't
-  fit below its mark, it now opens on whichever side has more room.
+  fit below its mark, it now opens on whichever side has more room. The same goes for your own
+  notes and sermon notes on a verse.
 - **Two marks side by side no longer read as one number.** Where two notes sit at the same spot,
   their numbers now have a small gap between them, so you see "6 7" rather than "67".
-- **A note's title and headings stand out.** In longer notes, the title, the section headings, the
-  smaller subheadings and the bold opening words all used to look the same. Now the title is the
-  largest, a section heading has a thin line under it, a subheading is in small capitals, and bold
-  opening words stay part of their paragraph.
-- **Poetry that wraps is easier to follow.** When a line of poetry in a note is too long for the box,
-  the part that wraps onto the next line is now indented, so it no longer looks like an extra line
-  of the poem.
 - **Reloading keeps your place.** After you jumped to a passage, the address bar still showed the
   chapter you started on, so reloading the page took you back there. It now follows you, so a
   reload or a bookmark opens the passage you're reading.
 - **No more brief failures reaching Concord.** Now and then a request to your Scripture engine
   (Concord) failed even though it was running fine. Usually the page asked again a second later,
   so all you saw was a short pause; once in a while an "is Concord reachable?" message showed
-  instead. It happened when you did something about five seconds after your last click: songbird
-  reused its connection to Concord at the very moment Concord was closing it. songbird now lets
-  an unused connection go after two seconds. If a connection is ever closed under a request
-  anyway, songbird sends that request again at once. When Concord really is down, you still see
-  the message straight away.
-- **Notes markers no longer multiply.** Reading with a study Bible's notes ticked, switching another
-  Bible's notes on and off could leave extra copies of a marker behind, one more each time, until
-  the page was reloaded (seen at Malachi 2:16). Each marker now appears once.
-- **The Status page opens properly from the reader again.** Opening Status after the reader, Compare
-  or Search showed "Unexpected Application Error!", and opening the reader after Status did the
-  same. These pages now all read the list of translations the same way.
+  instead. songbird now lets an unused connection go sooner, and if one is closed under a request
+  anyway, it sends that request again at once. When Concord really is down, you still see the
+  message straight away.
+- **The Status page opens properly from the reader again.** Opening Status after the reader,
+  Compare or Search showed "Unexpected Application Error!". These pages now all read the list of
+  translations the same way.
 - **Signing out now leaves nothing of yours behind.** If someone else signed in on the same browser
   tab after you, the home page and Browse notes could briefly show your notes before theirs
   loaded. Now songbird forgets your notes and searches as soon as you sign out, and again when
   anyone signs in.
-- **A reference keeps its brackets on its line.** In a study Bible's lists, such as the Verse Finder
-  in **About EMB**, a reference in brackets could wrap so that "(" ended one line and the reference
-  began the next, or ")" sat alone. On a phone that happened in almost half the Verse Finder's
-  entries. A reference now wraps together with the brackets and the full stop or comma that touch
-  it, in notes, introductions and the About page alike.
 - **A "see" topic names the topic it points to.** Some topics only send you to another one. The link
-  used to show the other topic's code ("See vf-56", or a lower-case word for a Nave's topic); it now
-  shows its name. If your Scripture engine doesn't have that topic, the link keeps its code.
-- **Escape keeps stepping back on the About page.** On a computer, pressing Escape in one of a
-  Bible's documents takes you back to its list. The third time in a row, the whole page closed
-  instead, because the browser stops a page from refusing a close after twice. Escape now steps
-  back every time, and closes the page only from the list.
+  used to show the other topic's code (a lower-case word for a Nave's topic); it now shows its name.
+  If your Scripture engine doesn't have that topic, the link keeps its code.
 
 ## [1.7.0] — 2026-09-07
 
@@ -290,6 +276,7 @@ The big fan-out — four study features at once, plus a proper guide.
   Scripture comes from [Concord](https://github.com/kbennett2000/concord); songbird keeps only your
   notes, on your own machine.
 
+[1.8.0]: https://github.com/kbennett2000/songbird/releases/tag/v1.8.0
 [1.7.0]: https://github.com/kbennett2000/songbird/releases/tag/v1.7.0
 [1.6.0]: https://github.com/kbennett2000/songbird/releases/tag/v1.6.0
 [1.1.0]: https://github.com/kbennett2000/songbird/releases/tag/v1.1.0
