@@ -2,7 +2,6 @@ import type { ReactNode } from "react";
 import { Link, useLocation } from "react-router-dom";
 
 import { useAuth } from "@/hooks/useAuth";
-import { useThemeControl } from "@/hooks/useTheme";
 
 interface TopNavProps {
   /** Tailwind max-width for the centered row (match the page body). Defaults to `max-w-3xl`. */
@@ -15,12 +14,12 @@ interface TopNavProps {
   children?: ReactNode;
 }
 
+// Sermon sources and Status live under Settings, so the Settings link is the current page there too.
+const SETTINGS_PATHS = ["/settings", "/sermon-sources", "/status"];
+
 const LINKS = [
   { to: "/read", label: "Reader" },
   { to: "/browse", label: "Browse notes" },
-  // "Sources", not "Sermon sources": this is the eighth link in a row that has to wrap onto a
-  // phone, and the page's own heading says the long name.
-  { to: "/sermon-sources", label: "Sources" },
   { to: "/search", label: "Search" },
   { to: "/topics", label: "Topics" },
   { to: "/places", label: "Places" },
@@ -29,8 +28,8 @@ const LINKS = [
 
 /**
  * The one shared top nav (issue #62) — every content page used to inline its own divergent header.
- * Renders the `songbird` home link, the standard nav cluster, and the signed-in user + log out;
- * the current page's link is emphasized. `actions` adds page controls to the nav row; `children`
+ * Renders the `songbird` home link, the standard nav cluster, Settings, and the signed-in user + log
+ * out; the current page's link is emphasized. `actions` adds page controls to the nav row; `children`
  * renders a second row beneath it (the reader / compare context bars).
  */
 export function TopNav({
@@ -40,7 +39,6 @@ export function TopNav({
   children,
 }: TopNavProps): JSX.Element {
   const { user, logout } = useAuth();
-  const { isDark, setTheme } = useThemeControl();
   const { pathname } = useLocation();
   const links = [...LINKS, { to: compareHref, label: "Compare" }];
 
@@ -71,29 +69,19 @@ export function TopNav({
           })}
           <div className="ml-auto flex flex-wrap items-center gap-3 text-sm">
             {actions}
-            {/* Utility, not content — so it sits with the theme toggle and the account rather
-                than lengthening a content row that already wraps on a phone. It needs to be
-                reachable, though: this is the page that names which Concord is being read, and
-                a missing translation is only explicable from there. */}
+            {/* Utility, not content — so it sits with the account rather than lengthening a
+                content row that already wraps on a phone. Behind it: which Bibles' notes to show,
+                light or dark, Sermon sources and Status. */}
             <Link
-              to="/status"
+              to="/settings"
               className={`hover:underline ${
-                pathname === "/status"
+                SETTINGS_PATHS.includes(pathname)
                   ? "font-semibold text-blue-800 dark:text-blue-300"
                   : "text-blue-700 dark:text-blue-400"
               }`}
             >
-              Status
+              Settings
             </Link>
-            <button
-              type="button"
-              onClick={() => setTheme(isDark ? "light" : "dark")}
-              aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}
-              title={isDark ? "Switch to light mode" : "Switch to dark mode"}
-              className="rounded px-1 text-base leading-none hover:opacity-80"
-            >
-              {isDark ? "☀️" : "🌙"}
-            </button>
             {user && (
               <span className="flex items-center gap-2 text-gray-500 dark:text-gray-400">
                 <span title={user.is_admin ? "Admin" : undefined}>{user.username}</span>

@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { Link } from "react-router-dom";
 
 import { TopNav } from "@/components/TopNav";
 import { translationsOptions } from "@/lib/reader";
@@ -34,6 +35,13 @@ export function StatusView(): JSX.Element {
       <TopNav maxWidth="max-w-3xl" />
       <main className="mx-auto max-w-3xl p-4">
         <header>
+          {/* Reached from Settings now, not the top bar — the way back. */}
+          <Link
+            to="/settings"
+            className="text-sm text-blue-700 dark:text-blue-400 hover:underline"
+          >
+            ‹ Settings
+          </Link>
           <h1 className="text-2xl font-bold tracking-tight">Scripture source</h1>
           <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
             songbird keeps your notes. The Bible text, the search and the maps all come from

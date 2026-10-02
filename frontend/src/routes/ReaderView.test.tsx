@@ -148,6 +148,11 @@ function sermonNote(overrides: Record<string, unknown> = {}) {
   };
 }
 
+/** Opens the chapter's Notes menu, where the "Show … notes" ticks live. */
+async function openNotesMenu(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(await screen.findByRole("button", { name: "Notes from other Bibles" }));
+}
+
 function renderReader() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
@@ -1447,10 +1452,12 @@ describe("ReaderView — borrowed NET notes (an older Concord)", () => {
     return patches;
   }
 
-  it("hides the checkbox when Concord doesn't offer NET", async () => {
+  it("offers no Notes menu when Concord doesn't offer NET", async () => {
     renderReader(); // default translations: KJV + WEB
     expect(await screen.findByText(/JHN 3:16/)).toBeInTheDocument();
-    expect(screen.queryByLabelText("Show NET notes")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Notes from other Bibles" }),
+    ).not.toBeInTheDocument();
   });
 
   it("borrows NET's note onto the matching words when switched on, and saves the choice", async () => {
@@ -1459,6 +1466,7 @@ describe("ReaderView — borrowed NET notes (an older Concord)", () => {
     renderReader();
 
     // KJV, switch off: no translator's-note marker at all.
+    await openNotesMenu(user);
     const checkbox = await screen.findByLabelText("Show NET notes");
     expect(await screen.findByText(TEXT.KJV!)).toBeInTheDocument();
     expect(checkbox).not.toBeChecked();
@@ -1478,6 +1486,7 @@ describe("ReaderView — borrowed NET notes (an older Concord)", () => {
     );
 
     // Switch off → the borrowed marker clears.
+    await openNotesMenu(user);
     await user.click(screen.getByLabelText("Show NET notes"));
     await waitFor(() =>
       expect(screen.queryByRole("button", { name: /Translator's note/ })).not.toBeInTheDocument(),
@@ -1485,15 +1494,19 @@ describe("ReaderView — borrowed NET notes (an older Concord)", () => {
     await waitFor(() => expect(patches).toContainEqual({ show_notes_from: [] }));
   });
 
-  it("hides the checkbox while reading NET itself, which shows its own notes", async () => {
+  it("hides the Notes menu while reading NET itself, which shows its own notes", async () => {
     useNetWorld(true);
     const user = userEvent.setup();
     renderReader();
 
-    // Wait until Concord's translation list (with NET) has loaded — the checkbox signals it.
+    // Wait until Concord's translation list (with NET) has loaded — the menu signals it.
+    await openNotesMenu(user);
     expect(await screen.findByLabelText("Show NET notes")).toBeChecked();
     await user.selectOptions(screen.getByLabelText("Translation"), "NET");
     expect(await screen.findByRole("button", { name: "Translator's note 1" })).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Notes from other Bibles" }),
+    ).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Show NET notes")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /from NET/ })).not.toBeInTheDocument();
   });
@@ -1613,8 +1626,10 @@ describe("ReaderView — notes from any source (Concord v8)", () => {
 
   it("offers one checkbox per notes source, in Concord's order, none for a Bible without notes", async () => {
     useV8World();
+    const user = userEvent.setup();
     renderReader(); // reading KJV, which has notes of its own
 
+    await openNotesMenu(user);
     expect(await screen.findByLabelText("Show EMB notes")).not.toBeChecked();
     const labels = screen
       .getAllByRole("checkbox")
@@ -1630,9 +1645,10 @@ describe("ReaderView — notes from any source (Concord v8)", () => {
     const user = userEvent.setup();
     renderReader();
 
-    await screen.findByLabelText("Show EMB notes");
+    await screen.findByRole("button", { name: "Notes from other Bibles" });
     await user.selectOptions(screen.getByLabelText("Translation"), "EMB");
     const marker = await screen.findByRole("button", { name: "Study Note 1" });
+    await openNotesMenu(user);
     expect(screen.queryByLabelText("Show EMB notes")).not.toBeInTheDocument();
     expect(screen.getByLabelText("Show NET notes")).toBeInTheDocument();
 
@@ -1648,6 +1664,7 @@ describe("ReaderView — notes from any source (Concord v8)", () => {
     const user = userEvent.setup();
     renderReader();
 
+    await openNotesMenu(user);
     await user.click(await screen.findByLabelText("Show EMB notes"));
     await waitFor(() => expect(patches).toContainEqual({ show_notes_from: ["EMB"] }));
     // A verse-level note stays at the start of the verse, after KJV's own.
@@ -1684,6 +1701,7 @@ describe("ReaderView — notes from any source (Concord v8)", () => {
     renderReader();
 
     await waitFor(() => expect(markerNames()).toHaveLength(3));
+    await openNotesMenu(user);
     await user.click(screen.getByLabelText("Show EMB notes"));
     await waitFor(() =>
       expect(markerNames()).toEqual(["Translator's note 1", "Translator's note 2 (from NET)"]),
@@ -1699,6 +1717,26 @@ describe("ReaderView — notes from any source (Concord v8)", () => {
       expect(markerNames()).toEqual(["Translator's note 1", "Study Note 2 (from EMB)"]),
     );
     expect(screen.queryByLabelText("Show OLD notes")).not.toBeInTheDocument();
+  });
+
+  it("the Notes menu says so when the list of Bibles can't be loaded, and links to Settings", async () => {
+    useV8World();
+    server.use(
+      http.get("/api/v1/translations", () =>
+        HttpResponse.json({ detail: { code: "CONCORD_UNREACHABLE" } }, { status: 502 }),
+      ),
+    );
+    const user = userEvent.setup();
+    renderReader();
+
+    // Not an empty menu, and not a missing one: an outage is an error (invariant 3).
+    await openNotesMenu(user);
+    expect(await screen.findByText(/Couldn.t load the Bibles from Concord/)).toBeInTheDocument();
+    expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "All settings ›" })).toHaveAttribute(
+      "href",
+      "/settings",
+    );
   });
 
   it("shows the notes-unavailable notice when a borrowed source can't be reached", async () => {
