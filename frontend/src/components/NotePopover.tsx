@@ -1,10 +1,15 @@
 import { NoteMarkdown } from "@/components/NoteMarkdown";
 import { Popover } from "@/components/Popover";
 import type { ShownNote } from "@/lib/borrowedNotes";
+import type { NoteLook } from "@/lib/noteLooks";
 import { noteKindLabel } from "@/lib/notes";
 
 interface NotePopoverProps {
   note: ShownNote;
+  /** The Bible the note came from ("EMB"): the one being read, or the one it was borrowed from. */
+  source: string;
+  /** That Bible's look (`noteLook`), the same one its markers wear. */
+  look: NoteLook;
   /** The tapped marker button the popover anchors to. */
   anchor: HTMLElement;
   onClose: () => void;
@@ -24,15 +29,32 @@ interface NotePopoverProps {
  * live in the shared {@link Popover} shell; the kind/close row stays pinned while it scrolls. A
  * note borrowed from another Bible names it ("From EMB", the code on its checkbox) and quotes
  * that Bible's words it's about, since its marker in this translation is a best-guess placement.
+ * Every note carries its Bible's code in the pinned row, in that Bible's look, so the note view
+ * matches the marker that opened it.
  */
-export function NotePopover({ note, anchor, onClose, onJump }: NotePopoverProps): JSX.Element {
+export function NotePopover({
+  note,
+  source,
+  look,
+  anchor,
+  onClose,
+  onJump,
+}: NotePopoverProps): JSX.Element {
   const kind = noteKindLabel(note);
   const passages = note.passages ?? [];
   return (
     <Popover anchor={anchor} onClose={onClose} ariaLabel={`${kind} — ${note.reference}`}>
       <div className="sticky -top-3 z-10 -mx-3 -mt-3 mb-1 flex items-center justify-between gap-2 bg-white dark:bg-gray-800 px-3 pb-1 pt-3">
-        <span className="text-xs font-semibold uppercase tracking-wide text-violet-700 dark:text-violet-400">
-          {kind}
+        <span className="flex items-center gap-2">
+          <span
+            data-note-look={look.id}
+            className={`shrink-0 font-mono text-xs font-semibold ${look.chip}`}
+          >
+            {source}
+          </span>
+          <span className={`text-xs font-semibold uppercase tracking-wide ${look.eyebrow}`}>
+            {kind}
+          </span>
         </span>
         <button
           type="button"

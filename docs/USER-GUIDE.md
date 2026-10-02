@@ -87,8 +87,8 @@ phrase. **The standard songbird setup includes none of these,** so most readers 
 — there's nothing missing if your text is clean.
 
 **A study Bible's notes.** Some Scripture engines also carry a study Bible, such as the Every Man's
-Bible. When you read it, its notes appear the same way, as small raised numbers you can tap. These
-notes can say more. Each one starts with what kind of note it is, like *Study Note* or *Textual Note*,
+Bible. When you read it, its notes appear as small raised numbers too, each in a little square, and
+you tap them the same way. These notes can say more. Each one starts with what kind of note it is, like *Study Note* or *Textual Note*,
 and some have a heading and the verses they cover. The text keeps the book's own paragraphs, italics
 and lists. **A reference shown in blue is a link:** tap it and the reader jumps to that passage. A
 long note scrolls inside its box.
@@ -96,13 +96,18 @@ long note scrolls inside its box.
 **Another Bible's notes, in the translation you're reading.** Open **Settings**. Under **Notes from
 other Bibles** there's a box for each Bible that has notes, such as **NET** or **EMB**:
 
-![The Settings page: a "Notes from other Bibles" list with a tick box for each Bible that has notes, the Light, Dark and "Match this device" choices, and links to Sermon sources and Status](screenshots/settings.png)
+![The Settings page: a "Notes from other Bibles" list with a tick box for each Bible that has notes and a sample of its mark beside its name, the Light, Dark and "Match this device" choices, and links to Sermon sources and Status](screenshots/settings.png)
 
 Tick one, and that Bible's notes appear while you read any other translation, on the same words
 wherever songbird can find them. You can tick more than one, and songbird remembers your ticks.
 Tapping a note tells you which Bible it came from (*From NET*) and quotes that Bible's own wording,
 so you know what it's about. When your translation words that part differently, the note waits at
 the end of the verse instead. A note about a whole verse sits at its start.
+
+**Telling the Bibles apart.** Each Bible's notes have their own mark, so you can tell them apart
+even with two ticked. NET's are plain violet numbers. The Every Man's Bible's are rose numbers in a
+little square. The sample beside each name on **Settings**, and in the **Notes ▾** menu, shows you
+which is which. An open note also names its Bible at the top.
 
 **Changing your mind mid-chapter?** The **Notes ▾** button beside the chapter's title has the same
 ticks, so you can switch a Bible's notes on or off without leaving your place.

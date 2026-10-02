@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
 import { MemoryRouter } from "react-router-dom";
@@ -1633,11 +1633,40 @@ describe("ReaderView — notes from any source (Concord v8)", () => {
     expect(await screen.findByLabelText("Show EMB notes")).not.toBeChecked();
     const labels = screen
       .getAllByRole("checkbox")
-      .map((c) => c.closest("label")?.textContent)
+      .map((c) => c.getAttribute("aria-label"))
       .filter((t) => t?.startsWith("Show "));
     expect(labels).toEqual(["Show EMB notes", "Show NET notes"]);
+    // Each row carries its Bible's look as a key, matching the markers in the text.
+    expect(
+      screen
+        .getAllByRole("checkbox")
+        .filter((c) => c.getAttribute("aria-label")?.startsWith("Show "))
+        .map((c) => c.closest("label")!.querySelector("[data-note-look]")?.getAttribute("data-note-look")),
+    ).toEqual(["rose-square", "violet"]);
     expect(screen.queryByLabelText("Show ESV notes")).not.toBeInTheDocument(); // note_count 0
     expect(screen.queryByLabelText("Show KJV notes")).not.toBeInTheDocument(); // being read
+  });
+
+  it("gives each Bible's markers and note view that Bible's look, its own or borrowed", async () => {
+    useV8World(["EMB", "NET"]);
+    const user = userEvent.setup();
+    renderReader(); // reading KJV: a third notes Bible here, so it takes the first spare look
+
+    await waitFor(() =>
+      expect(markerNames()).toEqual([
+        "Translator's note 1",
+        "Study Note 2 (from EMB)",
+        "Translator's note 3 (from NET)",
+      ]),
+    );
+    const looks = markerNames().map((name) =>
+      screen.getByRole("button", { name }).getAttribute("data-note-look"),
+    );
+    expect(looks).toEqual(["teal-circle", "rose-square", "violet"]);
+
+    await user.click(screen.getByRole("button", { name: "Study Note 2 (from EMB)" }));
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText("EMB")).toHaveAttribute("data-note-look", "rose-square");
   });
 
   it("shows a study Bible's own notes while reading it, and offers the other source", async () => {

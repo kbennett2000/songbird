@@ -1,10 +1,12 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 
+import { NoteLookSwatch } from "@/components/NoteLookSwatch";
 import { TopNav } from "@/components/TopNav";
 import { useShowNotesFrom } from "@/hooks/useShowNotesFrom";
 import { type Theme, useThemeControl } from "@/hooks/useTheme";
 import { noteSources } from "@/lib/borrowedNotes";
+import { noteLook } from "@/lib/noteLooks";
 import { translationsOptions } from "@/lib/reader";
 
 const THEMES: { value: Theme; label: string }[] = [
@@ -51,7 +53,8 @@ export function SettingsView(): JSX.Element {
             Notes from other Bibles
           </h2>
           <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
-            Tick a Bible to show its notes while you read other translations.
+            Tick a Bible to show its notes while you read other translations. The mark beside each
+            name is how its notes look in the text.
           </p>
 
           {translations.isPending && (
@@ -80,6 +83,7 @@ export function SettingsView(): JSX.Element {
                       onChange={(e) => setShowNotesFrom(code, e.target.checked)}
                     />
                     <span className="w-12 shrink-0 font-mono font-medium">{code}</span>
+                    <NoteLookSwatch look={noteLook(code, sources)} />
                     <span>{names.get(code) ?? code}</span>
                   </label>
                 </li>

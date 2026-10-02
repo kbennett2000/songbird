@@ -40,18 +40,25 @@ export function verseSegments(text: string, notes: ShownNote[]): VerseSegment[] 
     );
 
   const segments: VerseSegment[] = [];
+  const seen = new Map<string, number>();
   let cursor = 0;
   placed.forEach((item, i) => {
     if (item.offset > cursor) {
       segments.push({ kind: "text", text: text.slice(cursor, item.offset), key: `t${cursor}` });
       cursor = item.offset;
     }
+    // Ordinals are only unique within one source and one kind of note (EMB's textual note and
+    // its article can both be ordinal 1), so the key names the source and the type. Two notes
+    // that still collide get a count, never a shared key: React keeps a stale copy of a marker
+    // whose key repeats each time the verse re-renders.
+    const base = `m${item.note.borrowed ? `b${item.note.borrowed.from}-` : ""}${item.note.type ?? ""}-${item.note.ordinal}-${item.offset}`;
+    const repeat = seen.get(base) ?? 0;
+    seen.set(base, repeat + 1);
     segments.push({
       kind: "marker",
       note: item.note,
       number: i + 1,
-      // Ordinals are only unique within one source, so a borrowed marker's key names its source.
-      key: `m${item.note.borrowed ? `b${item.note.borrowed.from}-` : ""}${item.note.ordinal}-${item.offset}`,
+      key: repeat === 0 ? base : `${base}~${repeat}`,
     });
   });
   if (cursor < len) segments.push({ kind: "text", text: text.slice(cursor), key: `t${cursor}` });

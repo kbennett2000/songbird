@@ -10,6 +10,7 @@ import {
   Fragment,
   lazy,
   Suspense,
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -22,6 +23,7 @@ import { AnnotationsPopover } from "@/components/AnnotationsPopover";
 import { Geography } from "@/components/Geography";
 import { Modal } from "@/components/Modal";
 import { NoteEditor } from "@/components/NoteEditor";
+import { NoteLookSwatch } from "@/components/NoteLookSwatch";
 import { NotePopover } from "@/components/NotePopover";
 import { Popover } from "@/components/Popover";
 import { ScopePicker } from "@/components/ScopePicker";
@@ -51,6 +53,7 @@ import {
 import { ApiError } from "@/lib/api";
 import { saveReadingPosition } from "@/lib/auth";
 import { borrowNotes, noteSources, type ShownNote } from "@/lib/borrowedNotes";
+import { noteLook, noteSourceOf } from "@/lib/noteLooks";
 import { nextChapter, prevChapter } from "@/lib/navigation";
 import {
   createAnnotation,
@@ -274,6 +277,13 @@ export function ReaderView(): JSX.Element {
     borrowedChapters.data,
     chapterQuery.data,
   ]);
+
+  // Each notes Bible's look (lib/noteLooks.ts): a marker, its note view and the Notes menu's key
+  // all wear the look of the Bible the note came from, whether it's read here or borrowed.
+  const lookOf = useCallback(
+    (note: ShownNote) => noteLook(noteSourceOf(note, translation), notesSources),
+    [translation, notesSources],
+  );
 
   // Tick or untick one source from the Notes menu (saved to the profile by the hook).
   const toggleSource = (code: string, on: boolean) => {
@@ -854,6 +864,7 @@ export function ReaderView(): JSX.Element {
                       text={v.text ?? ""}
                       notes={notesByVerse.get(v.verse) ?? []}
                       onOpenNote={(note, anchor) => setOpenNote({ note, anchor })}
+                      lookOf={lookOf}
                     />
                     {inScope.length > 0 && (
                       <button
@@ -1162,7 +1173,9 @@ export function ReaderView(): JSX.Element {
                     type="checkbox"
                     checked={showNotesFrom.includes(code)}
                     onChange={(e) => toggleSource(code, e.target.checked)}
+                    aria-label={`Show ${code} notes`}
                   />
+                  <NoteLookSwatch look={noteLook(code, notesSources)} />
                   <span>Show {code} notes</span>
                 </label>
               ))}
@@ -1180,6 +1193,8 @@ export function ReaderView(): JSX.Element {
       {openNote && (
         <NotePopover
           note={openNote.note}
+          source={noteSourceOf(openNote.note, translation)}
+          look={lookOf(openNote.note)}
           anchor={openNote.anchor}
           onClose={() => setOpenNote(null)}
           onJump={(b, c, v) => navigate(b, c, v)}
