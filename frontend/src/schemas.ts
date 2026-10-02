@@ -435,6 +435,9 @@ export const translatorNoteSchema = z.object({
   title: z.string().nullish(),
   text_format: z.string().nullish(), // "markdown" → rendered as Markdown; else plain text
   passages: z.array(notePassageSchema).optional(),
+  // A chart's picture (Concord ADR-0012): an image name of the note's OWN Bible, fetched through
+  // songbird (`chartImageUrl`). Null or absent for every other note, and from an older Concord.
+  image: z.string().nullish(),
 });
 export const translatorNotesSchema = z.array(translatorNoteSchema);
 
@@ -581,6 +584,8 @@ export const studyNoteResultSchema = z.object({
   snippet: z.string().nullable(),
   label: z.string().nullish(), // Concord v8: the source's own name for the kind — the badge when set
   text_format: z.string().nullish(), // "markdown" → strip the syntax from the snippet
+  title: z.string().nullish(), // a heading — shown for a chart, whose words are in its picture
+  image: z.string().nullish(), // a chart's picture, an image name of `translation`
 });
 export type StudyNoteResult = z.infer<typeof studyNoteResultSchema>;
 // One page of the study-notes search; `total` counts every page, so the page can "Load more".

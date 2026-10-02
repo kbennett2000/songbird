@@ -10,6 +10,7 @@ export const NOTE_TYPE_LABELS: Record<string, string> = {
   sn: "Study note",
   tc: "Text-critical note",
   map: "Map note",
+  chart: "Chart",
 };
 
 /** Badge label for a "Study notes" search hit: a known type's label, else a neutral "Note". */
@@ -25,6 +26,20 @@ export function noteKindLabel(note: { label?: string | null; type: string | null
   if (note.label) return note.label;
   if (!note.type) return "Footnote";
   return NOTE_TYPE_LABELS[note.type] ?? "Note";
+}
+
+/**
+ * A chart's text alternative, and the name of the button that opens it larger. Its title is the
+ * only words a chart has outside its picture (Concord has no text for what's inside it).
+ */
+export function chartWords(note: { title?: string | null; reference: string }): {
+  alt: string;
+  label: string;
+} {
+  return {
+    alt: note.title ? `Chart: ${note.title}` : `Chart for ${note.reference}`,
+    label: `Open the chart larger: ${note.title ?? `the chart for ${note.reference}`}`,
+  };
 }
 
 /** The canonical anchor fields both annotations and sermon notes carry. */

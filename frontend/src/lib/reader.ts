@@ -1,6 +1,6 @@
 import { queryOptions } from "@tanstack/react-query";
 
-import { apiRequest } from "@/lib/api";
+import { apiRequest, apiUrl } from "@/lib/api";
 import {
   type Annotation,
   type Book,
@@ -229,6 +229,17 @@ export async function fetchNotes(
     `/notes/${encodeURIComponent(translation)}/${encodeURIComponent(book)}/${chapter}`,
   );
   return translatorNotesSchema.parse(data);
+}
+
+/**
+ * Where the browser gets a chart's picture: songbird's pass-through to Concord (it stores none).
+ * `translation` is the Bible the note CAME from — EMB for EMB's chart borrowed onto KJV — since an
+ * image name belongs to the note's own Bible.
+ */
+export function chartImageUrl(translation: string, image: string): string {
+  return apiUrl(
+    `/translations/${encodeURIComponent(translation)}/assets/${encodeURIComponent(image)}`,
+  );
 }
 
 /** Section headings for a whole chapter in one translation — from Concord (songbird stores no

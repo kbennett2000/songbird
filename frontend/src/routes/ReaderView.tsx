@@ -21,6 +21,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import { CrossReferences } from "@/components/CrossReferences";
 import { AnnotationsPopover } from "@/components/AnnotationsPopover";
 import { Geography } from "@/components/Geography";
+import { ChartViewer } from "@/components/ChartViewer";
 import { Modal } from "@/components/Modal";
 import { NoteEditor } from "@/components/NoteEditor";
 import { NoteLookSwatch } from "@/components/NoteLookSwatch";
@@ -55,7 +56,9 @@ import { saveReadingPosition } from "@/lib/auth";
 import { borrowNotes, noteSources, type ShownNote } from "@/lib/borrowedNotes";
 import { noteLook, noteSourceOf } from "@/lib/noteLooks";
 import { nextChapter, prevChapter } from "@/lib/navigation";
+import { chartWords } from "@/lib/notes";
 import {
+  chartImageUrl,
   createAnnotation,
   createSermonNote,
   deleteAnnotation,
@@ -165,8 +168,19 @@ export function ReaderView(): JSX.Element {
   const [words, setWords] = useState<WordsView | null>(null);
   const [geo, setGeo] = useState(false);
   const [map, setMap] = useState(false);
-  // The translator's note whose popover is open, with the marker it's anchored to.
-  const [openNote, setOpenNote] = useState<{ note: ShownNote; anchor: HTMLElement } | null>(null);
+  // The translator's note whose popover is open, with the marker it's anchored to. `focusChart`:
+  // it has reopened as its chart's large view closed, so focus goes back to the picture.
+  const [openNote, setOpenNote] = useState<{
+    note: ShownNote;
+    anchor: HTMLElement;
+    focusChart?: boolean;
+  } | null>(null);
+  // A chart's large view, opened from its note's picture. The popover closes meanwhile — it would
+  // close itself on the viewer's clicks and scrolls, or a phone turned to read it — and reopens at
+  // its marker when the viewer closes, measured afresh.
+  const [openChart, setOpenChart] = useState<{ note: ShownNote; anchor: HTMLElement } | null>(
+    null,
+  );
   // The chapter's Notes menu (other Bibles' notes), anchored to its button while open.
   const [notesMenu, setNotesMenu] = useState<HTMLElement | null>(null);
   // The sermon notes covering the tapped verse, whose popover is open (separate system —
@@ -1198,6 +1212,28 @@ export function ReaderView(): JSX.Element {
           anchor={openNote.anchor}
           onClose={() => setOpenNote(null)}
           onJump={(b, c, v) => navigate(b, c, v)}
+          onOpenChart={() => {
+            setOpenChart({ note: openNote.note, anchor: openNote.anchor });
+            setOpenNote(null);
+          }}
+          focusChart={openNote.focusChart}
+        />
+      )}
+
+      {openChart?.note.image && (
+        <ChartViewer
+          src={chartImageUrl(noteSourceOf(openChart.note, translation), openChart.note.image)}
+          title={openChart.note.title ?? `Chart for ${openChart.note.reference}`}
+          subtitle={
+            openChart.note.passages?.length
+              ? `Covers ${openChart.note.passages.map((p) => p.reference).join("; ")}`
+              : openChart.note.reference
+          }
+          alt={chartWords(openChart.note).alt}
+          onClose={() => {
+            setOpenNote({ ...openChart, focusChart: true });
+            setOpenChart(null);
+          }}
         />
       )}
 

@@ -1,8 +1,10 @@
+import { ChartPicture } from "@/components/ChartPicture";
 import { NoteMarkdown } from "@/components/NoteMarkdown";
 import { Popover } from "@/components/Popover";
 import type { ShownNote } from "@/lib/borrowedNotes";
 import type { NoteLook } from "@/lib/noteLooks";
-import { noteKindLabel } from "@/lib/notes";
+import { chartWords, noteKindLabel } from "@/lib/notes";
+import { chartImageUrl } from "@/lib/reader";
 
 interface NotePopoverProps {
   note: ShownNote;
@@ -18,6 +20,10 @@ interface NotePopoverProps {
    * opens a chapter at its top). Reuses the reader's canonical-coordinate navigation.
    */
   onJump: (book: string, chapter: number, verse: number | null) => void;
+  /** Open a chart's picture in the large view (the reader closes this popover meanwhile). */
+  onOpenChart: () => void;
+  /** Put focus on the chart's picture: the note reopening after its large view closed. */
+  focusChart?: boolean;
 }
 
 /**
@@ -30,7 +36,8 @@ interface NotePopoverProps {
  * note borrowed from another Bible names it ("From EMB", the code on its checkbox) and quotes
  * that Bible's words it's about, since its marker in this translation is a best-guess placement.
  * Every note carries its Bible's code in the pinned row, in that Bible's look, so the note view
- * matches the marker that opened it.
+ * matches the marker that opened it. A chart shows its picture, from the note's own Bible (EMB's
+ * chart borrowed onto KJV still comes from EMB), and tapping it opens the large view.
  */
 export function NotePopover({
   note,
@@ -39,6 +46,8 @@ export function NotePopover({
   anchor,
   onClose,
   onJump,
+  onOpenChart,
+  focusChart = false,
 }: NotePopoverProps): JSX.Element {
   const kind = noteKindLabel(note);
   const passages = note.passages ?? [];
@@ -85,6 +94,17 @@ export function NotePopover({
         <p className="mb-1 text-xs text-gray-500 dark:text-gray-400">
           Covers {passages.map((p) => p.reference).join("; ")}
         </p>
+      )}
+      {note.image && (
+        <div className="mb-2">
+          <ChartPicture
+            size="note"
+            src={chartImageUrl(source, note.image)}
+            {...chartWords(note)}
+            onOpen={onOpenChart}
+            autoFocus={focusChart}
+          />
+        </div>
       )}
       {note.text_format === "markdown" ? (
         <NoteMarkdown text={note.text} onJump={onJump} />

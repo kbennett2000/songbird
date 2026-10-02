@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -24,7 +24,13 @@ function note(overrides: Partial<TranslatorNote> = {}): TranslatorNote {
 }
 
 /** Opened as the reader opens it, reading `reading` with EMB and NET as the notes Bibles. */
-function renderPopover(n: ShownNote, onJump = vi.fn(), onClose = vi.fn(), reading = "NET") {
+function renderPopover(
+  n: ShownNote,
+  onJump = vi.fn(),
+  onClose = vi.fn(),
+  reading = "NET",
+  onOpenChart = vi.fn(),
+) {
   const anchor = document.createElement("button");
   document.body.appendChild(anchor);
   const source = noteSourceOf(n, reading);
@@ -36,9 +42,10 @@ function renderPopover(n: ShownNote, onJump = vi.fn(), onClose = vi.fn(), readin
       anchor={anchor}
       onJump={onJump}
       onClose={onClose}
+      onOpenChart={onOpenChart}
     />,
   );
-  return { onJump, onClose, anchor };
+  return { onJump, onClose, onOpenChart, anchor };
 }
 
 afterEach(() => {
@@ -196,5 +203,59 @@ describe("NotePopover", () => {
     );
     expect(screen.getByText("NET")).toHaveAttribute("data-note-look", "violet");
     expect(screen.getByText("Study note")).toHaveClass("text-violet-700");
+  });
+
+  // A chart, as a study Bible sends one: made-up title, name and reference.
+  const chart = (): TranslatorNote =>
+    note({
+      type: "chart",
+      label: "Chart",
+      title: "A made-up chart",
+      text: "[Genesis 12:10-20](ref:GEN.12.10-20)",
+      text_format: "markdown",
+      passages: [
+        { start_chapter: 12, start_verse: 10, end_chapter: 12, end_verse: 20, reference: "Genesis 12:10-20" },
+      ],
+      image: "chart-99.png",
+    });
+
+  it("shows a chart's picture from the Bible being read, under its title, and opens it larger", async () => {
+    const { onOpenChart } = renderPopover(chart(), vi.fn(), vi.fn(), "EMB");
+    const img = screen.getByAltText("Chart: A made-up chart");
+    expect(img).toHaveAttribute("src", "/api/v1/translations/EMB/assets/chart-99.png");
+    // Title and what it covers first, then the picture, then the link to the passage.
+    const dialog = screen.getByRole("dialog");
+    const order = [
+      within(dialog).getByRole("heading", { name: "A made-up chart" }),
+      within(dialog).getByText("Covers Genesis 12:10-20"),
+      img,
+      within(dialog).getByRole("button", { name: "Genesis 12:10-20" }),
+    ];
+    for (let i = 1; i < order.length; i++) {
+      expect(order[i - 1]!.compareDocumentPosition(order[i]!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    }
+
+    fireEvent.load(img);
+    await userEvent.click(screen.getByRole("button", { name: "Open the chart larger: A made-up chart" }));
+    expect(onOpenChart).toHaveBeenCalledOnce();
+  });
+
+  it("takes a borrowed chart's picture from the Bible it came from, not the one being read", () => {
+    renderPopover({ ...chart(), borrowed: { from: "EMB", phrase: "", rank: 0 } }, vi.fn(), vi.fn(), "KJV");
+    expect(screen.getByAltText("Chart: A made-up chart")).toHaveAttribute(
+      "src",
+      "/api/v1/translations/EMB/assets/chart-99.png",
+    );
+  });
+
+  it("shows no picture for a note without one, as from an older Concord", () => {
+    renderPopover(note({ type: "chart", label: "Chart", title: "A made-up chart" }));
+    expect(screen.queryByRole("img")).not.toBeInTheDocument();
+    expect(document.querySelector("[data-chart-picture]")).toBeNull();
+  });
+
+  it("names a chart that has no label of its own a Chart", () => {
+    renderPopover(note({ type: "chart" }));
+    expect(screen.getByText("Chart")).toBeInTheDocument();
   });
 });
