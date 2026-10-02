@@ -4,6 +4,93 @@ A running log of per-slice decisions, gotchas, and how each slice was verified. 
 
 ---
 
+## v1.8 fix — the Status page crash (one cache key, one shape)
+
+- **Date:** 2026-10-02
+- **Branch:** `fix/v1.8-status-crash`
+
+### Why
+
+On Kris's server, opening Status from the reader showed "Unexpected Application Error! Cannot read
+properties of undefined (reading 'map')". Status had its own `fetchTranslations`, which returned
+Concord's whole response (`{translations: [...]}`). The reader, Compare and Search use
+`lib/reader.ts`'s, which returns the bare list. All four use the key `["translations"]`, so
+whichever page loaded first decided the shape the next one read:
+
+- Reader, Compare or Search, then Status: Status read `.translations` of a list.
+- Status, then the reader or Search: `noteSources()` was handed an object ("translations.some is
+  not a function"). Compare crashed the same way on `.map`.
+
+The first direction is older than v1.8 (the same code is at 9e3aeb6). v1.8's `noteSources()` added
+the second.
+
+### What landed
+
+- **`translationsOptions`** in `lib/reader.ts`: TanStack Query's `queryOptions` holding the key
+  and its fetcher together. All four pages call `useQuery(translationsOptions)`, and Status maps
+  the bare list. A page can no longer pair the key with a different fetcher by accident.
+- **`routes/translationsCache.test.tsx`** moves between the real pages on one shared `QueryClient`
+  with the app's own cache settings, through `createMemoryRouter` and `router.navigate`: Reader →
+  Status, Status → Reader, Compare → Status → Compare, Search → Status → Search, Status → Search.
+  All five failed before the fix with the two errors above. They don't click the top bar, so they
+  survive the top bar changing.
+- **Logout now drops every cached query except the signed-in user**, and so do login and register.
+  See the check below.
+
+### The check of every other query key
+
+Every `queryKey`, `useQueries`, `setQueryData` and `getQueryData` in `frontend/src`:
+
+| Key | Used in | Fetcher | Verdict |
+|---|---|---|---|
+| `["translations"]` | Reader, Compare, Search, Status | two fetchers, two shapes | **the bug** |
+| `["books"]` | Reader, Compare, Search, Browse, Welcome | `fetchBooks` | one shape |
+| `["tags"]` | Reader, Browse, Welcome, Sources | `fetchTags` | one shape |
+| `["chapter", t, book, ch]` | Reader (own + borrowed), Compare | `fetchChapter` | one shape |
+| `["notes", t, book, ch]` | Reader (own + borrowed) | `fetchNotes` | one shape |
+| `["places", book, ch]` | Reader, Geography, MapView | `fetchPlaces` | one shape |
+| `["place-verses", id]` | Geography, MapView, PlaceDetail | `fetchPlaceVerses` | one shape |
+| `["browse", tags]`, `["browse-sermon", tags]` | Browse, Welcome | same fetcher, same arguments | one shape |
+| `["auth", "me"]` | `useAuth` (query); `useTheme` and the reader (writes) | `User` or `null` | one shape |
+| the other 24 | one place each, including both infinite queries | — | fine |
+
+No other key had the fault. The check found a different one:
+
+- **Logout left the last person's notes in the cache.** Annotations and sermon notes are
+  author-scoped, but logout removed only `["chapter"]`, `["tags"]` and `["annotations"]` (a key no
+  query uses). `["browse"]`, `["browse-sermon"]`, `["note-search"]` and the Sources lists survived.
+  The next person to sign in on the same tab saw the previous person's notes on Home and Browse,
+  served straight from the cache for 30 seconds (the app's `staleTime`), then until the refetch
+  landed. `useAuth` now removes every query whose key doesn't start with `"auth"`, on logout,
+  login and register.
+
+### The "Show EMB notes" box Kris saw disappear
+
+Three ways it can go, none of them the crash (which breaks the page instead):
+
+- **By design**, while EMB is the translation being read.
+- **If `/translations` fails when the reader mounts**, `noteSources([])` offers nothing and the
+  Translation menu falls back to the one translation being read, with no message. Changing chapter
+  doesn't remount the reader, so it stays that way until the reader is opened again. Concord on
+  the server restarted about 6 hours before this was written (the article load), which would do
+  it. The Settings page that follows shows an error here instead of an empty list.
+- **A Concord without `note_count`** offers NET alone.
+
+### Gotchas
+
+- **`translationsOptions`, not `translationsQuery`.** Three pages already name their
+  `useQuery` result `translationsQuery`, so an export of that name would shadow it.
+- **The new user reaches `useAuth` one tick after `setQueryData`**, the same TanStack Query
+  notification delay A2 noted for the checkbox. The login test waits for it.
+
+### How it was verified
+
+- The new tests failed first, with the exact errors from the server, then passed.
+- `make check`: 550 passed. `make check-frontend`: 418 passed across 46 files; eslint, tsc and
+  the build clean.
+
+---
+
 ## v1.8 slice A2 — notes from any source
 
 - **Date:** 2026-10-01

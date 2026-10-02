@@ -35,6 +35,15 @@ This project follows [Keep a Changelog](https://keepachangelog.com/) and
   Search page these notes carry their own labels, and each says which Bible it came from when more
   than one Bible has notes.
 
+### Fixed
+- **The Status page opens properly from the reader again.** Opening Status after the reader, Compare
+  or Search showed "Unexpected Application Error!", and opening the reader after Status did the
+  same. These pages now all read the list of translations the same way.
+- **Signing out now leaves nothing of yours behind.** If someone else signed in on the same browser
+  tab after you, the home page and Browse notes could briefly show your notes before theirs
+  loaded. Now songbird forgets your notes and searches as soon as you sign out, and again when
+  anyone signs in.
+
 ## [1.7.0] — 2026-09-07
 
 Sermon sources — songbird follows your church's channel and writes the notes itself.
