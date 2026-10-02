@@ -55,11 +55,8 @@ import {
 import { ApiError } from "@/lib/api";
 import { saveReadingPosition } from "@/lib/auth";
 import { borrowNotes, noteSources, type ShownNote } from "@/lib/borrowedNotes";
-import {
-  bookIntroductionsOptions,
-  introductionFor,
-  introductionSources,
-} from "@/lib/introductions";
+import { documentSources } from "@/lib/documents";
+import { bookIntroductionsOptions, introductionFor } from "@/lib/introductions";
 import { noteLook, noteSourceOf } from "@/lib/noteLooks";
 import { nextChapter, prevChapter } from "@/lib/navigation";
 import { chartWords } from "@/lib/notes";
@@ -258,7 +255,7 @@ export function ReaderView(): JSX.Element {
   // has documents. Each Bible's list of introductions is asked for once a session; its button shows
   // while the list loads or if it failed (the view then says so — invariant 3), and is hidden only
   // once the list says this book has none.
-  const introSources = introductionSources(translationsQuery.data ?? [], translation, borrowFrom);
+  const introSources = documentSources(translationsQuery.data ?? [], translation, borrowFrom);
   const introLists = useQueries({
     queries: introSources.map((code) => bookIntroductionsOptions(code)),
   });
