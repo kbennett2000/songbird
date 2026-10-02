@@ -41,8 +41,15 @@ function enclosed(tokens: MarkdownToken[], start: number): { inner: MarkdownToke
   return { inner: tokens.slice(start + 1, i - 1), end: i };
 }
 
+// Punctuation touching a `ref:` link: "(" before it, ")" "." "," … after it. A <button> is an
+// inline block, so a line may break on either side of it, leaving "(" or ")" alone on a line.
+const OPENS_BEFORE_LINK = /[([“‘]+$/;
+const CLOSES_AFTER_LINK = /^[)\].,;:!?”’]+/;
+
 function renderInline(tokens: MarkdownToken[], jump: (target: RefTarget) => void): ReactNode[] {
   const out: ReactNode[] = [];
+  // How many characters of the next text token already sit with the link before it.
+  let taken = 0;
   for (let i = 0; i < tokens.length; ) {
     const t = tokens[i]!;
     const key = `i${i}`;
@@ -54,20 +61,35 @@ function renderInline(tokens: MarkdownToken[], jump: (target: RefTarget) => void
       else if (t.type === "link_open") {
         // Only a well-formed `ref:` link does anything; any other link is just its words.
         const target = refLinkTarget(t.attrGet("href") ?? "");
-        out.push(
-          target ? (
+        if (target) {
+          const button = (
             <button
               key={key}
               type="button"
-              className="font-medium text-blue-700 dark:text-blue-400 hover:underline"
+              className="whitespace-normal font-medium text-blue-700 dark:text-blue-400 hover:underline"
               onClick={() => jump(target)}
             >
               {children}
             </button>
-          ) : (
-            <span key={key}>{children}</span>
-          ),
-        );
+          );
+          // Keep the punctuation touching the link on its line: "(Genesis 1:1)" wraps as one.
+          const prev = out[out.length - 1];
+          const before = typeof prev === "string" ? (OPENS_BEFORE_LINK.exec(prev)?.[0] ?? "") : "";
+          const next = tokens[end];
+          const after =
+            next?.type === "text" ? (CLOSES_AFTER_LINK.exec(next.content)?.[0] ?? "") : "";
+          if (before || after) {
+            if (before) out[out.length - 1] = (prev as string).slice(0, -before.length);
+            taken = after.length;
+            out.push(
+              <span key={key} className="whitespace-nowrap">
+                {before}
+                {button}
+                {after}
+              </span>,
+            );
+          } else out.push(button);
+        } else out.push(<span key={key}>{children}</span>);
       } else out.push(<span key={key}>{children}</span>);
       i = end;
       continue;
@@ -77,7 +99,8 @@ function renderInline(tokens: MarkdownToken[], jump: (target: RefTarget) => void
     else if (t.type === "code_inline") out.push(<code key={key}>{t.content}</code>);
     // An image shows its alt text (images are a later slice); text and anything else, its
     // content — React escapes it, so stray HTML stays visible text.
-    else out.push(t.content);
+    else out.push(t.content.slice(taken));
+    taken = 0;
     i++;
   }
   return out;

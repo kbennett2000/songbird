@@ -46,6 +46,26 @@ describe("NoteMarkdown", () => {
     expect(onJump).toHaveBeenCalledWith("GEN", 20, null);
   });
 
+  it("keeps a link's touching brackets and punctuation on its line, and the words unchanged", () => {
+    const { container } = renderMd(
+      "- A made-up entry ([Made-up 1:2](ref:GEN.1.2))\n- Another, see [Made-up 3:4](ref:EXO.3.4).\n- Last [Made-up 5:6](ref:LEV.5.6) here",
+    );
+    const items = Array.from(container.querySelectorAll("li"));
+    expect(items.map((li) => li.textContent)).toEqual([
+      "A made-up entry (Made-up 1:2)",
+      "Another, see Made-up 3:4.",
+      "Last Made-up 5:6 here",
+    ]);
+    const held = (name: string) => screen.getByRole("button", { name }).parentElement!;
+    // "(" and ")" sit with the link in a span that never breaks, so neither is left alone.
+    expect(held("Made-up 1:2")).toHaveClass("whitespace-nowrap");
+    expect(held("Made-up 1:2")).toHaveTextContent(/^\(Made-up 1:2\)$/);
+    expect(held("Made-up 3:4")).toHaveTextContent(/^Made-up 3:4\.$/);
+    // A link between spaces is left as it was, and the link's own words may still wrap.
+    expect(held("Made-up 5:6").tagName).toBe("LI");
+    expect(screen.getByRole("button", { name: "Made-up 1:2" })).toHaveClass("whitespace-normal");
+  });
+
   it("shows any other link as its words only — nothing clickable", () => {
     const { container } = renderMd(
       "A [web link](https://example.com), a [bad ref](ref:John.3), and <https://example.org>.",
