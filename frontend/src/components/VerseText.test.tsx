@@ -64,3 +64,34 @@ describe("VerseText", () => {
     expect(marker).toHaveAttribute("title", "Study Note");
   });
 });
+
+describe("VerseText — two notes from one source sharing an ordinal", () => {
+  // Concord numbers ordinals per kind of note, so one verse can carry a textual note and an
+  // article that are both ordinal 1. Borrowed onto another translation, both can land at the end
+  // of the verse — one spot, one source, one ordinal. Their markers once shared a React key, and
+  // every re-render (ticking another Bible on or off) left a stale copy of one behind.
+  const END = VERSE.length;
+  const fromEmb = (type: string, label: string) => ({
+    ...note({ type, label, char_offset: END, ordinal: 1, text: label }),
+    borrowed: { from: "EMB", phrase: "", rank: 0 },
+  });
+  const textual = fromEmb("tn", "Textual Note");
+  const article = fromEmb("article", "A Made-Up Article");
+  const other = {
+    ...note({ char_offset: 8, ordinal: 1, text: "other" }),
+    borrowed: { from: "NET", phrase: "For this", rank: 1 },
+  };
+
+  it("keeps exactly one marker each through repeated re-renders", () => {
+    const { rerender } = render(
+      <VerseText text={VERSE} notes={[textual, article]} onOpenNote={vi.fn()} />,
+    );
+    for (let i = 0; i < 4; i++) {
+      rerender(<VerseText text={VERSE} notes={[other, textual, article]} onOpenNote={vi.fn()} />);
+      rerender(<VerseText text={VERSE} notes={[textual, article]} onOpenNote={vi.fn()} />);
+    }
+    expect(screen.getAllByRole("button")).toHaveLength(2);
+    expect(screen.getAllByRole("button", { name: /^Textual Note/ })).toHaveLength(1);
+    expect(screen.getAllByRole("button", { name: /^A Made-Up Article/ })).toHaveLength(1);
+  });
+});

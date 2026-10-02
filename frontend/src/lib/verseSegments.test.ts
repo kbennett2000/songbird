@@ -116,3 +116,26 @@ describe("verseSegments", () => {
     expect(new Set(markers.map((m) => m.key)).size).toBe(3);
   });
 });
+
+describe("verseSegments — marker keys", () => {
+  it("gives two notes of one source a distinct key when they share an ordinal and a spot", () => {
+    // EMB numbers ordinals per kind: a textual note and an article can both be ordinal 1.
+    const borrowed = (type: string, text: string) => ({
+      ...note({ char_offset: VERSE.length, ordinal: 1, type, text }),
+      borrowed: { from: "EMB", phrase: "", rank: 0 },
+    });
+    const markers = verseSegments(VERSE, [borrowed("tn", "a"), borrowed("article", "b")]).filter(
+      (s): s is Extract<VerseSegment, { kind: "marker" }> => s.kind === "marker",
+    );
+    expect(markers.map((m) => m.note.text)).toEqual(["a", "b"]);
+    expect(new Set(markers.map((m) => m.key)).size).toBe(2);
+  });
+
+  it("still keeps keys unique when type, ordinal and spot all repeat", () => {
+    const twin = (text: string) => note({ char_offset: 5, ordinal: 2, type: "sn", text });
+    const keys = verseSegments(VERSE, [twin("a"), twin("b"), twin("c")])
+      .filter((s) => s.kind === "marker")
+      .map((s) => s.key);
+    expect(new Set(keys).size).toBe(3);
+  });
+});
