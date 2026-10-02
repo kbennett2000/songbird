@@ -162,7 +162,7 @@ export const defaultHandlers = [
   http.get("/api/v1/semantic-search", () => HttpResponse.json([])),
   // Study notes default to empty — the public image ships none, so the Search page's "Study notes"
   // section stays hidden; study-notes tests override per-case via server.use().
-  http.get("/api/v1/study-notes-search", () => HttpResponse.json([])),
+  http.get("/api/v1/study-notes-search", () => HttpResponse.json({ results: [], total: 0 })),
   // Verse of the day default — Welcome's card; verse-of-the-day tests override per-case.
   http.get("/api/v1/random-verse", () =>
     HttpResponse.json({

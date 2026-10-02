@@ -1,11 +1,13 @@
-import { useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { type FormEvent, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 
+import { NoteLookSwatch } from "@/components/NoteLookSwatch";
 import { TopNav } from "@/components/TopNav";
 import { useReadingTranslation } from "@/hooks/useReadingTranslation";
 import { noteSources } from "@/lib/borrowedNotes";
 import { markSegments } from "@/lib/highlight";
+import { noteLook } from "@/lib/noteLooks";
 import { markdownSnippetText } from "@/lib/noteMarkdown";
 import { noteReference, notePreview, readerLink, studyNoteBadge } from "@/lib/notes";
 import {
@@ -19,6 +21,9 @@ import {
 import type { KeywordResult, SemanticResult } from "@/schemas";
 
 type Mode = "semantic" | "keyword";
+
+/** Study-note hits per page: the first page is the 20 the page always showed. */
+const STUDY_NOTES_PAGE = 20;
 
 // Render a Concord <mark>…</mark> snippet as safe React nodes (split on the tags — never raw HTML).
 function highlighted(snippet: string): JSX.Element[] {
@@ -99,6 +104,9 @@ export function SearchView(): JSX.Element {
   const [scriptureOn, setScriptureOn] = useState(true);
   const [yourNotesOn, setYourNotesOn] = useState(true);
   const [studyNotesOn, setStudyNotesOn] = useState(true);
+  // Which Bible's study notes to search: "" is all of them. In-memory, like the page's other
+  // choices.
+  const [notesFrom, setNotesFrom] = useState("");
   // Semantic mode is meaning-based Scripture only — the scope row and the keyword note searches
   // belong to keyword mode (#66/#67). Selections live in state so they survive the mode toggle.
   const showScripture = mode === "semantic" || scriptureOn;
@@ -110,8 +118,11 @@ export function SearchView(): JSX.Element {
     [booksQuery.data],
   );
   const translationsQuery = useQuery(translationsOptions);
-  // With more than one Bible's notes in Concord, each study-note hit names whose note it is.
-  const severalNoteSources = noteSources(translationsQuery.data ?? []).length > 1;
+  // With more than one Bible's notes in Concord, each study-note hit names whose note it is, and
+  // the Study notes section offers a filter by Bible.
+  const sources = noteSources(translationsQuery.data ?? []);
+  const severalNoteSources = sources.length > 1;
+  const from = severalNoteSources && sources.includes(notesFrom) ? notesFrom : "";
 
   const semantic = useQuery({
     queryKey: ["semantic-search", query, readingTranslation],
@@ -132,13 +143,33 @@ export function SearchView(): JSX.Element {
     enabled: mode === "keyword" && yourNotesOn && query.length > 0,
   });
   // Concord's translator's/study notes — independent of the Scripture mode/picker, like "Your
-  // notes". Its own key (distinct from "note-search"). Best-effort: the backend swallows failures
-  // to [], so the section renders only on real hits and never degrades the rest of the page.
-  const studyNotes = useQuery({
-    queryKey: ["study-notes-search", query],
-    queryFn: () => searchStudyNotes(query),
+  // notes". Its own key (distinct from "note-search"). Paged ("Load more", like Places) and
+  // filtered by Bible; a new query or filter starts again from the first page. An outage is this
+  // section's own error and never degrades the rest of the page.
+  const studyNotes = useInfiniteQuery({
+    queryKey: ["study-notes-search", query, from],
+    queryFn: ({ pageParam }) =>
+      searchStudyNotes(query, {
+        translation: from || undefined,
+        offset: pageParam,
+        limit: STUDY_NOTES_PAGE,
+      }),
+    initialPageParam: 0,
+    getNextPageParam: (lastPage, allPages) => {
+      const loaded = allPages.reduce((n, p) => n + p.results.length, 0);
+      // An empty page ends it too, whatever the total says.
+      return lastPage.results.length > 0 && loaded < lastPage.total ? loaded : undefined;
+    },
     enabled: mode === "keyword" && studyNotesOn && query.length > 0,
   });
+  const studyHits = studyNotes.data?.pages.flatMap((p) => p.results) ?? [];
+  const studyTotal = studyNotes.data?.pages[0]?.total ?? 0;
+  // A Concord with no notes at all (the stock image) keeps the section hidden, as it always was;
+  // with a notes Bible, the section shows its empty and error states too.
+  const showStudyNotes =
+    mode === "keyword" &&
+    studyNotesOn &&
+    (sources.length > 0 || studyHits.length > 0 || studyNotes.isError);
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
@@ -387,49 +418,107 @@ export function SearchView(): JSX.Element {
             </section>
             )}
 
-            {/* Study notes — Concord's translator's/study notes (best-effort). Renders ONLY on
-                real hits: the stock image ships none, so on most deployments this never appears,
-                and any failure is already swallowed to [] by the backend. */}
-            {mode === "keyword" && studyNotesOn && studyNotes.data && studyNotes.data.length > 0 && (
+            {/* Study notes — Concord's translator's/study notes, a page at a time, from every
+                Bible or one. Hidden on a Concord with no notes (the stock image). */}
+            {showStudyNotes && (
               <section aria-label="Study notes results">
                 <h2 className="mb-2 text-lg font-semibold">
                   Study notes{" "}
                   <span className="text-sm font-normal text-gray-400 dark:text-gray-500">(keyword)</span>
                 </h2>
-                <ul className="flex flex-col gap-3">
-                  {studyNotes.data.map((n, i) => (
-                    <li
-                      // A study Bible can have two notes of one kind on a verse: the index keeps keys unique.
-                      key={`${n.book}-${n.chapter}-${n.verse}-${n.translation}-${n.type ?? ""}-${i}`}
-                      className="rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4"
-                    >
-                      <div className="flex items-center gap-2">
-                        <span className="font-semibold">{n.reference}</span>
-                        <span className="rounded bg-violet-100 px-2 py-0.5 text-xs font-medium text-violet-800">
-                          {n.label ?? studyNoteBadge(n.type)}
-                        </span>
-                        {severalNoteSources && (
-                          <span className="text-xs font-medium text-gray-500 dark:text-gray-400">
-                            {n.translation}
-                          </span>
-                        )}
-                        <Link
-                          to={`/read?book=${n.book}&chapter=${n.chapter}&verse=${n.verse}`}
-                          className="ml-auto text-sm text-blue-700 dark:text-blue-400 hover:underline"
+                {severalNoteSources && (
+                  <fieldset className="mb-3 flex flex-wrap items-center gap-2 text-sm">
+                    <legend className="sr-only">Study notes from</legend>
+                    <span className="text-gray-500 dark:text-gray-400">From:</span>
+                    {["", ...sources].map((code) => (
+                      <label
+                        key={code || "all"}
+                        className={`flex cursor-pointer items-center gap-1.5 rounded-full border px-3 py-1 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-blue-500 ${
+                          from === code
+                            ? "border-blue-600 bg-blue-50 font-medium text-blue-800 dark:border-blue-400 dark:bg-blue-400/15 dark:text-blue-200"
+                            : "border-gray-300 text-gray-700 hover:bg-gray-100 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700"
+                        }`}
+                      >
+                        <input
+                          type="radio"
+                          name="study-notes-from"
+                          value={code}
+                          checked={from === code}
+                          onChange={() => setNotesFrom(code)}
+                          className="sr-only"
+                        />
+                        {code && <NoteLookSwatch look={noteLook(code, sources)} />}
+                        {code || "All"}
+                      </label>
+                    ))}
+                  </fieldset>
+                )}
+                {studyNotes.isPending && <p className="text-gray-500 dark:text-gray-400">Searching…</p>}
+                {studyNotes.isSuccess && studyHits.length === 0 && (
+                  <p className="text-gray-500 dark:text-gray-400">
+                    No {from ? `${from} notes` : "study notes"} match &ldquo;{query}&rdquo;.
+                  </p>
+                )}
+                {studyHits.length > 0 && (
+                  <>
+                    <p className="mb-2 text-sm text-gray-400 dark:text-gray-500">
+                      {studyHits.length} of {studyTotal}
+                    </p>
+                    <ul className="flex flex-col gap-3">
+                      {studyHits.map((n, i) => (
+                        <li
+                          // A study Bible can have two notes of one kind on a verse: the index keeps keys unique.
+                          key={`${n.book}-${n.chapter}-${n.verse}-${n.translation}-${n.type ?? ""}-${i}`}
+                          className="rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4"
                         >
-                          Open in reader
-                        </Link>
-                      </div>
-                      {n.snippet && (
-                        <p className="mt-1 font-serif text-gray-700 dark:text-gray-200">
-                          {highlighted(
-                            n.text_format === "markdown" ? markdownSnippetText(n.snippet) : n.snippet,
+                          <div className="flex items-center gap-2">
+                            <span className="font-semibold">{n.reference}</span>
+                            <span className="rounded bg-violet-100 px-2 py-0.5 text-xs font-medium text-violet-800">
+                              {n.label ?? studyNoteBadge(n.type)}
+                            </span>
+                            {severalNoteSources && (
+                              <span
+                                data-note-look={noteLook(n.translation, sources).id}
+                                className={`font-mono text-xs font-semibold ${noteLook(n.translation, sources).chip}`}
+                              >
+                                {n.translation}
+                              </span>
+                            )}
+                            <Link
+                              to={`/read?book=${n.book}&chapter=${n.chapter}&verse=${n.verse}`}
+                              className="ml-auto text-sm text-blue-700 dark:text-blue-400 hover:underline"
+                            >
+                              Open in reader
+                            </Link>
+                          </div>
+                          {n.snippet && (
+                            <p className="mt-1 font-serif text-gray-700 dark:text-gray-200">
+                              {highlighted(
+                                n.text_format === "markdown" ? markdownSnippetText(n.snippet) : n.snippet,
+                              )}
+                            </p>
                           )}
-                        </p>
-                      )}
-                    </li>
-                  ))}
-                </ul>
+                        </li>
+                      ))}
+                    </ul>
+                  </>
+                )}
+                {/* An outage is this section's error, never "no matches" (invariant 3). */}
+                {studyNotes.isError && (
+                  <p className="mt-2 text-red-600 dark:text-red-400">
+                    Couldn&rsquo;t search the study notes (is Concord reachable?).
+                  </p>
+                )}
+                {studyNotes.hasNextPage && (
+                  <button
+                    type="button"
+                    onClick={() => void studyNotes.fetchNextPage()}
+                    disabled={studyNotes.isFetchingNextPage}
+                    className="mt-4 rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50"
+                  >
+                    {studyNotes.isFetchingNextPage ? "Loading…" : "Load more"}
+                  </button>
+                )}
               </section>
             )}
           </div>
