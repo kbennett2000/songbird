@@ -4,6 +4,73 @@ A running log of per-slice decisions, gotchas, and how each slice was verified. 
 
 ---
 
+## v1.8 follow-up 5 — two fixes found looking at the Verse Finder
+
+- **Date:** 2026-10-02
+- **Branch:** `fix/v1.8-reference-brackets`
+- **Spec:** `docs/v1.8/STUDY-BIBLE-SPEC.md` §3 (the note view) and §6 (Getting back), each a dated
+  line.
+
+### Why
+
+Concord now serves the Tyndale Verse Finder as printed (`front-matter-6`, ADR-0013): 183 `##`
+topics and 1,286 list items, each "statement (reference)". Before slice D, the live build was
+checked against it in headless Chromium: EMB and KJV with EMB ticked, 1280×800 and 390×844, light
+and dark. It opened, its headings and "see" lines read well, and a reference jumped the reader. The
+Exodus 24:3 and Genesis 39:23 Perspectives boxes had their passage and saying in italics, the
+reference and attribution upright, and no stray `*` or `\`. Two things were wrong:
+
+- **Brackets alone on a line.** At 390 px, 577 entries (45%) had "(" end a line with the reference
+  starting the next, or ")" alone after it; 69 at 1280 px. A `ref:` link is a `<button>`, and a
+  button is an inline block, so the line may break on either side of it, even after "(".
+- **The third Escape closed the About page.** From a document, Escape stepped back to the list
+  twice; the third time, from any document, the whole page closed. The same happened on the live
+  build. Chrome 148 fires the dialog's `cancel` as not cancelable on the third close request, even
+  right after a click, by its rule against pages that trap Back. On a bare `<dialog>`, refusing
+  `cancel` worked 2 times out of 6; refusing Escape's `keydown` worked 6 times out of 6.
+
+### What landed
+
+- **`NoteMarkdown`:** a `ref:` button with an opening bracket or quote right before it, or closing
+  punctuation right after it, sits with them in a `whitespace-nowrap` span; the button itself is
+  `whitespace-normal`, so a long link's words still wrap. The text is unchanged.
+- **`DocumentDialog`:** Escape's `keydown` calls `onCancel` first and is prevented when it stepped
+  back, so the browser never makes it a close. A key press inside a dialog within it (a picture's
+  large view) is left to that dialog. Android's Back still arrives only as `cancel`, handled as
+  before.
+
+### Not changed: Android's Back
+
+Back has no key press to catch, so on a phone the third Back in a row is expected still to close
+the page. Not tried on a real phone. Working around it would mean fighting the browser's own rule
+(reopening the page after it closes, say); left alone.
+
+### The slice before this, on the server
+
+PR #152 (slice C2, the About page) is live on Kris's server: `main` at `23c207d`, and the live
+`index.html` names `assets/index-DXRuiKQq.js`. It shipped with no migration.
+
+### How it was verified
+
+- **Tests:** `NoteMarkdown.test.tsx` (+1: brackets, a full stop, a link between spaces, the words
+  unchanged); `BibleAbout.test.tsx` (+1: Escape's key press steps back three times, and is left
+  alone on the list). The new Escape test fails without the fix.
+- **The gate:** `make check-frontend` green (566 tests).
+- **In a browser, before the PR:** a local build against Kris's Concord, with a scratch database.
+  - The Verse Finder: 0 brackets alone at 390 and 1280 px. The 8 runs above again, with no
+    differences and no page errors.
+  - Genesis, Isaiah and Philemon's introductions, the reading plan, the other five front-matter
+    pieces and the about: no bracket alone and no sideways scroll at either width.
+  - Escape stepped back 8 times in a row across all 7 documents, focus on the row each time; it
+    closes only a picture's large view first, then the introduction; from the list it closes the
+    page.
+  - On a phone with the CPU slowed 4×, the Verse Finder opens in 0.47–0.50 s the first time and
+    0.32–0.35 s after (0.43–0.45 and 0.28–0.36 s before). Flinging it with a finger, about 29,000
+    px in six flings, gave no frame over 17 ms, before and after. It is 106 screens long on a
+    phone and 78 on a desktop.
+
+---
+
 ## v1.8 slice C2 — a study Bible's About page
 
 - **Date:** 2026-10-02
