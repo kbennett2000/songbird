@@ -20,6 +20,7 @@ import { Link, useSearchParams } from "react-router-dom";
 
 import { CrossReferences } from "@/components/CrossReferences";
 import { AnnotationsPopover } from "@/components/AnnotationsPopover";
+import { BookIntroduction } from "@/components/BookIntroduction";
 import { Geography } from "@/components/Geography";
 import { ChartViewer } from "@/components/ChartViewer";
 import { Modal } from "@/components/Modal";
@@ -54,6 +55,11 @@ import {
 import { ApiError } from "@/lib/api";
 import { saveReadingPosition } from "@/lib/auth";
 import { borrowNotes, noteSources, type ShownNote } from "@/lib/borrowedNotes";
+import {
+  bookIntroductionsOptions,
+  introductionFor,
+  introductionSources,
+} from "@/lib/introductions";
 import { noteLook, noteSourceOf } from "@/lib/noteLooks";
 import { nextChapter, prevChapter } from "@/lib/navigation";
 import { chartWords } from "@/lib/notes";
@@ -183,6 +189,9 @@ export function ReaderView(): JSX.Element {
   );
   // The chapter's Notes menu (other Bibles' notes), anchored to its button while open.
   const [notesMenu, setNotesMenu] = useState<HTMLElement | null>(null);
+  // A book's introduction, open over the reader: whose it is, and the button that opened it (focus
+  // goes back there when it closes, unless a link in it jumped the reader somewhere).
+  const [intro, setIntro] = useState<{ source: string; trigger: HTMLElement } | null>(null);
   // The sermon notes covering the tapped verse, whose popover is open (separate system —
   // canonical, all-translations). One note → single popover; several → a stacked list.
   const [openSermon, setOpenSermon] = useState<{
@@ -245,6 +254,14 @@ export function ReaderView(): JSX.Element {
   );
   const { showNotesFrom, setShowNotesFrom } = useShowNotesFrom();
   const borrowFrom = offeredSources.filter((code) => showNotesFrom.includes(code));
+  // A book's introduction (v1.8 slice C1), from the Bible being read and from each ticked one that
+  // has documents. Each Bible's list of introductions is asked for once a session; its button shows
+  // while the list loads or if it failed (the view then says so — invariant 3), and is hidden only
+  // once the list says this book has none.
+  const introSources = introductionSources(translationsQuery.data ?? [], translation, borrowFrom);
+  const introLists = useQueries({
+    queries: introSources.map((code) => bookIntroductionsOptions(code)),
+  });
   const borrowedNotes = useQueries({
     queries: borrowFrom.map((code) => ({
       queryKey: ["notes", code, chapterBook, chapter],
@@ -396,6 +413,16 @@ export function ReaderView(): JSX.Element {
     setOpenNote(null);
     setOpenSermon(null);
     setOpenAnnotations(null);
+    setIntro(null);
+  };
+
+  // Open a book's introduction over the reader, closing anything open on it.
+  const openIntro = (source: string, trigger: HTMLElement) => {
+    setOpenNote(null);
+    setOpenSermon(null);
+    setOpenAnnotations(null);
+    setNotesMenu(null);
+    setIntro({ source, trigger });
   };
 
   // Bottom-of-chapter nav: go to the chapter, then start reading it from the top.
@@ -850,6 +877,26 @@ export function ReaderView(): JSX.Element {
                   Notes ▾
                 </button>
               )}
+              {introSources.map((code, i) => {
+                const listed = introLists[i];
+                if (listed?.isSuccess && !introductionFor(listed.data, chapterBook)) return null;
+                const own = code === translation;
+                const bookName = selectedBook?.name ?? chapterBook;
+                return (
+                  <button
+                    key={code}
+                    type="button"
+                    className="rounded border border-gray-300 dark:border-gray-600 px-2 py-0.5 font-sans text-xs text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                    onClick={(e) => openIntro(code, e.currentTarget)}
+                    aria-haspopup="dialog"
+                    aria-label={
+                      own ? `Introduction to ${bookName}` : `${code}'s introduction to ${bookName}`
+                    }
+                  >
+                    {own ? "Introduction" : `${code} introduction`}
+                  </button>
+                );
+              })}
             </div>
             {notesUnreachable && (
               <p className="mb-3 font-sans text-sm text-red-600 dark:text-red-400">
@@ -1216,6 +1263,25 @@ export function ReaderView(): JSX.Element {
             All settings ›
           </Link>
         </Popover>
+      )}
+
+      {intro && (
+        <BookIntroduction
+          translation={intro.source}
+          borrowed={intro.source !== translation}
+          book={chapterBook}
+          bookName={selectedBook?.name ?? chapterBook}
+          backTo={chapterQuery.data?.reference ?? `${selectedBook?.name ?? book} ${chapter}`}
+          // A link jumps the reader there; the view closes as it goes, with no focus back on the
+          // button (that would scroll the page back to the top, away from the verse).
+          onJump={(b, c, v) => navigate(b, c, v)}
+          onClose={() => {
+            const trigger = intro.trigger;
+            setIntro(null);
+            // Without scrolling to it: the reader stays on the line it was at.
+            requestAnimationFrame(() => trigger.focus({ preventScroll: true }));
+          }}
+        />
       )}
 
       {openNote && (
