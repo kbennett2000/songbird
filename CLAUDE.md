@@ -70,8 +70,9 @@ in the slices. Every slice is a thin vertical cut through the whole app that shi
   `feat(reader)`, `feat(annotations)`, `fix(...)`, `test(...)`, `docs(...)`, `chore(...)`.
 - **PR per slice** via `gh`. The PR body states what landed, the open-question answers, and
   how it was verified.
-- **Kris reviews and merges. Claude Code never self-merges. Never push to `main`. Never
-  `--force`.**
+- **Claude Code merges its own pull requests:** assign Kris (`kbennett2000`) to the PR, confirm
+  Kris shows as assignee, then merge once its checks are green, with a merge commit. If assigning
+  or merging fails, stop and tell Kris. **Never push to `main`. Never `--force`.**
 - Plan Mode for every slice: produce a plan, Kris approves, then implement.
 
 ## Engineering principles
@@ -163,5 +164,6 @@ comfortably with zero background, fix it before you ship.
 - Don't store Bible text in songbird's database (invariant 5).
 - Don't store notes as editor-native JSON (invariant 6).
 - Don't put an ML stack in songbird — that's Concord's job.
-- Don't self-merge, push to `main`, or `--force`.
+- Don't merge a PR before Kris is its assignee and its checks are green. Don't push to `main` or
+  `--force`.
 - Don't build a horizontal layer in isolation — slice vertically.
