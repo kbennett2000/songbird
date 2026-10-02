@@ -16,7 +16,28 @@ const LIST = [
   { slug: "about-1", kind: "about", title: "Made-up authors" },
 ];
 
+// A made-up index: 24 `##` headings over eight letters (A×5, B×3, D×4, E×2, G×3, K, S×4, Y×2), each
+// heading an invented word over one made-up entry.
+const INDEX_HEADINGS = (
+  [
+    ["A", 5],
+    ["B", 3],
+    ["D", 4],
+    ["E", 2],
+    ["G", 3],
+    ["K", 1],
+    ["S", 4],
+    ["Y", 2],
+  ] as const
+).flatMap(([letter, count]) =>
+  Array.from({ length: count }, (_, n) => `${letter}ozzwick ${n + 1}`),
+);
+const INDEXED = [...LIST, { slug: "front-matter-3", kind: "front-matter", title: "Made-up index" }];
+
 const TEXTS: Record<string, string> = {
+  "front-matter-3": INDEX_HEADINGS.map(
+    (h) => `## ${h}\n\n- Made-up statement ([Made-up 1:1](ref:GEN.1.1)).`,
+  ).join("\n\n"),
   "front-matter-2": [
     "## MADE-UP DIVISION",
     "*Made-up role*\\\nA. Made-up",
@@ -69,7 +90,7 @@ function useDocuments({
         translation: "EMB",
         slug,
         kind: slug.replace(/-\d+$/, ""),
-        title: LIST.find((d) => d.slug === slug)?.title ?? "Made-up other plan",
+        title: listed.find((d) => d.slug === slug)?.title ?? "Made-up other plan",
         book: null,
         ordinal: 1,
         text: TEXTS[slug] ?? "Made-up words.",
@@ -109,6 +130,14 @@ function body(): HTMLElement {
 function placeDay(id: string, top: number) {
   vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
     const y = this.id === id ? top : 0;
+    return { top: y, bottom: y, left: 0, right: 0, width: 0, height: 0, x: 0, y } as DOMRect;
+  });
+}
+
+/** Lay the page out so that the `##` heading reading `words` sits `top` px below its top. */
+function placeHeading(words: string, top: number) {
+  vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
+    const y = this.hasAttribute("data-md-heading") && this.textContent === words ? top : 0;
     return { top: y, bottom: y, left: 0, right: 0, width: 0, height: 0, x: 0, y } as DOMRect;
   });
 }
@@ -344,5 +373,69 @@ describe("BibleAbout — a reading plan", () => {
       await screen.findByRole("heading", { name: "Made-up week one", level: 3 }),
     ).toBeInTheDocument();
     expect(screen.queryByRole("combobox", { name: "Month" })).not.toBeInTheDocument();
+  });
+});
+
+describe("BibleAbout — an index", () => {
+  // Each test first serves the made-up index with `useDocuments({ listed: INDEXED })`.
+  const openIndex = async () => {
+    const user = userEvent.setup();
+    const calls = renderAbout({ slug: "front-matter-3", month: null, day: null });
+    const row = await screen.findByRole("navigation", { name: "Jump to a letter" });
+    return { user, row, ...calls };
+  };
+
+  it("offers a row of only the letters its headings start with, above the page", async () => {
+    useDocuments({ listed: INDEXED });
+    const { row } = await openIndex();
+    expect(screen.getByRole("dialog", { name: "Made-up index" })).toBeInTheDocument();
+    expect(
+      within(row)
+        .getAllByRole("button")
+        .map((b) => b.textContent),
+    ).toEqual(["A", "B", "D", "E", "G", "K", "S", "Y"]);
+    // In the header, outside the scrolling body, so it never scrolls away.
+    expect(body().contains(row)).toBe(false);
+  });
+
+  it("goes to a letter's first heading, without leaving the letters", async () => {
+    useDocuments({ listed: INDEXED });
+    const { user, row, onPlaceChange } = await openIndex();
+    expect(
+      await screen.findByRole("heading", { name: "Dozzwick 1", level: 3 }),
+    ).toBeInTheDocument();
+    placeHeading("Dozzwick 1", 900);
+    await user.click(within(row).getByRole("button", { name: "D" }));
+    // 8 px of room above the heading.
+    expect(body().scrollTop).toBe(900 - 8);
+    placeHeading("Yozzwick 1", 2400);
+    await user.click(within(row).getByRole("button", { name: "Y" }));
+    expect(body().scrollTop).toBe(2400 + 892 - 8);
+    expect(within(row).getByRole("button", { name: "Y" })).toHaveFocus();
+    // The same document: nothing to remember.
+    expect(onPlaceChange).not.toHaveBeenCalled();
+  });
+
+  it("still steps back to the list by Escape", async () => {
+    useDocuments({ listed: INDEXED });
+    await openIndex();
+    expect(fireEvent.keyDown(body(), { key: "Escape" })).toBe(false);
+    expect(await screen.findByRole("dialog", { name: "Made-up Bible" })).toBeInTheDocument();
+    expect(screen.queryByRole("navigation", { name: "Jump to a letter" })).not.toBeInTheDocument();
+  });
+
+  it("isn't offered on an ordinary document or a reading plan", async () => {
+    useDocuments({ listed: INDEXED });
+    const user = userEvent.setup();
+    renderAbout({ slug: "front-matter-2", month: null, day: null });
+    expect(
+      await screen.findByRole("heading", { name: "MADE-UP DIVISION", level: 3 }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("navigation", { name: "Jump to a letter" })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "‹ About EMB" }));
+    await user.click(await screen.findByRole("button", { name: /Made-up plan/ }));
+    expect(await screen.findByRole("combobox", { name: "Month" })).toBeInTheDocument();
+    expect(screen.queryByRole("navigation", { name: "Jump to a letter" })).not.toBeInTheDocument();
   });
 });

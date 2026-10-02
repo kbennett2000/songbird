@@ -4,6 +4,98 @@ A running log of per-slice decisions, gotchas, and how each slice was verified. 
 
 ---
 
+## v1.8 follow-up 6 — a row of letters on a long alphabetical document
+
+- **Date:** 2026-10-02
+- **Branch:** `slice/v1.8-letter-row`
+- **Spec:** `docs/v1.8/STUDY-BIBLE-SPEC.md` §6 (a new bullet), §7's "Not in this slice" and §9's
+  slice C2 acceptance; `docs/v1/SPEC.md` §12, "A study Bible's About page".
+
+### Why
+
+EMB's Verse Finder (`front-matter-6`) is 183 `##` headings, 106 screens on a phone, read through
+the About page with no way to get around it. Kris asked for a row of letters under its title, like
+the reading plan's Month row, offering only the letters it has.
+
+Surveyed on Kris's Concord without keeping any text (heading counts, first letters and order
+only):
+- **Of EMB's 74 documents** only the Verse Finder has more than 12 `##` headings in letter order.
+  Its 183 are in order under every rule tried (case-sensitive, case-folded, word by word, letter by
+  letter) and start with 22 letters (no N, V, X or Z). No heading carries emphasis.
+- **The rest:** book introductions have at most 12 headings, front matter at most 10, the about 2.
+  The reading plan's 365 dates aren't in letter order, and the plan is recognised first anyway.
+
+### What landed
+
+- **`lib/letterIndex.ts`:** `parseLetterIndex` walks the markdown-it tokens as `parseReadingPlan`
+  does. A document is an index when it has at least 20 `##` headings, each starting with a letter
+  A–Z (past opening punctuation, accents and case folded), whose first letters never go back,
+  across at least 5 letters. It returns each letter with the place of its first `##` heading.
+- **`LetterRow`:** a `<nav>` ("Jump to a letter") of equal grid cells in `DocumentDialog`'s `bar`,
+  where the plan's row sits. On a phone, even rows of at most 13; from 640 px, one row. The column
+  counts come from two CSS variables, and `minmax(0, 1fr)` lets the cells shrink rather than push
+  the page sideways.
+- **`BibleAbout`:** checks for an index only when a document isn't a plan. A letter scrolls the
+  body to the Nth `[data-md-heading="2"]`, which `NoteMarkdown` already marks in token order, so it
+  needed no change. The plan's scroll arithmetic moved into `topIn`, shared by both.
+- **No new dependency, no API or database change, no screenshot in the repo.**
+
+### Decisions
+
+- **The shape, not the name.** Nothing looks at the slug, title, kind or Bible. "First letters never
+  go back" is the order the jump needs, and it holds for an index sorted word by word or letter by
+  letter. The thresholds are 20 headings (the longest other document has 12) and 5 letters, so a
+  "Chapter 1 … 20, Epilogue, Notes" run isn't one.
+- **Only the letters it has.** No greyed N, V, X, Z.
+- **8 px above the heading.** Flush against the header's line the heading looked cramped on a
+  phone. The 8 px fall inside the gap before it, so none of the entry before shows.
+- **A tap isn't a move.** It scrolls the body directly: `BibleAbout`'s layout effect runs only on
+  a move or a plan change, so nothing snaps the page back. Nothing is remembered: reopening comes
+  back to the Verse Finder at its top. Focus stays on the letter, as it does on the plan's Day.
+- **Link-blue letters with no borders.** 22 boxed letters would be noise. The browser's own focus
+  ring is kept, as on the plan's controls.
+
+### Gotchas
+
+- **`react-hooks/rules-of-hooks` flags MSW's `useDocuments` helper** when another helper calls it.
+  Each index test calls it itself.
+- **Playwright's `check()` fails on a Settings notes box:** the box follows the saved preference,
+  so it changes only after the save returns. Click it, then wait for it to be checked.
+
+### The slice before this, on the server
+
+PR #154 (slice D, topics by source) is live on Kris's server: `main` at `85dcf46`, and the live
+`index.html` names `assets/index-DNmOqmB2.js`. It shipped with no migration.
+
+### How it was verified
+
+- **Frontend:**
+  - `letterIndex.test.ts` (8): only the letters present, each at its first heading; case, accents,
+    an opening quote and emphasis; a preface, a `#` title and `###` headings ignored; 19 headings,
+    a letter going back, a digit, or fewer than 5 letters aren't an index, nor are a plan or a short
+    document.
+  - `BibleAbout.test.tsx` (+4): the row and only its letters, in the header outside the scrolling
+    body; a letter scrolls to its first heading less 8 px, keeps focus and isn't remembered; Escape
+    still steps back; no row on an ordinary document or a reading plan. All made-up headings
+    ("Aozzwick 1" …), never a real index's topics.
+- **The gate:** `make check` and `make check-frontend` green (counts in the PR).
+- **In a browser, before the PR:** a local build against Kris's Concord, with a scratch database,
+  in headless Chromium, at 390×844 and 1280×800, light and dark (4 runs). The expected letters came
+  from songbird's own API answer, worked out by the script independently of the app.
+  - **The row:** the 22 letters, two rows of 11 on a phone (cells 32.5 × 36 px) and one row on a
+    desktop (25.6 × 36 px), exactly as wide as the header (390 and 595 px). No sideways scroll, and
+    it's outside the scrolling body.
+  - **Every letter:** 21 bring their first heading to 8 px below the row, with none of the entry
+    before showing; Y, the last, scrolls the body to its end. The heading is that letter's first,
+    the row doesn't move, and focus stays on the letter.
+  - **Elsewhere:** the other six documents and Genesis's introduction show no row, and the plan
+    still shows Month. Escape steps back to the list.
+  - **On KJV with EMB ticked, and from Settings:** the same row; a reference still closes the page
+    and jumps the reader.
+  - **No page errors** in any run.
+
+---
+
 ## v1.8 slice D — topics by source
 
 - **Date:** 2026-10-02

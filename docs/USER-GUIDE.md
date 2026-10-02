@@ -125,6 +125,11 @@ more: **About EMB**. It opens the pages the Bible prints before Genesis and at t
 copyright page, its introductions, the people who made it, a one-year reading plan, and notes on
 its authors. Tap one to read it. **‹** at the top takes you back to the list.
 
+**A long index has a row of letters.** The Every Man's Bible's *Verse Finder* lists its themes from
+A to Z, and on a phone it runs to about a hundred screens. Under its title is a row of letters: tap
+one to go straight to the themes that start with it. The row stays put while you scroll, and it
+only shows the letters the index uses.
+
 **The reading plan opens on today's date,** marked **Today**, with its four readings. Tap a
 reading and the Bible opens at that passage. When you're done, tap **About EMB** again: you're
 back on the same day, ready for the next reading. To look at another day:

@@ -3,9 +3,11 @@ import { useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import { DocumentDialog } from "@/components/DocumentDialog";
 import { DOCUMENT_COLUMN, DOCUMENT_TEXT, useDocumentPictures } from "@/components/DocumentText";
+import { LetterRow } from "@/components/LetterRow";
 import { NoteMarkdown } from "@/components/NoteMarkdown";
 import { ReadingPlanBar, ReadingPlanMonth } from "@/components/ReadingPlan";
 import { aboutGroups, aboutKindLabel, documentListOptions, documentOptions } from "@/lib/documents";
+import { type IndexLetter, parseLetterIndex } from "@/lib/letterIndex";
 import { type PlanDay, parseReadingPlan, planDayId, todayIn } from "@/lib/readingPlan";
 
 /**
@@ -20,6 +22,14 @@ export interface AboutPlace {
 }
 
 const THE_LIST: AboutPlace = { slug: null, month: null, day: null };
+
+/**
+ * How far down the view's body `el` sits. The body is scrolled by hand, never with
+ * scrollIntoView, so the page under the view can't move.
+ */
+function topIn(body: HTMLElement, el: Element): number {
+  return el.getBoundingClientRect().top - body.getBoundingClientRect().top + body.scrollTop;
+}
 
 interface BibleAboutProps {
   /** The Bible ("EMB"). */
@@ -40,9 +50,10 @@ interface BibleAboutProps {
 /**
  * A study Bible's About page (v1.8 slice C2): its front matter, reading plan and notes on the
  * edition, in a view that fills the window over the reader or Settings (see `DocumentDialog`). It
- * opens on a list of them; each opens in full, and a reading plan shows a month at a time. Every
- * document is fetched from Concord through songbird and never stored (invariants 1 and 5).
- * Escape and Android's Back step back from a document to the list, then close.
+ * opens on a list of them; each opens in full, a reading plan shows a month at a time, and a long
+ * alphabetical document (an index) offers a row of its letters. Every document is fetched from
+ * Concord through songbird and never stored (invariants 1 and 5). Escape and Android's Back step
+ * back from a document to the list, then close.
  */
 export function BibleAbout({
   translation,
@@ -74,6 +85,8 @@ export function BibleAbout({
     () => (doc?.kind === "reading-plan" ? parseReadingPlan(doc.text) : null),
     [doc],
   );
+  // Any other document is an index by its shape alone, never its slug, title or Bible.
+  const index = useMemo(() => (doc && !plan ? parseLetterIndex(doc.text) : null), [doc, plan]);
 
   const title = summary?.title ?? doc?.title ?? "";
   const kind = aboutKindLabel(summary?.kind ?? doc?.kind ?? "") ?? "About";
@@ -97,16 +110,22 @@ export function BibleAbout({
   };
   const backToList = () => go(THE_LIST);
 
-  // Each move scrolls the page: to the day gone to, or else to the top. The body is scrolled by
-  // hand, never with scrollIntoView, so the page under the view can't move.
+  // Each move scrolls the page: to the day gone to, or else to the top.
   useLayoutEffect(() => {
     const body = bodyRef.current;
     if (!body) return;
     const target = plan && day !== null ? document.getElementById(planDayId({ month, day })) : null;
-    body.scrollTop = target
-      ? target.getBoundingClientRect().top - body.getBoundingClientRect().top + body.scrollTop
-      : 0;
+    body.scrollTop = target ? topIn(body, target) : 0;
   }, [moves, plan, month, day]);
+
+  // A letter scrolls to its first heading, the Nth `##` the page drew, with a little room above it
+  // (inside the gap before it, so none of the entry before shows). Not a move: the place is the
+  // same document.
+  const toLetter = ({ heading }: IndexLetter) => {
+    const body = bodyRef.current;
+    const target = body?.querySelectorAll('[data-md-heading="2"]')[heading];
+    if (body && target) body.scrollTop = topIn(body, target) - 8;
+  };
 
   // Between the list and a document the button pressed is gone: focus goes to the page, or back on
   // the list to the document's own row.
@@ -164,7 +183,7 @@ export function BibleAbout({
       title={place.slug === null ? name : title}
       wrapTitle
       bar={
-        plan && (
+        plan ? (
           <ReadingPlanBar
             plan={plan}
             month={month}
@@ -173,6 +192,8 @@ export function BibleAbout({
             onDay={(d) => go({ slug: place.slug, month, day: d })}
             onToday={() => go({ slug: place.slug, month: today!.month, day: today!.day })}
           />
+        ) : (
+          index && <LetterRow letters={index.letters} onLetter={toLetter} />
         )
       }
       onCancel={() => {
