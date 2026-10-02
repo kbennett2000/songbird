@@ -92,9 +92,10 @@ Both throwaways, their folders and the old image's tag were removed afterwards.
   has 10 tests (was 4).
 - **Live, against the published image:** `docker run --rm -p 127.0.0.1:18100:8000
   ghcr.io/kbennett2000/concord:v1.3.0`, then `CONCORD_BASE_URL=http://127.0.0.1:18100 pytest -m
-  concord`: 7 passed (3 before, 4 new). The image has 15 translations whose counts are all 0, Nave's
-  as its only source, an empty documents list, and 404s for an unknown document or picture. The
-  same 7 pass against Kris's Concord, which has EMB.
+  concord`: 7 passed, 4 from before (one of them the canonical-coordinate bridge's) and 3 new. The
+  image has 15 translations whose counts are all 0, Nave's as its only source, an empty documents
+  list, and 404s for an unknown document or picture. The same 7 pass against Kris's Concord, which
+  has EMB.
 - **Nothing on the server was touched** for this slice, and its leftover `songbird-concord-1` was
   left alone.
 
