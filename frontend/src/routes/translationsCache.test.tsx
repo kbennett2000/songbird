@@ -93,10 +93,13 @@ async function expectStatusList() {
   expect(within(section).getByText("King James Version")).toBeInTheDocument();
 }
 
-/** The reader's Translation menu and its notes checkbox, both built from the cached list. */
+/** The reader's Translation menu and its Notes menu (other Bibles' notes), both built from the
+ * cached list. */
 async function expectReaderControls() {
   expect(await screen.findByRole("option", { name: "NET" })).toBeInTheDocument();
-  expect(await screen.findByLabelText("Show NET notes")).toBeInTheDocument();
+  expect(
+    await screen.findByRole("button", { name: "Notes from other Bibles" }),
+  ).toBeInTheDocument();
 }
 
 describe("the translation list, shared between pages", () => {

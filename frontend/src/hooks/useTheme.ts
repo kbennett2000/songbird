@@ -1,13 +1,13 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
 
-import { useAuth } from "@/hooks/useAuth";
+import { ME_KEY, useAuth } from "@/hooks/useAuth";
 import { saveTheme } from "@/lib/auth";
+import type { User } from "@/schemas";
 
 export type Theme = "light" | "dark" | "system";
 
 const STORAGE_KEY = "songbird-theme";
-const ME_KEY = ["auth", "me"];
 
 function systemPrefersDark(): boolean {
   return (
@@ -73,6 +73,8 @@ export function useThemeControl(): ThemeControl {
 
   const setTheme = (next: Theme): void => {
     apply(next); // optimistic — no flash waiting on the round-trip
+    // …and the choice shows at once wherever it's displayed (the Settings page's options).
+    queryClient.setQueryData<User | null>(ME_KEY, (u) => (u ? { ...u, theme: next } : u));
     void saveTheme(next)
       .then((updated) => queryClient.setQueryData(ME_KEY, updated))
       .catch(() => {

@@ -350,9 +350,10 @@ translation has notes, and a Markdown snippet loses its syntax while keeping `<m
 
 **Borrowed notes, from any source (opt-in).** A notes source is any translation whose Concord
 `note_count` is above 0; against a Concord that predates `note_count`, NET is the one source when
-offered. The reader shows a "Show ⟨code⟩ notes" checkbox per source, hidden while that source is
-the translation being read, backed by a per-user `show_notes_from` list (default `[]`; migration
-0015 turned a v1.7 `show_net_notes = true` into `["NET"]`). Ticked sources' notes are shown on the
+offered. The Settings page lists every source with a tick box, and the reader's **Notes ▾** menu
+(beside the chapter's title) offers the sources other than the translation being read; both are
+backed by a per-user `show_notes_from` list (default `[]`; migration 0015 turned a v1.7
+`show_net_notes = true` into `["NET"]`). Ticked sources' notes are shown on the
 translation being read. Notes join verses on the canonical verse number. Within a verse, each
 marker is placed by matching the source's words just before the note's anchor: the last 3, then 2,
 then 1 words, used only when the match is unique in the verse. Otherwise the marker goes at the end
@@ -403,9 +404,18 @@ imported / skipped / failed. Controls live in the Browse view.
 greeting, library counts (notes, sermons, tags), a "pick up where you left off" card from the
 saved reading position, a recent-notes feed, and quick links to Browse / Search / Compare / Places.
 
+**Settings page (v1.8).** One **Settings** link in the top bar replaces four things that crowded
+it and the reader's bar: the "Show ⟨code⟩ notes" checkboxes, the light/dark switch, and the
+Sources and Status links. `/settings` lists every notes source (whatever is being read) with one
+line on what a tick does, offers Light / Dark / Match this device, and links to Sermon sources and
+Status, which stay their own pages with a "‹ Settings" link back; the Settings link is highlighted
+on all three. A choice saves to the profile as it's made (`PATCH /api/v1/auth/me`); no new table or
+column. When Concord's translation list can't be loaded, Settings and the reader's Notes menu say
+so instead of showing an empty list (invariant 3).
+
 **Light / dark theme (issue #60).** A per-profile theme: `users.theme` (`'light' | 'dark' |
 'system'`, nullable; migration `0009`) persists each reader's choice via `PATCH /api/v1/auth/me`,
-and a top-nav toggle switches it live. The frontend applies the saved theme before first paint (an
+and the Settings page's Light / Dark / Match this device choice switches it live. The frontend applies the saved theme before first paint (an
 inline script in `index.html`) so there's no flash of the wrong theme on load; `system` follows the
 OS preference. Pure presentation — no Bible text, no Concord involvement.
 

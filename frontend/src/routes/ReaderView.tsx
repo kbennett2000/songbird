@@ -15,7 +15,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 
 import { CrossReferences } from "@/components/CrossReferences";
 import { AnnotationsPopover } from "@/components/AnnotationsPopover";
@@ -23,6 +23,7 @@ import { Geography } from "@/components/Geography";
 import { Modal } from "@/components/Modal";
 import { NoteEditor } from "@/components/NoteEditor";
 import { NotePopover } from "@/components/NotePopover";
+import { Popover } from "@/components/Popover";
 import { ScopePicker } from "@/components/ScopePicker";
 import { SermonNoteForm, type SermonNoteFormValues } from "@/components/SermonNoteForm";
 import { SermonNotePopover } from "@/components/SermonNotePopover";
@@ -33,7 +34,8 @@ import { TopNav } from "@/components/TopNav";
 import { VerseText } from "@/components/VerseText";
 import { VerseTopics } from "@/components/VerseTopics";
 import { WordStudy } from "@/components/WordStudy";
-import { useAuth } from "@/hooks/useAuth";
+import { ME_KEY, useAuth } from "@/hooks/useAuth";
+import { useShowNotesFrom } from "@/hooks/useShowNotesFrom";
 
 // Lazy-loaded: the map pulls in MapLibre (~300 KB gz), only needed when the map modal opens.
 const MapView = lazy(() => import("@/components/MapView").then((m) => ({ default: m.MapView })));
@@ -47,7 +49,7 @@ import {
   VERSE_HIGHLIGHT,
 } from "@/lib/annotationStyles";
 import { ApiError } from "@/lib/api";
-import { saveReadingPosition, saveShowNotesFrom } from "@/lib/auth";
+import { saveReadingPosition } from "@/lib/auth";
 import { borrowNotes, noteSources, type ShownNote } from "@/lib/borrowedNotes";
 import { nextChapter, prevChapter } from "@/lib/navigation";
 import {
@@ -74,7 +76,6 @@ import type {
   SectionHeading,
   SermonNote,
   TranslatorNote,
-  User,
 } from "@/schemas";
 
 const DEFAULT_TRANSLATION = "KJV";
@@ -163,6 +164,8 @@ export function ReaderView(): JSX.Element {
   const [map, setMap] = useState(false);
   // The translator's note whose popover is open, with the marker it's anchored to.
   const [openNote, setOpenNote] = useState<{ note: ShownNote; anchor: HTMLElement } | null>(null);
+  // The chapter's Notes menu (other Bibles' notes), anchored to its button while open.
+  const [notesMenu, setNotesMenu] = useState<HTMLElement | null>(null);
   // The sermon notes covering the tapped verse, whose popover is open (separate system —
   // canonical, all-translations). One note → single popover; several → a stacked list.
   const [openSermon, setOpenSermon] = useState<{
@@ -213,8 +216,8 @@ export function ReaderView(): JSX.Element {
     queryKey: ["notes", translation, chapterBook, chapter],
     queryFn: () => fetchNotes(translation, chapterBook, chapter),
   });
-  // Notes from other Bibles (opt-in, ADR 0005): one "Show … notes" checkbox per notes source
-  // other than the translation being read (`noteSources`: Concord's note_count, or NET alone
+  // Notes from other Bibles (opt-in, ADR 0005): one "Show … notes" tick per notes source other
+  // than the translation being read, in the chapter's Notes menu (every source is on Settings) (`noteSources`: Concord's note_count, or NET alone
   // against an older Concord), ticked per the user's `show_notes_from`. For each ticked source,
   // fetch its notes and its verse text (placing a note needs the source's words; ADR 0004) —
   // sharing cache keys with reading that translation itself, and only while borrowing.
@@ -223,7 +226,7 @@ export function ReaderView(): JSX.Element {
     () => notesSources.filter((code) => code !== translation),
     [notesSources, translation],
   );
-  const showNotesFrom = user?.show_notes_from ?? [];
+  const { showNotesFrom, setShowNotesFrom } = useShowNotesFrom();
   const borrowFrom = offeredSources.filter((code) => showNotesFrom.includes(code));
   const borrowedNotes = useQueries({
     queries: borrowFrom.map((code) => ({
@@ -272,22 +275,10 @@ export function ReaderView(): JSX.Element {
     chapterQuery.data,
   ]);
 
-  // Tick or untick one source: apply it to the cached user at once (the markers appear or clear
-  // immediately), then persist the whole list; a failed save puts the previous list back.
-  const setShowNotesFrom = (code: string, on: boolean) => {
-    const previous = queryClient.getQueryData<User | null>(["auth", "me"])?.show_notes_from ?? [];
-    const next = on
-      ? [...previous.filter((c) => c !== code), code]
-      : previous.filter((c) => c !== code);
-    const put = (value: string[]) =>
-      queryClient.setQueryData<User | null>(["auth", "me"], (u) =>
-        u ? { ...u, show_notes_from: value } : u,
-      );
+  // Tick or untick one source from the Notes menu (saved to the profile by the hook).
+  const toggleSource = (code: string, on: boolean) => {
     if (!on) setOpenNote(null); // its marker may be about to disappear
-    put(next);
-    void saveShowNotesFrom(next)
-      .then((updated) => queryClient.setQueryData(["auth", "me"], updated))
-      .catch(() => put(previous));
+    setShowNotesFrom(code, on);
   };
 
   // Section headings for the chapter, in the CURRENT translation. Keyed like notes so switching
@@ -342,7 +333,7 @@ export function ReaderView(): JSX.Element {
     const handle = setTimeout(() => {
       savedPositionRef.current = { translation, book, chapter };
       saveReadingPosition({ translation, book, chapter })
-        .then((updated) => queryClient.setQueryData(["auth", "me"], updated))
+        .then((updated) => queryClient.setQueryData(ME_KEY, updated))
         .catch(() => {
           // Best-effort: restore the ref so a later identical change retries the save.
           savedPositionRef.current = saved;
@@ -727,16 +718,6 @@ export function ReaderView(): JSX.Element {
               ))}
             </select>
           </label>
-          {offeredSources.map((code) => (
-            <label key={code} className="flex items-center gap-1.5">
-              <input
-                type="checkbox"
-                checked={showNotesFrom.includes(code)}
-                onChange={(e) => setShowNotesFrom(code, e.target.checked)}
-              />
-              <span className="text-gray-500 dark:text-gray-400">Show {code} notes</span>
-            </label>
-          ))}
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
@@ -795,7 +776,7 @@ export function ReaderView(): JSX.Element {
         )}
         {chapterQuery.data && (
           <article className="font-serif text-lg leading-8">
-            <div className="mb-4 flex items-center gap-3">
+            <div className="mb-4 flex flex-wrap items-center gap-3">
               <h2 className="font-sans text-xl font-semibold">{chapterQuery.data.reference}</h2>
               <button
                 type="button"
@@ -816,6 +797,21 @@ export function ReaderView(): JSX.Element {
               >
                 🌐 Map
               </button>
+              {/* Other Bibles' notes, two taps away while reading; the full list is on Settings.
+                  Shown when there's a source to offer, or when the list of Bibles failed to load —
+                  an empty menu would hide that (invariant 3). */}
+              {(offeredSources.length > 0 || translationsQuery.isError) && (
+                <button
+                  type="button"
+                  className="rounded border border-gray-300 dark:border-gray-600 px-2 py-0.5 font-sans text-xs text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                  onClick={(e) => setNotesMenu(notesMenu ? null : e.currentTarget)}
+                  aria-expanded={notesMenu !== null}
+                  aria-label="Notes from other Bibles"
+                  title="Show notes from other Bibles"
+                >
+                  Notes ▾
+                </button>
+              )}
             </div>
             {notesUnreachable && (
               <p className="mb-3 font-sans text-sm text-red-600 dark:text-red-400">
@@ -1147,6 +1143,39 @@ export function ReaderView(): JSX.Element {
           </Suspense>
         )}
       </Modal>
+
+      {notesMenu && (
+        <Popover
+          anchor={notesMenu}
+          onClose={() => setNotesMenu(null)}
+          ariaLabel="Notes from other Bibles"
+        >
+          {translationsQuery.isError ? (
+            <p className="text-red-600 dark:text-red-400">
+              Couldn&rsquo;t load the Bibles from Concord. Is it reachable?
+            </p>
+          ) : (
+            <div className="flex flex-col gap-1">
+              {offeredSources.map((code) => (
+                <label key={code} className="flex items-center gap-2 py-1">
+                  <input
+                    type="checkbox"
+                    checked={showNotesFrom.includes(code)}
+                    onChange={(e) => toggleSource(code, e.target.checked)}
+                  />
+                  <span>Show {code} notes</span>
+                </label>
+              ))}
+            </div>
+          )}
+          <Link
+            to="/settings"
+            className="mt-2 block border-t border-gray-100 dark:border-gray-700 pt-2 text-blue-700 dark:text-blue-400 hover:underline"
+          >
+            All settings ›
+          </Link>
+        </Popover>
+      )}
 
       {openNote && (
         <NotePopover

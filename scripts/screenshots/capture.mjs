@@ -4,8 +4,8 @@
 //   reader, reader-dark, note-editor, cross-references, topics-verse, topics-drill, topics-browse,
 //   topic-detail, word-study, word-study-strongs, geography-panel, sermon, sermon-chooser,
 //   translator-notes, journeys-list, journey-detail, place-detail, places-gazetteer, places,
-//   compare, browse, notes-search, search (semantic), search-keyword, welcome, and the map shots
-//   (desktop/mobile, with cards).
+//   compare, browse, notes-search, search (semantic), search-keyword, welcome, settings, and the map
+//   shots (desktop/mobile, with cards). SETTINGS_ONLY=1 takes just settings.png.
 //
 //   1. point songbird at a FULL Concord (see "Capture stack" below) and start it.
 //   2. install once:      cd scripts/screenshots && npm install && npx playwright install chromium
@@ -702,20 +702,46 @@ async function captureSermonChooser(page) {
   console.log("✓ sermon-chooser.png");
 }
 
-// The reader in dark mode — toggle the theme, capture, then toggle back (the choice persists to the
-// profile, #60, so leaving it dark would darken every later shot). Run last among the reader shots.
+/** Choose light or dark on the Settings page (the choice persists to the profile, #60). */
+async function chooseTheme(page, label) {
+  await page.goto(`${BASE}/settings`, { waitUntil: "networkidle" });
+  const radio = page.getByRole("radio", { name: label });
+  // Click, then wait: the option shows as chosen a tick after the click (the cached profile
+  // notifies React on the next tick), so Playwright's check() reports it unchanged.
+  await radio.click();
+  await page.waitForFunction((el) => el.checked, await radio.elementHandle());
+  await page.waitForTimeout(600);
+}
+
+// The reader in dark mode — choose Dark on Settings, capture, then choose Light again (leaving it
+// dark would darken every later shot). Run last among the reader shots.
 async function captureReaderDark(page) {
+  await chooseTheme(page, "Dark");
   await page.goto(
     `${BASE}/read?book=${READER_BOOK}&chapter=${READER_CHAPTER}`,
     { waitUntil: "networkidle" },
   );
-  await page.getByRole("button", { name: "Switch to dark mode" }).click();
   await page.waitForTimeout(600);
   await page.screenshot({ path: `${OUT}/reader-dark.png` });
   console.log("✓ reader-dark.png");
   // Restore light mode so subsequent runs/shots aren't dark.
-  await page.getByRole("button", { name: "Switch to light mode" }).click();
-  await page.waitForTimeout(300);
+  await chooseTheme(page, "Light");
+}
+
+// The Settings page: which Bibles' notes follow you into other translations, light or dark, and
+// the links to Sermon sources and Status. Needs a Concord with notes sources (the LAN one has EMB
+// and NET) for the notes list to show; one is ticked so the shot shows both states, then unticked.
+async function captureSettings(page) {
+  await page.goto(`${BASE}/settings`, { waitUntil: "networkidle" });
+  const boxes = page.locator("section").filter({ hasText: "Notes from other Bibles" }).getByRole("checkbox");
+  await boxes.first().waitFor({ timeout: 15000 });
+  const first = boxes.first();
+  if (!(await first.isChecked())) await first.click();
+  await page.waitForTimeout(600);
+  await page.screenshot({ path: `${OUT}/settings.png` });
+  console.log("✓ settings.png");
+  await first.click();
+  await page.waitForTimeout(600);
 }
 
 // The Welcome page (v1.5): the home route ("/", not "/?book=…") leads with the verse-of-the-day
@@ -963,6 +989,7 @@ async function main() {
   // with a real key and real channels — they are taken during live acceptance, not on the throwaway
   // instance the other thirty come from.
   const sourcesOnly = process.env.SOURCES_ONLY === "1";
+  const settingsOnly = process.env.SETTINGS_ONLY === "1";
   const browser = await chromium.launch(channel ? { channel } : {});
   const context = await browser.newContext({
     viewport: { width: 1440, height: 900 },
@@ -973,6 +1000,10 @@ async function main() {
     await ensureSignedIn(page);
     if (sourcesOnly) {
       await captureSermonSources(page);
+      return;
+    }
+    if (settingsOnly) {
+      await captureSettings(page);
       return;
     }
     if (!mapOnly) {
@@ -998,6 +1029,7 @@ async function main() {
       await capturePlaces(page);
       await capturePlacesGazetteer(page);
       await captureWelcome(page);
+      await captureSettings(page);
       // Dark mode toggles + restores the theme; run it before the remaining light shots.
       await captureReaderDark(page);
       // Journey-dependent shots LAST: discovery throws on a data gap (surfacing it loudly), but by

@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
+import { Link } from "react-router-dom";
 
 import { RedateSermonsModal } from "@/components/RedateSermonsModal";
 import { SermonSourceForm, type SermonSourceFormValues } from "@/components/SermonSourceForm";
@@ -307,6 +308,13 @@ export function SermonSourcesView(): JSX.Element {
       />
 
       <main className="mx-auto max-w-3xl p-6">
+        {/* Reached from Settings now, not the top bar — the way back. */}
+        <Link
+          to="/settings"
+          className="text-sm text-blue-700 dark:text-blue-400 hover:underline"
+        >
+          ‹ Settings
+        </Link>
         <h1 className="mb-1 text-2xl font-bold tracking-tight">Sermon sources</h1>
 
         {/* The schedule, in one line (spec §6c). The first status text this page has ever shown:

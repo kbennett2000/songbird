@@ -21,10 +21,11 @@ This project follows [Keep a Changelog](https://keepachangelog.com/) and
 - **← Prev and Next → buttons at the bottom of each chapter.** When you finish reading a chapter,
   you can go straight to the next one without scrolling back up. It opens at the top of the page.
   This works on both the reader and the Compare page.
-- **Notes from other Bibles can follow you into the translation you're reading.** The reader has a
-  **Show … notes** checkbox for each Bible that has notes: NET's translator's notes, and a study
+- **Notes from other Bibles can follow you into the translation you're reading.** The new
+  **Settings** page has a box for each Bible that has notes: NET's translator's notes, and a study
   Bible's notes such as the Every Man's Bible's. Tick one, and its notes appear while you read the
-  ESV, KJV or any other translation. Each note lands on the same words when songbird can find them,
+  ESV, KJV or any other translation. While reading, the **Notes ▾** button beside the chapter's
+  title has the same boxes. Each note lands on the same words when songbird can find them,
   and otherwise at the end of the verse. Every note says which Bible it's from and quotes that
   Bible's wording. songbird remembers your choices, and if you'd already switched on NET's notes,
   they stay on.
@@ -34,6 +35,13 @@ This project follows [Keep a Changelog](https://keepachangelog.com/) and
   reference inside a note takes you straight to that passage, and a long note scrolls. On the
   Search page these notes carry their own labels, and each says which Bible it came from when more
   than one Bible has notes.
+
+### Changed
+- **A Settings page, and a less crowded top of the screen.** Light or dark, which Bibles' notes to
+  show, Sermon sources and Status now live on one **Settings** page, reached from the top right of
+  every page. That takes four things off the top bar and the reader's bar, which on a phone is a
+  whole line of controls. Settings also offers **Match this device**, which follows your phone or
+  computer's own light or dark setting; the old switch couldn't get back to it.
 
 ### Fixed
 - **The Status page opens properly from the reader again.** Opening Status after the reader, Compare

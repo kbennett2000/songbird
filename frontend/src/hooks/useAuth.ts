@@ -4,7 +4,8 @@ import { ApiError } from "@/lib/api";
 import { type Credentials, fetchMe, login, logout, register } from "@/lib/auth";
 import type { User } from "@/schemas";
 
-const ME_KEY = ["auth", "me"];
+/** The signed-in user's cache entry — `User`, or `null` when signed out. */
+export const ME_KEY = ["auth", "me"];
 
 /**
  * Drop everything cached except the signed-in user. Notes, sermons and search results belong to
