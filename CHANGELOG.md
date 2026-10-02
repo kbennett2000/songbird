@@ -18,6 +18,10 @@ This project follows [Keep a Changelog](https://keepachangelog.com/) and
 ## [Unreleased]
 
 ### Added
+- **A row of letters for a long index.** The Every Man's Bible's *Verse Finder*, under **About
+  EMB**, lists its themes from A to Z, about a hundred screens on a phone. A row of letters now
+  sits under its title and stays put while you scroll: tap one to go straight to the themes that
+  start with it. Only the letters the index uses are there.
 - **Topics from more than one index.** Besides *Nave's Topical Bible*, your Scripture engine can now
   load a study Bible's own index of themes; with the Every Man's Bible that is the *Tyndale Verse
   Finder*. Each topic now says which index it comes from: on the Topics page, on a topic's own page

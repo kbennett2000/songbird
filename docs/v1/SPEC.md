@@ -398,7 +398,9 @@ that Bible's introduction button, for the Bible being read or a ticked one) and 
 *About these Bibles* on Settings. It opens in the same full-window view as an introduction, on a
 list of those documents grouped by kind; each opens in full. A reading plan laid out by date shows
 a month at a time, with Month, Day and Today, and opens on today; nothing about what's been read is
-stored. Escape and Back step from a document to the list, then close; reopening it from the reader
+stored. A long alphabetical document (an index such as the Verse Finder, recognised by its many `##`
+headings running A to Z) offers a row of its letters that never scrolls away, each going to its
+first heading. Escape and Back step from a document to the list, then close; reopening it from the reader
 in the same visit returns to where it was left (in memory only). Its `ref:` links jump the reader,
 or from Settings open it. No API change: it reads the documents passthrough above. Specified in
 `docs/v1.8/STUDY-BIBLE-SPEC.md` §6.
