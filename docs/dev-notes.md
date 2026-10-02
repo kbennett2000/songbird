@@ -4,6 +4,111 @@ A running log of per-slice decisions, gotchas, and how each slice was verified. 
 
 ---
 
+## Release prep v1.8.0 — versions, CHANGELOG, README and guide, and a clean-checkout gate
+
+- **Date:** 2026-10-02
+- **Branch:** `slice/release-1.8.0-prep`
+
+### Why
+
+v1.8 (study Bibles) is complete: slices A–E, follow-ups 1–6 and the fixes, with the Concord pin at
+v1.3.0 since slice E. The versions still read `1.7.0` and everything since sat under
+`[Unreleased]`. This is Stop 1 of the two-stop release, done as 1.7.0's was. The tag and the GitHub
+release are Stop 2, after this merges and only on Kris's say.
+
+### The version: seven sites now, not four
+
+- **The four known:** `backend/pyproject.toml`, `backend/songbird/__init__.py` (served on
+  `/healthz`, OpenAPI and the Status page), `frontend/package.json`, and the `/healthz` mock in
+  `frontend/src/test/msw/handlers.ts`.
+- **`frontend/src/routes/StatusView.test.tsx:23`:** a second `/healthz` mock, added in `2888ff6`
+  before the 1.7.0 bump. It already said 1.7.0 then, so that release's `grep 1.6.0` couldn't see
+  it. No test asserts it.
+- **`frontend/package-lock.json` lines 3 and 9:** songbird's own root entry. It stayed at 0.1.0
+  through 1.6.0 and 1.7.0 until slice A1's `npm install` synced it, so skipping it now would bring
+  the drift back. Edited by hand; nothing else in the lock moved.
+
+Afterwards `git grep 1.7.0` outside CHANGELOG and dev-notes finds only two dependencies in the lock
+(`es-module-lexer`, `esquery`).
+
+### What changed for readers
+
+- **CHANGELOG:**
+  - `[Unreleased]` became `[1.8.0] — 2026-10-02`, with a fresh empty `[Unreleased]` and a link
+    reference.
+  - It opens by saying the study-Bible features need a study Bible in your own Concord (1.3.0 or
+    later), that the one included has none, and that songbird keeps no copy of any of it (said
+    once, not in every entry).
+  - **Fixes to things no 1.7.0 user saw** were folded into their features or cut. Headings and
+    wrapped poetry joined the notes entry. Multiplying markers, brackets alone on a line and
+    Escape on the About page came and went within v1.8.
+  - The Status crash stayed: its Reader → Status direction is older than v1.8. So did the gap
+    between markers (NET's ran together too) and the note box's placement (every popover).
+  - The letter row joined the Verse Finder's entry.
+- **README:**
+  - It never mentioned study Bibles. A paragraph in "How it works" now says what one you own adds,
+    that the included engine has none, and points to Concord's "Your own study Bible".
+  - Its three mentions of **Status** say it's on **Settings** now.
+  - "See it" stays as it is: its screenshots couldn't show a study Bible's pages, which are book
+    text.
+- **User's Guide:**
+  - It now says plainly where its study-Bible paragraphs begin: the standard setup has no study
+    Bible, so they don't apply until you load one.
+  - The reading plan's paragraphs sit together, ahead of the letter row.
+  - Every topic names its index. With Concord 1.3.0 even the standard setup sends `source`, so a
+    topic's page and the ※ panel name *Nave's Topical Bible* (seen in the gate).
+
+### The release gate: a clean checkout, as a new user would
+
+Run on this machine, not on Kris's server.
+1. **A fresh clone of this branch, with no `.env`,** in `/home/kb/songbird-release-gate/songbird-gate`.
+   The folder name keeps its compose project (`songbird-gate`) off this machine's own
+   `songbird_songbird-data`.
+2. **The README's own command,** `docker compose --profile bundled-concord up`. No songbird
+   variable was set in the shell. `/healthz` reported version 1.8.0, with the bundled Concord
+   (`concord:v1.3.0`, healthy) reachable at `http://concord:8000` and its 15 translations.
+3. **Headless Chromium at 1280×800 and 390×844.** A new visitor lands on sign-in. The first account
+   was created as the README says, then the run signed in on the second width. On both:
+   - **The reader (KJV John 3):** the text is there, with no note marker, no **Notes ▾**, no
+     **Introduction** or **About** button, and no "notes unavailable" notice. The ※ panel on
+     verse 16 names Nave's.
+   - **Settings:** "None of the Bibles in this Concord has notes.", and no *About these Bibles*.
+     **Status** shows "version 1.8.0".
+   - **Topics:** no **From:** row, and the rows are unlabelled. A topic's page names Nave's.
+   - **Search:** "shepherd" finds verses. In Keyword mode, with Study notes ticked, the only
+     sections are Scripture and Your notes.
+   - **Every page:** no "EMB", "Every Man", "Verse Finder" or "Tyndale" anywhere in its text, no
+     sideways scroll, and no page errors.
+   - **songbird's own log:** no request for a translation's documents or assets. The only
+     `/assets/` requests are its own page files.
+4. **Removed:** `docker compose --profile bundled-concord down -v` in the clone (its containers,
+   network and volume), `docker rmi songbird-gate-songbird`, and the clone folder.
+
+### Gotchas
+
+- **Docker here is a snap,** with its own private `/tmp`. A clone under the session's `/tmp`
+  scratch folder gave "no configuration file provided: not found". It has to sit in an ordinary,
+  non-hidden folder in the home directory.
+- **The Search page opens in Semantic mode,** where study notes never show. A check that they stay
+  quiet must switch to Keyword first.
+- **`grep /assets` on songbird's log matches its own page files.** Match
+  `translations/<code>/assets` instead.
+
+### The slice before this, on the server
+
+Nothing to deploy: slice E (PR #156) changed only pins, tests and docs. PR #155 (the letter row) is
+live on Kris's server (`c3ec2cb`, `index-CZ7W7FE6.js`; see slice E's entry). After slice E merged,
+the nightly workflow was run once by hand on `main`. It pulled `concord:v1.3.0` and passed all 7
+live tests.
+
+### Verified
+
+- `make check` and `make check-frontend` green (counts in the PR).
+- The `[1.8.0]` block, the README paragraph and the guide's changes were each read top to bottom as
+  their audience.
+
+---
+
 ## v1.8 slice E — Concord pin → v1.3.0
 
 - **Date:** 2026-10-02
