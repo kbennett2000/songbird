@@ -10,11 +10,11 @@ import { markdownSnippetText } from "@/lib/noteMarkdown";
 import { noteReference, notePreview, readerLink, studyNoteBadge } from "@/lib/notes";
 import {
   fetchBooks,
-  fetchTranslations,
   keywordSearch,
   searchAnnotations,
   searchStudyNotes,
   semanticSearch,
+  translationsOptions,
 } from "@/lib/reader";
 import type { KeywordResult, SemanticResult } from "@/schemas";
 
@@ -109,7 +109,7 @@ export function SearchView(): JSX.Element {
     () => new Map((booksQuery.data ?? []).map((b) => [b.id, b])),
     [booksQuery.data],
   );
-  const translationsQuery = useQuery({ queryKey: ["translations"], queryFn: fetchTranslations });
+  const translationsQuery = useQuery(translationsOptions);
   // With more than one Bible's notes in Concord, each study-note hit names whose note it is.
   const severalNoteSources = noteSources(translationsQuery.data ?? []).length > 1;
 

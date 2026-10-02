@@ -1,8 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 
 import { TopNav } from "@/components/TopNav";
-import { apiRequest } from "@/lib/api";
-import { healthResponseSchema, translationsResponseSchema } from "@/schemas";
+import { translationsOptions } from "@/lib/reader";
+import { healthResponseSchema } from "@/schemas";
 
 async function fetchHealth() {
   // /healthz is songbird's unprefixed liveness + Concord-reachability report.
@@ -11,12 +11,6 @@ async function fetchHealth() {
     throw new Error(`healthz responded ${response.status}`);
   }
   return healthResponseSchema.parse(await response.json());
-}
-
-async function fetchTranslations() {
-  // Goes through songbird's own API, which calls Concord over HTTP.
-  const data = await apiRequest<unknown>("GET", "/translations");
-  return translationsResponseSchema.parse(data);
 }
 
 /**
@@ -30,7 +24,8 @@ async function fetchTranslations() {
  */
 export function StatusView(): JSX.Element {
   const health = useQuery({ queryKey: ["health"], queryFn: fetchHealth });
-  const translations = useQuery({ queryKey: ["translations"], queryFn: fetchTranslations });
+  // The same cache entry the Reader, Compare and Search read (songbird's API → Concord over HTTP).
+  const translations = useQuery(translationsOptions);
 
   const concord = health.data?.concord;
 
@@ -110,7 +105,7 @@ export function StatusView(): JSX.Element {
           )}
           {translations.data && (
             <ul className="mt-3 divide-y divide-gray-100 dark:divide-gray-700 text-sm">
-              {translations.data.translations.map((t) => (
+              {translations.data.map((t) => (
                 <li key={t.id} className="flex flex-wrap items-baseline gap-x-2 py-1.5">
                   <span className="font-mono font-medium">{t.id}</span>
                   <span>{t.name}</span>

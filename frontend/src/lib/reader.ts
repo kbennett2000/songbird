@@ -1,3 +1,5 @@
+import { queryOptions } from "@tanstack/react-query";
+
 import { apiRequest } from "@/lib/api";
 import {
   type Annotation,
@@ -70,6 +72,16 @@ export async function fetchTranslations(): Promise<Translation[]> {
   const data = await apiRequest<unknown>("GET", "/translations");
   return translationsResponseSchema.parse(data).translations;
 }
+
+/**
+ * The translation list's one cache entry. Reader, Compare, Search and Status all read it, so its
+ * key and its fetcher live together here: a page that paired `["translations"]` with a different
+ * fetcher once cached a different shape under the same key, and the next page to read it crashed.
+ */
+export const translationsOptions = queryOptions({
+  queryKey: ["translations"],
+  queryFn: fetchTranslations,
+});
 
 /** Resolve a raw reference ("John 3", "Gen 1:1") to canonical coords — via Concord. */
 export async function resolveReference(ref: string): Promise<ResolvedReference> {
