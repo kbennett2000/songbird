@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { NotePopover } from "@/components/NotePopover";
 import type { ShownNote } from "@/lib/borrowedNotes";
+import { noteLook, noteSourceOf } from "@/lib/noteLooks";
 import type { TranslatorNote } from "@/schemas";
 
 function note(overrides: Partial<TranslatorNote> = {}): TranslatorNote {
@@ -22,10 +23,21 @@ function note(overrides: Partial<TranslatorNote> = {}): TranslatorNote {
   };
 }
 
-function renderPopover(n: ShownNote, onJump = vi.fn(), onClose = vi.fn()) {
+/** Opened as the reader opens it, reading `reading` with EMB and NET as the notes Bibles. */
+function renderPopover(n: ShownNote, onJump = vi.fn(), onClose = vi.fn(), reading = "NET") {
   const anchor = document.createElement("button");
   document.body.appendChild(anchor);
-  render(<NotePopover note={n} anchor={anchor} onJump={onJump} onClose={onClose} />);
+  const source = noteSourceOf(n, reading);
+  render(
+    <NotePopover
+      note={n}
+      source={source}
+      look={noteLook(source, ["EMB", "NET"])}
+      anchor={anchor}
+      onJump={onJump}
+      onClose={onClose}
+    />,
+  );
   return { onJump, onClose, anchor };
 }
 
@@ -160,9 +172,29 @@ describe("NotePopover", () => {
 
   it("keeps the kind and Close pinned while a long note scrolls", () => {
     renderPopover(note({ label: "Study Note", text: "A long made-up note. ".repeat(200) }));
-    const header = screen.getByText("Study Note").parentElement!;
-    expect(header).toHaveClass("sticky");
+    // The kind sits beside the Bible's code in the pinned row.
+    const header = screen.getByText("Study Note").closest(".sticky")!;
+    expect(header).not.toBeNull();
     expect(header).toContainElement(screen.getByRole("button", { name: "Close" }));
     expect(screen.getByRole("dialog")).toHaveClass("overflow-y-auto");
+  });
+
+  it("names the Bible of a note read here, in that Bible's look, in the pinned row", () => {
+    renderPopover(note({ type: "sn" }), vi.fn(), vi.fn(), "EMB");
+    const chip = screen.getByText("EMB");
+    expect(chip).toHaveAttribute("data-note-look", "rose-square");
+    expect(chip.closest(".sticky")).not.toBeNull();
+    expect(screen.getByText("Study note")).toHaveClass("text-rose-700");
+  });
+
+  it("names the Bible of a borrowed note in that Bible's look, not the one being read", () => {
+    renderPopover(
+      { ...note({ type: "sn" }), borrowed: { from: "NET", phrase: "made-up words", rank: 0 } },
+      vi.fn(),
+      vi.fn(),
+      "EMB",
+    );
+    expect(screen.getByText("NET")).toHaveAttribute("data-note-look", "violet");
+    expect(screen.getByText("Study note")).toHaveClass("text-violet-700");
   });
 });

@@ -96,14 +96,18 @@ function openAt(path: string) {
   return router;
 }
 
-/** The notes section's rows, as "CODE Name", in order. */
+/** The notes section's rows, as "CODE Name", in order (the decorative look swatch left out). */
 async function sourceRows() {
   const section = (await screen.findByRole("heading", { name: "Notes from other Bibles" }))
     .parentElement!;
   await within(section).findAllByRole("checkbox");
   return within(section)
     .getAllByRole("checkbox")
-    .map((c) => c.closest("label")!.textContent);
+    .map((c) => {
+      const row = c.closest("label")!.cloneNode(true) as HTMLElement;
+      row.querySelectorAll("[aria-hidden]").forEach((n) => n.remove());
+      return row.textContent;
+    });
 }
 
 describe("SettingsView", () => {
@@ -117,8 +121,15 @@ describe("SettingsView", () => {
         "NETA Bible Full of Notes",
       ]);
       expect(
-        screen.getByText("Tick a Bible to show its notes while you read other translations."),
-      ).toBeInTheDocument();
+        screen.getByText(/^Tick a Bible to show its notes while you read other translations\./),
+      ).toHaveTextContent("The mark beside each name is how its notes look in the text.");
+      // The key: each row shows its Bible's look. NET and EMB are pinned; KJV, a third notes
+      // Bible here, takes the first spare look.
+      expect(
+        screen
+          .getAllByRole("checkbox")
+          .map((c) => c.closest("label")!.querySelector("[data-note-look]")?.getAttribute("data-note-look")),
+      ).toEqual(["rose-square", "teal-circle", "violet"]);
     });
 
     it("against a Concord without note_count, offers NET alone", async () => {
