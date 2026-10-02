@@ -54,6 +54,14 @@ This project follows [Keep a Changelog](https://keepachangelog.com/) and
   computer's own light or dark setting; the old switch couldn't get back to it.
 
 ### Fixed
+- **No more brief failures reaching Concord.** Now and then a request to your Scripture engine
+  (Concord) failed even though it was running fine. Usually the page asked again a second later,
+  so all you saw was a short pause; once in a while an "is Concord reachable?" message showed
+  instead. It happened when you did something about five seconds after your last click: songbird
+  reused its connection to Concord at the very moment Concord was closing it. songbird now lets
+  an unused connection go after two seconds. If a connection is ever closed under a request
+  anyway, songbird sends that request again at once. When Concord really is down, you still see
+  the message straight away.
 - **Notes markers no longer multiply.** Reading with a study Bible's notes ticked, switching another
   Bible's notes on and off could leave extra copies of a marker behind, one more each time, until
   the page was reloaded (seen at Malachi 2:16). Each marker now appears once.
