@@ -45,6 +45,8 @@ async def test_study_notes_search_returns_a_shaped_page(
                 # Concord v8's fields — absent from an older Concord's hit, so they arrive as null.
                 "label": None,
                 "text_format": None,
+                "title": None,
+                "image": None,
             }
         ],
         # The total across every page, so the page knows there's more to load.

@@ -24,7 +24,7 @@ from songbird.api.deps import (
     get_scan_runner_optional,
     get_youtube_client_optional,
 )
-from songbird.concord.client import ConcordNotFoundError
+from songbird.concord.client import ConcordAsset, ConcordNotFoundError
 from songbird.concord.schemas import (
     Book,
     Chapter,
@@ -97,6 +97,7 @@ class FakeConcordClient:
         place_detail: PlaceDetail | None = None,
         place_types: list[str] | None = None,
         random: RandomVerse | None = None,
+        asset: ConcordAsset | None = None,
         error: Exception | None = None,
         base_url: str = "http://concord.test",
     ) -> None:
@@ -139,7 +140,11 @@ class FakeConcordClient:
         self._place_detail = place_detail
         self._place_types = place_types or []
         self._random = random
+        self._asset = asset
         self._error = error
+        # Every `get_asset` call (translation, name, if_none_match), so a test can prove what
+        # reached Concord — and that a refused name never did.
+        self.asset_calls: list[tuple[str, str, str | None]] = []
         # Records the last `list_places` filter args so tests can assert filter/pagination passthrough.
         self.last_list_places: dict[str, object] = {}
         # Records the last `list_topics` filter args so tests can assert filter/pagination passthrough.
@@ -385,6 +390,16 @@ class FakeConcordClient:
                 translation=translation, book=book, chapter=chapter, verse=None, total=0, notes=[]
             )
         )
+
+    async def get_asset(
+        self, translation: str, name: str, *, if_none_match: str | None = None
+    ) -> ConcordAsset:
+        self.asset_calls.append((translation, name, if_none_match))
+        if self._error is not None:
+            raise self._error
+        if self._asset is None:
+            raise ConcordNotFoundError(f"Concord has no image '{name}' (in {translation})")
+        return self._asset
 
     async def get_headings(self, translation: str, book: str, chapter: int) -> HeadingsResponse:
         if self._error is not None:
