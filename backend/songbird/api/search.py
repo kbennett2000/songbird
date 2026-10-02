@@ -4,10 +4,18 @@ because the model lives in Concord and never in songbird (CLAUDE.md dependency d
 (Semantic search of the user's *notes* awaits a Concord embed-arbitrary-text endpoint — which
 doesn't exist — so notes use keyword search; see the annotations browse `q` param.)"""
 
-from fastapi import APIRouter, Depends
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, Query
 
 from songbird.api.deps import get_concord_client
-from songbird.api.schemas import KeywordResult, RandomVerse, SemanticResult, StudyNoteResult
+from songbird.api.schemas import (
+    KeywordResult,
+    RandomVerse,
+    SemanticResult,
+    StudyNoteResult,
+    StudyNotesPageOut,
+)
 from songbird.concord.client import (
     ConcordClient,
     ConcordNotFoundError,
@@ -83,27 +91,41 @@ async def keyword_search(
     ]
 
 
-@router.get("/study-notes-search", response_model=list[StudyNoteResult])
+@router.get("/study-notes-search", response_model=StudyNotesPageOut)
 async def study_notes_search(
     q: str,
+    translation: Annotated[
+        str | None, Query(min_length=1, max_length=16, pattern=r"^[A-Za-z0-9_-]+$")
+    ] = None,
+    limit: Annotated[int, Query(ge=1, le=100)] = 20,
+    offset: Annotated[int, Query(ge=0)] = 0,
     concord: ConcordClient = Depends(get_concord_client),
-) -> list[StudyNoteResult]:
+) -> StudyNotesPageOut:
     """Keyword search over Concord's translator's/study notes — the Search page's "Study notes"
     section, distinct from "Scripture" and the user's own "Your notes". Named to avoid colliding
     with the user's-own-notes search (`/annotations?q=`).
 
-    Best-effort by design: this is the rarely-populated reference layer (the public Concord image
-    ships zero notes), so **any** failure — client error *or* unreachable — is swallowed to `[]`,
-    and the section simply doesn't render. This is a deliberate divergence from the Scripture
-    search endpoints (which surface a 502): the Scripture section is already the page's
-    Concord-health signal, so a redundant error here would be noise and would degrade the page."""
+    One page at a time (`limit` 1–100 from `offset`, Concord's own bounds) with the `total` across
+    all pages, so the page can offer "Load more"; `translation` narrows to one Bible's notes.
+
+    A query Concord can't run (FTS5 rejects punctuation) or a Bible it doesn't hold is an empty
+    page, like keyword search. An unreachable Concord is a 502 (invariant 3): this section now
+    shows an empty state, so an outage swallowed to "no results" would read as "nothing matches".
+    The Scripture and Your-notes sections are separate requests, so they're unaffected."""
     if not q.strip():
-        return []  # no query → no call
+        return StudyNotesPageOut(results=[], total=0)  # no query → no call
     try:
-        result = await concord.search_notes(q)
-    except (ConcordNotFoundError, ConcordUnreachableError):
-        return []  # best-effort: never degrade the Scripture / Your-notes sections
-    return [
+        result = await concord.search_notes(
+            q,
+            translation=translation.upper() if translation else None,
+            limit=limit,
+            offset=offset,
+        )
+    except ConcordNotFoundError:
+        return StudyNotesPageOut(results=[], total=0)
+    except ConcordUnreachableError as exc:
+        raise_http(502, ErrorCode.CONCORD_UNREACHABLE, str(exc))
+    results = [
         StudyNoteResult(
             book=h.book,
             chapter=h.chapter,
@@ -117,6 +139,9 @@ async def study_notes_search(
         )
         for h in result.hits
     ]
+    # A Concord that doesn't send `total` gets no "Load more": this page counts as the last.
+    total = result.total if result.total is not None else offset + len(results)
+    return StudyNotesPageOut(results=results, total=total)
 
 
 @router.get("/random-verse", response_model=RandomVerse)

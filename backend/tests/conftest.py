@@ -152,6 +152,9 @@ class FakeConcordClient:
         # Records the last `keyword_search` translations arg so tests can assert the endpoint's
         # CSV→list parse and the absent→None (search-all) default.
         self.last_keyword_translations: list[str] | None = None
+        # Records the last `search_notes` call (q, translation, limit, offset) so tests can assert
+        # the study-notes endpoint passes its page and filter through.
+        self.last_note_search: dict[str, object] | None = None
 
     async def health(self) -> ConcordHealth:
         if self._error is not None:
@@ -413,7 +416,20 @@ class FakeConcordClient:
             raise self._error
         return self._keyword if self._keyword is not None else KeywordSearchResponse(hits=[])
 
-    async def search_notes(self, q: str, limit: int = 20) -> NoteSearchResponse:
+    async def search_notes(
+        self,
+        q: str,
+        *,
+        translation: str | None = None,
+        limit: int = 20,
+        offset: int = 0,
+    ) -> NoteSearchResponse:
+        self.last_note_search = {
+            "q": q,
+            "translation": translation,
+            "limit": limit,
+            "offset": offset,
+        }
         if self._error is not None:
             raise self._error
         return self._note_search if self._note_search is not None else NoteSearchResponse(hits=[])
