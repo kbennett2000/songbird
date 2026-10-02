@@ -28,6 +28,8 @@ interface ChartViewerProps {
   subtitle?: string | null;
   /** The picture's text alternative. */
   alt: string;
+  /** What its words call it: a chart (the default), or a picture (a book introduction's). */
+  noun?: "chart" | "picture";
   /** Called once the dialog has closed — by Close, Escape, or Android's Back. */
   onClose: () => void;
 }
@@ -60,7 +62,14 @@ const DOUBLE_TAP_PX = 30;
  * under the fingers, the pointer, or the centre still (lib/chartZoom.ts). No zoom library — songbird
  * stays lean.
  */
-export function ChartViewer({ src, title, subtitle, alt, onClose }: ChartViewerProps): JSX.Element {
+export function ChartViewer({
+  src,
+  title,
+  subtitle,
+  alt,
+  noun = "chart",
+  onClose,
+}: ChartViewerProps): JSX.Element {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const boxRef = useRef<HTMLDivElement>(null);
   const [natural, setNatural] = useState<Size | null>(null);
@@ -320,14 +329,17 @@ export function ChartViewer({ src, title, subtitle, alt, onClose }: ChartViewerP
         ref={boxRef}
         tabIndex={0}
         role="group"
-        aria-label="Chart picture: use the arrow keys to move around"
+        aria-label={`${noun === "chart" ? "Chart picture" : "Picture"}: use the arrow keys to move around`}
         onPointerUp={onPointerUp}
         onDoubleClick={onDoubleClick}
         className="flex min-h-0 flex-1 touch-pan-x touch-pan-y overflow-auto overscroll-contain bg-stone-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-600 dark:bg-gray-950"
       >
         {failed ? (
           <div className="m-auto flex flex-col items-center gap-2 p-4 text-center text-sm">
-            <p>Couldn’t load the chart’s picture (is Concord reachable?).</p>
+            <p>
+              Couldn’t load {noun === "chart" ? "the chart’s picture" : "the picture"} (is Concord
+              reachable?).
+            </p>
             <button
               type="button"
               className="font-medium text-blue-700 dark:text-blue-300 hover:underline"
@@ -343,7 +355,7 @@ export function ChartViewer({ src, title, subtitle, alt, onClose }: ChartViewerP
           <>
             {!natural && (
               <p className="m-auto p-4 text-sm text-gray-600 dark:text-gray-400">
-                Loading the chart…
+                Loading the {noun}…
               </p>
             )}
             <img
@@ -373,7 +385,9 @@ export function ChartViewer({ src, title, subtitle, alt, onClose }: ChartViewerP
         Pinch, double-tap or use + and − to zoom. Drag to move around.
         <span className="sr-only">
           {" "}
-          The chart’s words are part of the picture and aren’t available as text.
+          {noun === "chart"
+            ? "The chart’s words are part of the picture and aren’t available as text."
+            : "Any words in the picture are part of it and aren’t available as text."}
         </span>
       </p>
     </dialog>
