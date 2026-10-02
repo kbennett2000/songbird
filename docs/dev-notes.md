@@ -4,6 +4,123 @@ A running log of per-slice decisions, gotchas, and how each slice was verified. 
 
 ---
 
+## v1.8 follow-up — a Settings page (and a first look at the articles)
+
+- **Date:** 2026-10-02
+- **Branch:** `slice/v1.8-settings-page`
+- **Spec:** `docs/v1/SPEC.md` §12, "Settings page"; a dated note in `docs/v1.8/STUDY-BIBLE-SPEC.md`
+  §3.
+
+### Why
+
+The top of the screen had grown crowded: on a phone the reader's header ran to eight lines. Kris
+asked for one Settings page holding the "Show … notes" checkboxes, the light/dark switch, Sources
+and Status, reached from a single Settings link.
+
+### What landed
+
+- **`/settings`** (`routes/SettingsView.tsx`):
+  - Every notes source, always, whatever is being read, with one line saying what a tick does.
+  - Light / Dark / Match this device. The profile already stored `system` as the default, but the
+    old two-way switch could never get back to it.
+  - Links to Sermon sources and Status.
+- **Choices taken** (the plan's defaults; Kris didn't pick):
+  - Sermon sources and Status stay their own pages, each with a "‹ Settings" link back. The top
+    bar's Settings link is highlighted on all three pages.
+  - The reader keeps a compact **Notes ▾** menu beside Places and Map: the same ticks, two taps
+    away, and "All settings ›".
+  - Your name and Log out stay in the top bar.
+- **Shared pieces:**
+  - `hooks/useShowNotesFrom.ts`: the optimistic tick with rollback, moved out of the reader.
+  - `ME_KEY` is exported from `useAuth`, so `["auth","me"]` is spelled once.
+  - `useThemeControl().setTheme` now updates the cached profile at once, so the Settings options
+    follow the click.
+- **An outage is an error, not an empty list.** When `/translations` fails, Settings and the
+  reader's Notes menu both say "Couldn't load the Bibles from Concord". The old checkboxes just
+  vanished, one of the ways the "Show EMB notes" box could disappear (see the fix entry below).
+- **`capture.mjs`** gains a `settings` shot (`SETTINGS_ONLY=1` takes just that one).
+  `reader-dark.png` now chooses Dark on Settings, since the top-bar switch is gone.
+- **No database change.** `show_notes_from` and `theme` were already on `users`.
+
+### The top bar, measured
+
+On the reader (KJV Genesis 41), in headless Chromium:
+
+| Width | Before (the server's build) | After |
+|---|---|---|
+| Phone (390 px) | 323 px | 295 px |
+| Desktop (1280 px) | 210 px | 182 px |
+
+On a phone the Notes button wraps under the chapter title. That line scrolls away with the
+chapter, unlike the header.
+
+### Gotchas
+
+- **The Status page has its own `<header>`**, holding the new back link. A test selector that
+  meant the top bar should use the `banner` role, not the `header` tag.
+- **A radio bound to the cached profile shows checked one tick after the click**, the same
+  TanStack Query delay A2 recorded for the checkbox. Playwright's `check()` fails on it, so scripts
+  click and then wait for `checked`.
+- **The Status-crash tests asserted the reader's checkbox**, which moved. They now assert the Notes
+  button, which is built from the same cached list.
+
+### The fix before this, on the server
+
+PR #143 was deployed to Kris's server on 2026-10-02: no migration, and the live `index.html`
+served the new build. Checked in headless Chromium against a throwaway container built from the
+server's image, with its own empty database and account:
+- Reader → Status, Status → Reader, Compare ↔ Status and Search ↔ Status all work, with no page
+  errors.
+- Reading KJV offers EMB and NET; EMB offers NET only; NET offers EMB only.
+
+### A first look at EMB's articles (Concord V8-S3a)
+
+A read-only sweep of EMB's notes found **219 articles**:
+- 101 "Men, Women, and God", 94 "Someone You Should Know", 24 "Personal Gold".
+- 185–601 words each.
+- 94 open with a `##` heading; one (Job 4:1) uses `###`.
+- 119 have block quotes and 17 have lists.
+- Two (Genesis 35:21, Daniel 1:6) use backslash line breaks, and three (Matthew 26:8, Acts 5:33,
+  Acts 12:20) use superscript footnote marks.
+- None has raw HTML or a non-`ref:` link.
+
+Opened in the reader at desktop and phone width, on EMB and borrowed onto KJV. Nothing is quoted
+here.
+
+**These render as intended:**
+- the label as the kind line, the title, "Covers …";
+- "From EMB" when borrowed;
+- `##` headings, block quotes (dialogue lines stay separate), numbered lists;
+- poetry with hard breaks, line by line;
+- superscript footnote marks and their footnote lines;
+- `ref:` links as jump buttons.
+
+The close button stays pinned while scrolling. No raw Markdown leaks, there's no sideways
+overflow, and there were no page errors.
+
+**What's wrong is songbird's rendering. Nothing was fixed here; this is input for the "bigger
+reading surface" the spec deferred until the articles arrived.**
+
+1. **The popover's window is often small.** `Popover` opens below the marker whenever there's
+   160 px below it, even with far more above. An article tapped low on the screen gets a
+   190–220 px window: 4–10 boxfuls of scrolling (Genesis 35:21 on a phone took 10). Tapped near the
+   top, the same article gets 520–730 px.
+2. **The popover is 288 px wide** (`w-72`) for up to 600 words: about 35 characters a line on a
+   desktop. On a phone it leaves verse text showing down both sides.
+3. **The article's marker is the same small violet number as a one-line footnote.** Nothing says
+   a 400-word feature is there.
+4. **`##` and `###` render alike**, as body-size bold, which is also how the articles' bold lead-ins
+   and "THE POINT:" closers look. Job 4:1's subheadings lose their place under its heading.
+5. **A reference link can break away from its bracket** ("(" at a line end, "1 Corinthians 6:18)"
+   on the next line), because a link is a button and wraps as one block.
+
+**From Concord's text** (minor):
+- A footnote's line sits where the source put it, sometimes just before the article's closing
+  line (Acts 12:20).
+- One footnote has no space after its mark where the others do.
+
+---
+
 ## v1.8 fix — the Status page crash (one cache key, one shape)
 
 - **Date:** 2026-10-02

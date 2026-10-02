@@ -37,6 +37,7 @@ Slices B–E get their detail when their Concord slice lands.
 **Borrowing** (generalises ADR 0004; record it as ADR 0005).
 
 - The single "Show NET notes" checkbox becomes one checkbox per source, in the same place, each shown only when that source isn't the translation being read: "Show NET notes", "Show EMB notes".
+  - *2026-10-02, after slice A shipped:* the checkboxes moved out of the reader's bar to a Settings page, which lists every source; the reader keeps them in a compact Notes menu beside the chapter's title, still without the source being read. The top of the screen had grown crowded. See `docs/v1/SPEC.md` §12, "Settings page".
 - The preference becomes a per-user list of source codes. The migration keeps an existing choice: `show_net_notes = true` becomes `["NET"]`.
 - Placement is ADR 0004's rule, per source: a note anchored inside its source verse is placed by phrase match (a unique match of the last 3, 2, then 1 words, else the end of the verse); a note anchored at the start of its source verse stays at the start. A note whose verse the translation lacks is left out.
 - Order at one spot: the translation's own notes first, then borrowed ones, sources in checkbox order.

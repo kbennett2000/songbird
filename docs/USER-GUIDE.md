@@ -46,6 +46,9 @@ Below that, a quiet tally of how many **notes**, **sermon notes**, and **tags** 
 a list of your **recent notes** — each one a link straight back to the verse it sits on. The more you
 read and write, the more these fill in. This home page becomes *yours*.
 
+**Settings**, at the top right of every page, holds the things you set once and leave: light or
+dark, and which Bibles' notes to show. We'll meet each one when it comes up.
+
 <br>
 
 ## Reading
@@ -90,16 +93,23 @@ and some have a heading and the verses they cover. The text keeps the book's own
 and lists. **A reference shown in blue is a link:** tap it and the reader jumps to that passage. A
 long note scrolls inside its box.
 
-**Another Bible's notes, in the translation you're reading.** Next to the Translation menu there's
-a checkbox for each Bible that has notes, such as **Show NET notes** or **Show EMB notes**. Tick
-one, and that Bible's notes appear in the translation you're reading too, on the same words
-wherever songbird can find them. You can tick more than one. Tapping a note tells you which Bible
-it came from (*From NET*) and quotes that Bible's own wording, so you know what it's about. When
-your translation words that part differently, the note waits at the end of the verse instead. A
-note about a whole verse sits at its start. songbird remembers which boxes you left ticked.
+**Another Bible's notes, in the translation you're reading.** Open **Settings**. Under **Notes from
+other Bibles** there's a box for each Bible that has notes, such as **NET** or **EMB**:
 
-**Light or dark.** The little sun/moon toggle in the top corner switches between a light theme and a
-dark one — easy on the eyes in a dim room — and songbird remembers which you prefer:
+![The Settings page: a "Notes from other Bibles" list with a tick box for each Bible that has notes, the Light, Dark and "Match this device" choices, and links to Sermon sources and Status](screenshots/settings.png)
+
+Tick one, and that Bible's notes appear while you read any other translation, on the same words
+wherever songbird can find them. You can tick more than one, and songbird remembers your ticks.
+Tapping a note tells you which Bible it came from (*From NET*) and quotes that Bible's own wording,
+so you know what it's about. When your translation words that part differently, the note waits at
+the end of the verse instead. A note about a whole verse sits at its start.
+
+**Changing your mind mid-chapter?** The **Notes ▾** button beside the chapter's title has the same
+ticks, so you can switch a Bible's notes on or off without leaving your place.
+
+**Light or dark.** On **Settings**, under **Appearance**, pick **Light** or **Dark** — dark is easy on
+the eyes in a dim room. **Match this device** follows your phone or computer's own setting, and
+it's where songbird starts. songbird remembers your choice:
 
 ![The reader in dark theme, showing John 3](screenshots/reader-dark.png)
 
@@ -147,7 +157,7 @@ that turns out to be a lot of them, so there's a list for those and it's one tap
 
 ![The Sermon sources page, showing a followed channel with 352 needing a passage, 12 placed and 7 skipped, and the list of what songbird found below it](screenshots/sermon-sources.png)
 
-That's the **Sources** page, in the top bar. Here's how to get there.
+That's the **Sermon sources** page. You'll find it on **Settings**. Here's how to get it working.
 
 ### First, a free key from Google
 
@@ -197,7 +207,7 @@ It takes about five minutes, and it's all clicking. Any Google account will do.
 Treat that key like a password: it belongs in `.env`, which stays on your machine, and nowhere
 else. songbird never shows it in the browser and never writes it to its logs.
 
-Open the **Sources** page and it's ready.
+Open **Settings → Sermon sources** and it's ready.
 
 ### Adding a church
 
@@ -265,9 +275,9 @@ it.
 
 If you've been writing sermon notes by hand and linking them to YouTube, they probably carry the
 date you *wrote* the note rather than the day the sermon was preached. **Re-date YouTube sermons**,
-in the top bar of the Sources page, fixes that: it looks each one up and shows you every date it
-would change before changing anything. Nothing is written until you press **Apply**, and pressing
-it twice is safe.
+in the top bar of the Sermon sources page, fixes that: it looks each one up and shows you every
+date it would change before changing anything. Nothing is written until you press **Apply**, and
+pressing it twice is safe.
 
 ### Two settings you can change
 
@@ -473,8 +483,8 @@ who uses this songbird can see yours (see [Getting started](#getting-started-in-
 save all your notes and sermons to a single file and load them on another computer — the walkthrough
 is back in [Finding things](#finding-things).
 
-**Read however suits the room.** The light/dark toggle is always in the top corner, and songbird
-remembers your choice (more in [Reading](#reading)).
+**Read however suits the room.** Light, dark, or matching your device is one tap on **Settings**,
+and songbird remembers your choice (more in [Reading](#reading)).
 
 That's everything. Open a chapter, click a verse, and write the first thing that speaks to you — the
 rest of songbird is just here to help you find it again. 🕊️
