@@ -4,6 +4,101 @@ A running log of per-slice decisions, gotchas, and how each slice was verified. 
 
 ---
 
+## v1.8 fix — the brief Concord failures (a connection closed under a request)
+
+- **Date:** 2026-10-02
+- **Branch:** `slice/v1.8-stale-connection`
+- **Spec:** none changed (a client-behaviour fix; invariant 3 holds as before).
+
+### Why
+
+Now and then a request for the Bible list came back 502 though Concord was up, and the page recovered
+on TanStack Query's one automatic retry (`retry: 1` in `lib/queryClient.ts`). The request never
+reached Concord. The last session reproduced the cause with a tiny uvicorn server: songbird's
+`httpx.AsyncClient` kept an idle connection for 5 s (`keepalive_expiry`), and Concord's uvicorn
+(started without `--timeout-keep-alive`, so 5 s) closes an idle connection at 5 s. httpcore only
+drops a pooled connection when its timer has run out or the socket already reads as closed. A request
+sent in the few milliseconds when Concord has closed but the close hasn't arrived goes out on a dead
+connection. httpx raises `RemoteProtocolError` or `ReadError`, and httpx retries only connect errors.
+
+### Confirming it was this
+
+All against Kris's Concord, before any code changed (scripts kept out of the repo):
+- **httpx's defaults straight at Concord, from the dev machine over the LAN:** 12 requests per
+  idle gap, one client per gap.
+  - 22 of 96 failed between 4.90 and 4.995 s, and 1 of 12 at 4.5 s.
+  - None failed among 336 requests at 1 to 4.5 s, nor at 5.0 s or more (there httpx drops the
+    connection itself).
+  - Every failure was `RemoteProtocolError: Server disconnected without sending a response`.
+  - The window is wider over the LAN than on one machine because a close takes longer to arrive.
+- **Through songbird `main` run locally:**
+  - 9 of 36 requests to `/api/v1/translations` were 502 `CONCORD_UNREACHABLE` "… Server
+    disconnected without sending a response."
+  - Concord's access log had a line for each of the 27 that worked and **none** at the 9 failure
+    times.
+- **On the server's own path** (the probe run inside the songbird image, reaching Concord through
+  `host.docker.internal` as songbird does): the window is about 4 ms wide.
+  - 4 of 24 failed at 4.996 and 4.998 s, with the same two errors.
+  - Nothing failed at 4.994 s or below, nor at 5.0 s.
+  - Through a throwaway container of the server's then-current songbird image, 1 of 36 requests at
+    4.984 to 4.996 s was the same 502, and Concord's log has no line at that moment.
+  - So on the server it is rare, "now and then", exactly as seen.
+
+### What landed
+
+`backend/songbird/concord/client.py` only.
+- **`_RetryStaleConnection`** wraps the client's transport. It sends a GET once more when it fails
+  with `RemoteProtocolError`, `ReadError` or `WriteError`, and logs one INFO line saying so.
+  - The dead connection has already left the pool, so the retry goes out on a live or new one.
+  - Timeouts and `ConnectError` aren't retried: a slow or down Concord is asked once, and is still
+    an error (invariant 3).
+  - One retry, never a loop.
+  - All of the client's methods share it, and a test's injected transport is wrapped the same way.
+- **The idle time drops to 2 s** (`_KEEPALIVE_EXPIRY`): a wide margin under Concord's 5 s, given
+  that the LAN window opened as early as 4.5 s. That stops the race at its source against a stock
+  Concord. The retry covers a Concord behind anything that closes sooner. On the LAN a new
+  connection costs about a millisecond, and the requests within one page load still share
+  connections.
+
+### The other clients
+
+- **`YouTubeClient`** has the same httpx defaults, but the race needs the server to drop idle
+  connections no later than songbird does. `www.googleapis.com` kept an idle connection open for
+  more than 90 s (measured), so httpx's 5 s timer always closes first. No change.
+- **The browser talking to songbird** (songbird's own uvicorn, also 5 s) isn't songbird's code.
+  Browsers resend a request that fails on a reused connection before any reply. No change. A
+  probe script hit this once, which is why the sweeps open a fresh connection to songbird each
+  time.
+- **Nothing else in the backend makes HTTP calls.** I searched for `urllib`, `requests`, `aiohttp`
+  and `http.client` and found none.
+
+### Gotchas
+
+- **A request that never reached Concord leaves no trace there,** and songbird logged nothing
+  either (the 502 is an `HTTPException`). The retry's INFO line is now the trace.
+- **A probe is only fair if it opens a fresh connection to songbird for every request.** One that
+  reuses its own connection races songbird's uvicorn in exactly the same way.
+
+### How it was verified
+
+- **`tests/concord_stale_connection_test.py`** (fast suite, no live Concord, no timing): a raw
+  asyncio server answers a connection's first request and hangs up on a reused one, once with a
+  clean close and once with a reset.
+  - **On `main` both cases fail** with `ConcordUnreachableError`, caused by `RemoteProtocolError`
+    and `ReadError` respectively.
+  - With the fix, both calls succeed, and the server sees 3 requests over 2 connections.
+  - A server that hangs up on every request is still `ConcordUnreachableError` after exactly 2
+    attempts.
+  - A `ConnectError` or a `ReadTimeout` is attempted once.
+- **The branch's client against Kris's Concord, with the idle time forced back to 5 s so the race
+  happens:** 84 of 84 requests at 4.90 to 4.995 s succeeded. 23 were retried (21
+  `RemoteProtocolError`, 2 `ReadError`).
+- **Local songbird on the branch:** the same sweep through `/api/v1/translations` returned 36 of
+  36 OK. On `main` it was 27 of 36.
+- **The gate:** `make check` green (counts in the PR).
+
+---
+
 ## v1.8 follow-up 3 — study-note search: pages and a per-Bible filter
 
 - **Date:** 2026-10-02
