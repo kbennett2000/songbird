@@ -6,6 +6,7 @@ over HTTP at a configured URL, never embedded; when it is unreachable songbird r
 clear error rather than falling back.
 """
 
+import logging
 from typing import Any
 from urllib.parse import quote
 
@@ -47,6 +48,52 @@ from songbird.concord.schemas import (
 # 5s) so a genuinely-down Concord still fails fast (CLAUDE.md invariant 3).
 _SEARCH_TIMEOUT = httpx.Timeout(30.0, connect=5.0)
 
+# How long an idle connection to Concord is kept for reuse. Concord's uvicorn closes one after 5 s,
+# and httpx's default was also 5 s: a request sent just under 5 s after the last could go out on a
+# connection Concord was closing at that instant. Measured against Kris's Concord over the LAN, that
+# window opened as early as 4.5 s, so 2 s leaves a wide margin. A new connection on the LAN costs
+# about a millisecond; requests within a page load still share one.
+_KEEPALIVE_EXPIRY = 2.0
+
+# What httpx raises when the connection a request went out on died under it: closed before any
+# response ("Server disconnected without sending a response") or reset. The request never reached
+# Concord, so sending it again is safe. Timeouts and connect errors are deliberately absent: a slow
+# or down Concord is asked once, and is an error (invariant 3).
+_STALE_CONNECTION_ERRORS = (httpx.RemoteProtocolError, httpx.ReadError, httpx.WriteError)
+
+logger = logging.getLogger("songbird")
+
+
+class _RetryStaleConnection(httpx.AsyncBaseTransport):
+    """Sends a GET once more when its connection was closed under it.
+
+    httpcore drops a pooled connection only when its idle timer has run out or the socket already
+    reads as closed; a close that lands while the request is being sent surfaces as one of
+    `_STALE_CONNECTION_ERRORS`, and httpx retries only connect errors. The dead connection has
+    already left the pool, so the second attempt goes out on a live or fresh one. One retry, never
+    a loop: a Concord that hangs up on every request is still unreachable after it.
+    """
+
+    def __init__(self, inner: httpx.AsyncBaseTransport) -> None:
+        self._inner = inner
+
+    async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+        try:
+            return await self._inner.handle_async_request(request)
+        except _STALE_CONNECTION_ERRORS as exc:
+            if request.method not in ("GET", "HEAD"):
+                raise
+            logger.info(
+                "Concord connection closed under %s %s (%s); retrying once on a new one",
+                request.method,
+                request.url.path,
+                type(exc).__name__,
+            )
+            return await self._inner.handle_async_request(request)
+
+    async def aclose(self) -> None:
+        await self._inner.aclose()
+
 
 class ConcordUnreachableError(Exception):
     """Raised when Concord cannot be reached, or returns a server error, over HTTP."""
@@ -74,7 +121,14 @@ class ConcordClient:
         transport: httpx.AsyncBaseTransport | None = None,
     ) -> None:
         self._base_url = base_url
-        self._client = httpx.AsyncClient(base_url=base_url, timeout=timeout, transport=transport)
+        # A test's injected transport is wrapped the same way as the real one, so the retry is
+        # exercised wherever the client is.
+        inner = transport or httpx.AsyncHTTPTransport(
+            limits=httpx.Limits(keepalive_expiry=_KEEPALIVE_EXPIRY)
+        )
+        self._client = httpx.AsyncClient(
+            base_url=base_url, timeout=timeout, transport=_RetryStaleConnection(inner)
+        )
 
     @property
     def base_url(self) -> str:
