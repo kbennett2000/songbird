@@ -51,10 +51,35 @@ describe("ChartViewer", () => {
   it("says it's loading until the picture arrives, then shows it at its fitted size", () => {
     renderViewer();
     expect(screen.getByText("Loading the chart…")).toBeInTheDocument();
+    expect(screen.queryByText(/^\d+%$/)).not.toBeInTheDocument(); // no zoom claimed yet
     const img = loadPicture(800, 600);
     expect(screen.queryByText("Loading the chart…")).not.toBeInTheDocument();
     expect(img.style.width).toBe("800px");
     expect(readout()).toBe("Zoom 100%");
+  });
+
+  it("fits the picture to its area from the first frame, measured once the dialog is open", () => {
+    // A closed dialog has no size; an open one does. The viewer must measure after opening, or a
+    // picture already in the cache shows at full size until a resize notice corrects it.
+    const sized = (el: HTMLElement) => el.closest("dialog")?.hasAttribute("open") ?? false;
+    const width = vi
+      .spyOn(HTMLElement.prototype, "clientWidth", "get")
+      .mockImplementation(function (this: HTMLElement) {
+        return sized(this) ? 400 : 0;
+      });
+    const height = vi
+      .spyOn(HTMLElement.prototype, "clientHeight", "get")
+      .mockImplementation(function (this: HTMLElement) {
+        return sized(this) ? 300 : 0;
+      });
+    try {
+      renderViewer();
+      loadPicture(800, 600);
+      expect(readout()).toBe("Zoom 50%");
+    } finally {
+      width.mockRestore();
+      height.mockRestore();
+    }
   });
 
   it("zooms in and out with its buttons, up to three times, and back to fit", async () => {

@@ -4,6 +4,66 @@ A running log of per-slice decisions, gotchas, and how each slice was verified. 
 
 ---
 
+## v1.8 slice B follow-up — the chart viewer's first frame
+
+- **Date:** 2026-10-02
+- **Branch:** `slice/v1.8-charts-fit`
+- **Spec:** unchanged (`docs/v1.8/STUDY-BIBLE-SPEC.md` §4 already says the view opens fitted).
+
+### Why
+
+On the server's build, a check read the Search page's large view on a phone as "Zoom 100%" just
+after the picture loaded, and "Zoom 38%" (fitted) a moment later. It looked like the picture
+showing at full size for a frame. A frame-by-frame recording showed it isn't:
+- for one frame the picture is still hidden (1 px, `sr-only`) and only the readout says 100%;
+- from the next frame on it is fitted, at 38% and 390 px.
+
+The same holds for the old build. Two smaller things were real:
+- **The readout claims a zoom it doesn't know.** Until React's `onLoad` records the picture's size,
+  "fit" falls back to 1, so the readout, a live region, said "Zoom 100%" before the right value.
+- **The viewer measured its picture area before opening the dialog.** One layout effect measured
+  and a later passive effect called `showModal()`. A closed dialog has no size, so that measurement
+  was 0×0, and only the `ResizeObserver` put it right. In Chromium that happens within the frame;
+  in happy-dom it never happens.
+
+### What landed
+
+- **One layout effect opens the dialog and then measures.** A test gives the picture area a size
+  only while its dialog is open; on the old code it read "Zoom 100%" where "Zoom 50%" was due.
+- **The readout shows "…" (hidden from screen readers) until the picture's size is known.** The
+  live region then announces the fitted zoom once.
+- **Recorded again on the local build:** "… hidden" for one frame, then "Zoom 38%" shown at 390 px.
+
+### Slice B on the server
+
+PR #148 was deployed to Kris's server on 2026-10-02 with no migration.
+- The live `index.html` names the image's `assets/index-C5IziDeg.js`.
+- `/api/v1/translations/EMB/assets/chart-01.jpg` is a 401 when not signed in.
+
+Checked in headless Chromium against a throwaway container of that image, with its own empty
+database, over an SSH tunnel:
+- **The 24 cases:** Genesis 13, Jeremiah 1 and Psalm 9, on EMB and on KJV with EMB ticked, at
+  1280×800 and 390×844 (touch), light and dark, all as in slice B's local check.
+  - The markers are at verses 4, 3 and 1, and the pictures come from EMB.
+  - The frame is 262×192, and the popover stays on screen.
+  - Fitted at 100%, 98% and 100% on desktop; on the phone, 38%, then 86% after + +, and 190% after a
+    pinch, with the page zoom still 1.
+  - Closing brings the note back with focus on the picture.
+  - Every picture was 200 `image/jpeg`, `private, max-age=31536000, immutable`.
+  - No page errors, no overflow.
+- **Search,** "Pss" (a chart's indexed text is its short reference): EMB's Psalm 9 chart shows as a
+  "Chart" hit with a 112×80 thumbnail. It opens the large view titled with the chart's name, and
+  focus returns to the thumbnail. That is where the 100%-then-38% above was seen.
+- **Against the leftover Concord v1.2.0** (a second throwaway container on its network): 15
+  Bibles and no `note_count`.
+  - `/notes/KJV/GEN/13` is `[]` and the study-notes search is `{results: [], total: 0}`.
+  - The picture route is a 404 that nothing calls.
+  - The reader shows Genesis 13 with no chart markers, no frames and no Notes menu.
+  - Keyword search finds "Abram" (324 highlights) with no study-notes section.
+  - No page errors at either width.
+
+---
+
 ## v1.8 slice B — charts
 
 - **Date:** 2026-10-02

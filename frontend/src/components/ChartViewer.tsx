@@ -77,20 +77,19 @@ export function ChartViewer({ src, title, subtitle, alt, onClose }: ChartViewerP
   const live = useRef({ natural, box, fit, current });
   live.current = { natural, box, fit, current };
 
-  // Open as a modal on mount. No close on unmount: taking an open dialog out of the page already
-  // takes it out of the top layer, and a close() there would fire onClose — under StrictMode's
-  // double-run effects, shutting the viewer the moment it opened.
-  useEffect(() => {
-    const dialog = dialogRef.current;
-    if (!dialog) return;
-    if (!dialog.open) dialog.showModal();
-    boxRef.current?.focus();
-  }, []);
-
-  // The box's size: what "fit" means, and where its centre is.
+  // Open as a modal, then measure the box. Both in one layout effect, in that order: a closed
+  // dialog has no size, so measuring first gives a "fit" of the picture's own size, and a picture
+  // already in the cache would show that large for a frame. No close on unmount: taking an open
+  // dialog out of the page already takes it out of the top layer, and a close() there would fire
+  // onClose — under StrictMode's double-run effects, shutting the viewer the moment it opened.
+  //
+  // The box's size is what "fit" means, and where its centre is; it follows the window.
   useLayoutEffect(() => {
+    const dialog = dialogRef.current;
     const el = boxRef.current;
-    if (!el) return;
+    if (!dialog || !el) return;
+    if (!dialog.open) dialog.showModal();
+    el.focus();
     const measure = () => setBox({ width: el.clientWidth, height: el.clientHeight });
     measure();
     if (typeof ResizeObserver === "undefined") {
@@ -280,8 +279,15 @@ export function ChartViewer({ src, title, subtitle, alt, onClose }: ChartViewerP
             aria-live="polite"
             className="w-14 text-center text-sm tabular-nums text-gray-700 dark:text-gray-300"
           >
-            <span className="sr-only">Zoom </span>
-            {percent}
+            {natural ? (
+              <>
+                <span className="sr-only">Zoom </span>
+                {percent}
+              </>
+            ) : (
+              // No zoom to state until the picture's size is known (it's hidden meanwhile).
+              <span aria-hidden="true">…</span>
+            )}
           </span>
           <button
             type="button"
