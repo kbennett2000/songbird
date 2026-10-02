@@ -233,6 +233,106 @@ describe("SettingsView", () => {
     await user.click(await screen.findByRole("link", { name: /^Status ›/ }));
     expect(await screen.findByText("the Status page")).toBeInTheDocument();
   });
+
+  describe("about these Bibles", () => {
+    // Made-up documents: EMB has front matter and a reading plan; NET only book introductions.
+    const WITH_DOCUMENTS = V8.map((t) => ({
+      ...t,
+      document_count: t.id === "EMB" ? 3 : t.id === "NET" ? 1 : 0,
+    }));
+    type Summary = { slug: string; kind: string; title: string; book: string | null };
+    const LISTS: Record<string, Summary[]> = {
+      EMB: [
+        { slug: "front-matter-1", kind: "front-matter", title: "Made-up team", book: null },
+        { slug: "reading-plan-1", kind: "reading-plan", title: "Made-up plan", book: null },
+        { slug: "introduction-jhn", kind: "book-introduction", title: "Made-up John", book: "JHN" },
+      ],
+      NET: [{ slug: "introduction-jhn", kind: "book-introduction", title: "Made-up", book: "JHN" }],
+    };
+
+    function useDocuments() {
+      const asked: string[] = [];
+      server.use(
+        http.get("/api/v1/translations/:translation/documents", ({ params }) => {
+          const code = String(params.translation);
+          asked.push(code);
+          const documents = (LISTS[code] ?? []).map((d, i) => ({ ...d, ordinal: i + 1 }));
+          return HttpResponse.json({ translation: code, total: documents.length, documents });
+        }),
+        http.get("/api/v1/translations/:translation/documents/:slug", ({ params }) =>
+          HttpResponse.json({
+            translation: String(params.translation),
+            slug: String(params.slug),
+            kind: "reading-plan",
+            title: "Made-up plan",
+            book: null,
+            ordinal: 1,
+            text: "## January 1\n\n- [Made-up 4:1-10](ref:JHN.4.1-10)",
+            images: [],
+          }),
+        ),
+      );
+      return asked;
+    }
+
+    it("lists each Bible with an About page, and what's in it", async () => {
+      useWorld({ translations: WITH_DOCUMENTS });
+      useDocuments();
+      openAt("/settings");
+      const section = (await screen.findByRole("heading", { name: "About these Bibles" }))
+        .parentElement!;
+      const row = await within(section).findByRole("button", { name: /^About EMB ›/ });
+      expect(row).toHaveTextContent("A Study Bible · Front matter · Reading plan");
+      // NET's documents are all book introductions.
+      await waitFor(() =>
+        expect(
+          within(section).queryByRole("button", { name: /^About NET/ }),
+        ).not.toBeInTheDocument(),
+      );
+    });
+
+    it("isn't there against an older Concord, which is asked nothing", async () => {
+      useWorld();
+      const asked = useDocuments();
+      openAt("/settings");
+      await screen.findAllByRole("checkbox"); // the Bibles have loaded
+      expect(screen.queryByRole("heading", { name: "About these Bibles" })).not.toBeInTheDocument();
+      expect(asked).toEqual([]);
+    });
+
+    it("opens over Settings, and a reading opens the reader there", async () => {
+      useWorld({ translations: WITH_DOCUMENTS });
+      useDocuments();
+      const user = userEvent.setup();
+      const router = openAt("/settings");
+      await user.click(await screen.findByRole("button", { name: /^About EMB ›/ }));
+      const view = await screen.findByRole("dialog", { name: "A Study Bible" });
+      expect(
+        within(view).getByRole("button", { name: "← Back to Settings" }),
+      ).toBeInTheDocument();
+
+      await user.click(await within(view).findByRole("button", { name: /Made-up plan/ }));
+      await user.click(await screen.findByRole("button", { name: "Made-up 4:1-10" }));
+      await waitFor(() => expect(router.state.location.pathname).toBe("/read"));
+      expect(router.state.location.search).toBe("?book=JHN&chapter=4&verse=1");
+    });
+
+    it("closes back to Settings, with focus on its row", async () => {
+      useWorld({ translations: WITH_DOCUMENTS });
+      useDocuments();
+      const user = userEvent.setup();
+      openAt("/settings");
+      await user.click(await screen.findByRole("button", { name: /^About EMB ›/ }));
+      const view = await screen.findByRole("dialog", { name: "A Study Bible" });
+      await user.click(within(view).getByRole("button", { name: "Close" }));
+      await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+      await waitFor(() =>
+        expect(document.activeElement).toBe(
+          screen.getByRole("button", { name: /^About EMB ›/ }),
+        ),
+      );
+    });
+  });
 });
 
 describe("a notes choice made on Settings shows in the Reader", () => {

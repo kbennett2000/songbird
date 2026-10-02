@@ -120,6 +120,25 @@ of the book. Tap it, and the introduction opens over the page.
 Reading a different translation with that study Bible's notes ticked? The button names it, for
 example **EMB introduction**, so you can still read it.
 
+**A study Bible's front matter and reading plan.** Beside the introduction button there's one
+more: **About EMB**. It opens the pages the Bible prints before Genesis and at the back: the
+copyright page, its introductions, the people who made it, a one-year reading plan, and notes on
+its authors. Tap one to read it. **‹** at the top takes you back to the list.
+
+**The reading plan opens on today's date,** marked **Today**, with its four readings. Tap a
+reading and the Bible opens at that passage. When you're done, tap **About EMB** again: you're
+back on the same day, ready for the next reading. To look at another day:
+- **Month** shows any month of the year.
+- **Day** jumps to a date in it.
+- **Today** brings you back.
+
+One thing to know: when a day's reading runs from the end of one book into the next, each half is
+its own link. The second one opens at the first verse of the next book, where that part of the
+reading begins.
+
+**To get back to your reading,** tap **Close**, or **← Back to** at the end of the page. You'll be
+on the same line you left. The same pages are on **Settings** too, under **About these Bibles**.
+
 **Another Bible's notes, in the translation you're reading.** Open **Settings**. Under **Notes from
 other Bibles** there's a box for each Bible that has notes, such as **NET** or **EMB**:
 

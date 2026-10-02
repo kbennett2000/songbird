@@ -4,6 +4,128 @@ A running log of per-slice decisions, gotchas, and how each slice was verified. 
 
 ---
 
+## v1.8 slice C2 — a study Bible's About page
+
+- **Date:** 2026-10-02
+- **Branch:** `slice/v1.8-about`
+- **Spec:** `docs/v1.8/STUDY-BIBLE-SPEC.md` §6 (new), §1, §2 and §8 (Rules and Acceptance
+  renumbered); `docs/v1/SPEC.md` §12, "A study Bible's About page" and "Settings page".
+
+### Why
+
+Concord V8-S5c loaded the rest of EMB's documents: 5 front matter, a reading plan and an about,
+beside the 66 introductions from C1. None of them belongs to a chapter, so they get a page of their
+own, reached from the reader and from Settings.
+
+Their shape, surveyed without keeping any text:
+- **Front matter:** two prose pieces with 9 and 10 `##` headings (722 and 4,138 words); a copyright
+  page of paragraphs and one list; the contributors as 9 italic-role-over-names paragraphs (hard
+  breaks); the translation team as 8 `##` divisions, each a senior translator over a school, then
+  italic book labels over bulleted lists of people.
+- **About:** two `##` sections: author notes opening with a bold name, then bold titles over their
+  author, each followed by a credit.
+- **The reading plan:** 365 `##` dates (a month's first day in capitals), each over 4 readings as
+  `ref:` links, about 61 KB. A reading that crosses into the next book is two links in one item.
+- **No pictures** in any of the seven.
+
+### What landed
+
+- **No API change.** C1's passthrough serves every kind; the page reads the unfiltered list and one
+  document at a time.
+- **Shared with C1, pulled out of `BookIntroduction`:**
+  - `DocumentDialog`: the full-window modal, its header (eyebrow, title, an optional leading
+    button, an optional bar that never scrolls) and its own scrolling body. `onCancel` lets a page
+    step back instead of closing.
+  - `DocumentText`: the reading column's classes and `useDocumentPictures`, the picture figure and
+    its large view (kept outside the scrolling body, as before).
+  - `BookIntroduction` now uses both, unchanged in behaviour; its 7 tests pass as they were.
+- **`lib/documents.ts`:** `documentSources` (C1's `introductionSources`, renamed and moved),
+  `documentListOptions` (the whole list, once a session), the document query, and `aboutGroups`.
+- **`lib/readingPlan.ts`:** `parseReadingPlan` splits a plan into days by its `##` headings' source
+  lines (markdown-it's `map`), or returns null for one not laid out by date. Also `monthsIn`,
+  `daysIn`, `dayName`, `planDayId` and `todayIn`.
+- **`BibleAbout`:** the list grouped by kind, a document in full, a reading plan a month at a time,
+  states, the back step, and its place reported to whoever opened it.
+- **`ReadingPlan`:** the Month / Day / Today bar and the month's days.
+- **The reader:** **About EMB** after each source's introduction button. The place each Bible's page
+  was left at is kept in a ref, in memory only.
+- **Settings:** *About these Bibles*, opening the same page over Settings; a link navigates to
+  `/read?book=&chapter=&verse=`.
+- **No new dependency, no database change, no screenshot in the repo.**
+
+### Decisions
+
+- **One view for the reader and Settings, not a route.** The reader keeps its exact line under the
+  view, as with an introduction; Settings gets the same page rather than a second shell.
+- **A month at a time.** The plan's whole year would be ~3,700 elements; a month is ~470 with the
+  view's own. Month, Day and Today in a bar that never scrolls away make any date two taps.
+- **Opens on today, remembers where a reading was tapped.** A reading jumps the reader and closes
+  the view; **About EMB** then reopens on that day. Both come from the device's date and the
+  reader's memory; nothing about what's been read is stored.
+- **Escape and Back step back a level.** From a document they return to the list, with focus on its
+  row; from the list they close.
+- **One column for every document.** A two-column team list on a desktop would need a guess about
+  which documents are lists of names. The plan is the one exception, and only when every `##`
+  heading is a date.
+- **The plan bar's text size sits on its controls.** `max-w-prose` is 65 `ch`; on a `text-sm` row
+  it was 37 px narrower than the header above it (found in the browser pass).
+
+### Gotchas
+
+- **Scroll the plan's body by hand.** `scrollTop` from the day's and the body's rectangles, never
+  `scrollIntoView`, which may also scroll the page under the view.
+- **Only the dialog's own `cancel` counts,** as with `close`: React passes a nested dialog's up.
+- **Playwright's `click()` scrolls its target into view.** The title row is at the chapter's top,
+  so a check that scrolled the reader down and then clicked **About EMB** saw the reader "jump to
+  the top". With `dispatchEvent("click")` the reader stays at y = 400 through open, Close and
+  Escape, for the introduction and the About page alike.
+- **Prettier on a glob reformats files that weren't Prettier-clean.** Only the new files and those
+  clean before were formatted; the rest were restored.
+
+### The slice before this, on the server
+
+PR #151 (book introductions) is live on Kris's server: `main` at `0ef2253`, and the live
+`index.html` names `assets/index-CoEM_AjN.js`. It shipped with no migration.
+
+### How it was verified
+
+- **Frontend:**
+  - `readingPlan.test.ts` (7): dates in any case, a crossing reading in its day, the preface and
+    Windows line ends, emphasis and a smaller heading, null for plans not by date, 29 February,
+    `todayIn`.
+  - `documents.test.ts` (6): `documentSources` (moved), `aboutGroups` and its labels.
+  - `BibleAbout.test.tsx` (13): the list, none, failure and Try again; a document, ‹ with focus on
+    its row, Escape stepping back (`cancel` prevented) and not on the list, a link and both ways
+    back, a document's loading and failure; the plan on today and scrolled there, Month / Day /
+    Today and the month links, both halves of a crossing reading, reopening at a day, the fallback.
+  - `ReaderView.test.tsx` (+6): after the introduction on EMB and on KJV with EMB ticked; hidden for
+    introductions only; Close with focus back without scrolling; a reading jumps and the view
+    reopens on the plan; shown on failure; it and the introduction close each other. C1's request
+    checks now include the one whole-list request.
+  - `SettingsView.test.tsx` (+4): the section and its rows, none from an older Concord (nothing
+    asked), a reading opens the reader, Close gives the row focus.
+- **The gate:** `make check` and `make check-frontend` green (counts in the PR).
+- **In a browser, before the PR:** a local build against Kris's Concord, with a scratch database, in
+  headless Chromium. EMB and KJV with EMB ticked, at 1280×800 and 390×844, light and dark (8 runs),
+  then Settings in light and dark.
+  - **The title row:** **About EMB** right after **Introduction** / **EMB introduction**; no
+    sideways scroll (two rows, 62 px, on a phone).
+  - **The list:** three groups, seven rows, 44 px each.
+  - **Each document:** 16 / 28 px text in a 595 px column (390 on a phone), `##` at 17 px / 600
+    with a rule, no sideways scroll. The NLT introduction is the longest: 16 screens on a desktop,
+    24 on a phone. The team list is 8 and 10.
+  - **The plan:** opens on today's month with today at the top, tagged, its bar blue-600 in light
+    and blue-400 in dark. January's first day is "January 1"; June 15 and December 31 come up
+    through Month and Day; both halves of the January reading that crosses books jump to their own
+    starts, and **About EMB** reopens on that day.
+  - **Settings:** one row, "About EMB ›", with the Bible's name and its three groups; a reading
+    opens the reader in the Bible last read, and Back returns to Settings.
+  - **On a phone with the CPU slowed 4×:** the plan opens in 264 ms the first time and 122 ms after;
+    a month change takes 62–120 ms.
+  - **No page errors** in any run.
+
+---
+
 ## v1.8 slice C1 — a book's introduction in the reader
 
 - **Date:** 2026-10-02

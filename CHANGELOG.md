@@ -18,6 +18,14 @@ This project follows [Keep a Changelog](https://keepachangelog.com/) and
 ## [Unreleased]
 
 ### Added
+- **A study Bible's front matter and its reading plan.** The Every Man's Bible prints more than
+  notes: a copyright page, an introduction to the Bible and one to its translation, the people who
+  made it, a one-year reading plan, and notes on the authors behind its *Personal Gold* features.
+  An **About EMB** button beside the chapter's title (and a row on Settings) opens them, each in
+  full. The reading plan shows a month at a time and opens on today's date; pick another month or
+  day, or tap a reading to open that passage, then **About EMB** again to come back to the same
+  day. songbird keeps no record of what you've read, and fetches every page from your Scripture
+  engine as you open it, keeping no copy.
 - **A book's introduction, one tap from the text.** A study Bible such as the Every Man's Bible
   introduces each of its 66 books: what it's about, who wrote it, when, an outline, key people and
   passages, how long it takes to read, and for many books a timeline. While you read that Bible, an
