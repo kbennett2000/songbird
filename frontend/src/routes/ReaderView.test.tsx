@@ -1913,9 +1913,14 @@ describe("ReaderView — a book's introduction (Concord v8 documents)", () => {
     return { ...result, address: () => screen.getByTestId("address").textContent };
   }
 
+  const PLAN_TEXT = "## JANUARY 1\n\n- [Made-up 4:1-10](ref:JHN.4.1-10)";
+  const FRONT_TEXT = "## MADE-UP DIVISION\n\n*Made-up role*\\\nA. Made-up";
+
   /**
    * Reading `reading` at `book` 1… with `ticked` Bibles' notes on. EMB has introductions to John
-   * and Luke (not Acts). `older`: a Concord that sends no counts. Returns the documents asked for.
+   * and Luke (not Acts), and — unless `about` is false — front matter and a reading plan.
+   * `older`: a Concord that sends no counts. `failList`: the lists can't be had. Returns the
+   * documents asked for.
    */
   function useDocumentsWorld({
     reading = "EMB",
@@ -1924,6 +1929,8 @@ describe("ReaderView — a book's introduction (Concord v8 documents)", () => {
     chapter = 3,
     older = false,
     failDocument = false,
+    about = true,
+    failList = false,
   } = {}) {
     const asked: string[] = [];
     me = {
@@ -1954,19 +1961,36 @@ describe("ReaderView — a book's introduction (Concord v8 documents)", () => {
       ),
       http.get("/api/v1/notes/:translation/:book/:chapter", () => HttpResponse.json([])),
       http.get("/api/v1/translations/:translation/documents", ({ params, request }) => {
-        asked.push(`${String(params.translation)} ${new URL(request.url).search}`);
-        return HttpResponse.json({
-          translation: String(params.translation),
-          book: null,
-          kind: "book-introduction",
-          total: 2,
-          documents: ["JHN", "LUK"].map((b, i) => ({
+        const search = new URL(request.url).search;
+        asked.push(`${String(params.translation)} ${search}`);
+        if (failList) {
+          return HttpResponse.json(
+            { detail: { code: "CONCORD_UNREACHABLE", message: "down" } },
+            { status: 502 },
+          );
+        }
+        const all = [
+          ...(about
+            ? [
+                { slug: "front-matter-1", kind: "front-matter", title: "Made-up team", book: null },
+                { slug: "reading-plan-1", kind: "reading-plan", title: "Made-up plan", book: null },
+              ]
+            : []),
+          ...["JHN", "LUK"].map((b) => ({
             slug: `introduction-${b.toLowerCase()}`,
             kind: "book-introduction",
             title: `Made-up ${b}`,
             book: b,
-            ordinal: i + 1,
           })),
+        ].map((d, i) => ({ ...d, ordinal: i + 1 }));
+        const kind = new URL(request.url).searchParams.get("kind");
+        const documents = all.filter((d) => kind === null || d.kind === kind);
+        return HttpResponse.json({
+          translation: String(params.translation),
+          book: null,
+          kind,
+          total: documents.length,
+          documents,
         });
       }),
       http.get("/api/v1/translations/:translation/documents/:slug", ({ params }) => {
@@ -1977,9 +2001,23 @@ describe("ReaderView — a book's introduction (Concord v8 documents)", () => {
             { status: 502 },
           );
         }
+        const slug = String(params.slug);
+        if (!slug.startsWith("introduction-")) {
+          const plan = slug === "reading-plan-1";
+          return HttpResponse.json({
+            translation: String(params.translation),
+            slug,
+            kind: plan ? "reading-plan" : "front-matter",
+            title: plan ? "Made-up plan" : "Made-up team",
+            book: null,
+            ordinal: 1,
+            text: plan ? PLAN_TEXT : FRONT_TEXT,
+            images: [],
+          });
+        }
         return HttpResponse.json({
           translation: String(params.translation),
-          slug: String(params.slug),
+          slug,
           kind: "book-introduction",
           title: "Made-up John",
           book: "JHN",
@@ -2017,7 +2055,12 @@ describe("ReaderView — a book's introduction (Concord v8 documents)", () => {
     // The timeline's date and event, each on its own line.
     expect(view.querySelectorAll("li [data-poetry-line]")).toHaveLength(2);
     expect(within(view).getByRole("button", { name: "← Back to JHN 3" })).toBeInTheDocument();
-    expect(asked).toEqual(["EMB ?kind=book-introduction", "EMB introduction-jhn"]);
+    // The introductions, the whole list (for the About page) and this introduction: no more.
+    expect([...asked].sort()).toEqual([
+      "EMB ",
+      "EMB ?kind=book-introduction",
+      "EMB introduction-jhn",
+    ]);
 
     // Close: back to the reader, focus on the button that opened it — without scrolling the page
     // to it, so the reader stays on the line it was at.
@@ -2039,6 +2082,7 @@ describe("ReaderView — a book's introduction (Concord v8 documents)", () => {
     expect(await screen.findByText(/JHN 4:16/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Introduction to John" })).toBeInTheDocument();
     expect(asked.filter((a) => a.includes("?kind"))).toHaveLength(1);
+    expect(asked.filter((a) => a === "EMB ")).toHaveLength(1);
   });
 
   it("names a ticked Bible's introduction by its Bible while reading another", async () => {
@@ -2101,10 +2145,14 @@ describe("ReaderView — a book's introduction (Concord v8 documents)", () => {
     const asked = useDocumentsWorld({ book: "ACT", chapter: 1 });
     renderReader();
     expect(await screen.findByText(/ACT 1:16/)).toBeInTheDocument();
-    await waitFor(() => expect(asked).toEqual(["EMB ?kind=book-introduction"]));
+    await waitFor(() =>
+      expect([...asked].sort()).toEqual(["EMB ", "EMB ?kind=book-introduction"]),
+    );
     await waitFor(() =>
       expect(screen.queryByRole("button", { name: /introduction to/i })).not.toBeInTheDocument(),
     );
+    // The Bible's About page is still there: it isn't about one book.
+    expect(screen.getByRole("button", { name: "About EMB" })).toBeInTheDocument();
   });
 
   it("offers nothing for a Bible without documents, or against an older Concord", async () => {
@@ -2118,6 +2166,97 @@ describe("ReaderView — a book's introduction (Concord v8 documents)", () => {
     renderReader();
     expect(await screen.findByText(/JHN 3:16/)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /introduction to/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^About / })).not.toBeInTheDocument();
     expect([...asked, ...askedOlder]).toEqual([]); // nothing asked of Concord
+  });
+
+  describe("a Bible's About page", () => {
+    it("comes after the Bible's introduction, for the Bible read and a ticked one", async () => {
+      useDocumentsWorld();
+      const { unmount } = renderReader();
+      const about = await screen.findByRole("button", { name: "About EMB" });
+      expect(about).toHaveAttribute("aria-haspopup", "dialog");
+      const intro = screen.getByRole("button", { name: "Introduction to John" });
+      expect(intro.compareDocumentPosition(about) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      unmount();
+
+      useDocumentsWorld({ reading: "KJV", ticked: ["EMB"] });
+      renderReader();
+      expect(await screen.findByRole("button", { name: "About EMB" })).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: "EMB's introduction to John" }),
+      ).toBeInTheDocument();
+    });
+
+    it("isn't offered by a Bible whose documents are all introductions", async () => {
+      useDocumentsWorld({ about: false });
+      renderReader();
+      expect(
+        await screen.findByRole("button", { name: "Introduction to John" }),
+      ).toBeInTheDocument();
+      await waitFor(() =>
+        expect(screen.queryByRole("button", { name: "About EMB" })).not.toBeInTheDocument(),
+      );
+    });
+
+    it("opens over the reader, and Close gives the button focus without scrolling", async () => {
+      useDocumentsWorld();
+      const user = userEvent.setup();
+      renderReader();
+      await user.click(await screen.findByRole("button", { name: "About EMB" }));
+      const view = await screen.findByRole("dialog", { name: "EMB" }); // the Bible's name
+      expect(await within(view).findByRole("button", { name: /Made-up team/ })).toBeInTheDocument();
+      expect(within(view).getByRole("button", { name: "← Back to JHN 3" })).toBeInTheDocument();
+
+      const focus = vi.spyOn(HTMLElement.prototype, "focus");
+      await user.click(within(view).getByRole("button", { name: "Close" }));
+      await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+      await waitFor(() =>
+        expect(document.activeElement).toBe(screen.getByRole("button", { name: "About EMB" })),
+      );
+      expect(focus).toHaveBeenCalledWith({ preventScroll: true });
+      focus.mockRestore();
+    });
+
+    it("a reading jumps the reader and closes the view, which reopens on the plan", async () => {
+      useDocumentsWorld();
+      const user = userEvent.setup();
+      const { address } = renderReader("/read?book=JHN&chapter=3");
+      await user.click(await screen.findByRole("button", { name: "About EMB" }));
+      await user.click(await screen.findByRole("button", { name: /Made-up plan/ }));
+      await user.click(await screen.findByRole("button", { name: "Made-up 4:1-10" }));
+
+      await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+      expect(await screen.findByText(/JHN 4:16/)).toBeInTheDocument();
+      await waitFor(() => expect(address()).toBe("?book=JHN&chapter=4&verse=1"));
+
+      await user.click(screen.getByRole("button", { name: "About EMB" }));
+      expect(await screen.findByRole("dialog", { name: "Made-up plan" })).toBeInTheDocument();
+      expect(screen.getByRole("heading", { name: "January 1", level: 3 })).toBeInTheDocument();
+    });
+
+    it("is offered while its list can't be had, and then says so", async () => {
+      useDocumentsWorld({ failList: true });
+      const user = userEvent.setup();
+      renderReader();
+      await user.click(await screen.findByRole("button", { name: "About EMB" }));
+      expect(
+        await screen.findByText(
+          "Couldn’t load EMB’s front matter and reading plan (is Concord reachable?)",
+        ),
+      ).toBeInTheDocument();
+    });
+
+    it("closes the book's introduction when opened, and is closed by it", async () => {
+      useDocumentsWorld();
+      const user = userEvent.setup();
+      renderReader();
+      await user.click(await screen.findByRole("button", { name: "About EMB" }));
+      expect(await screen.findByRole("dialog", { name: "EMB" })).toBeInTheDocument();
+      // The view is modal; the reader's buttons are reached again once it has gone.
+      fireEvent.click(screen.getByRole("button", { name: "Introduction to John", hidden: true }));
+      expect(await screen.findByRole("dialog", { name: "Made-up John" })).toBeInTheDocument();
+      expect(screen.queryByRole("dialog", { name: "EMB" })).not.toBeInTheDocument();
+    });
   });
 });

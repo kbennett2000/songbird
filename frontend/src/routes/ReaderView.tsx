@@ -20,6 +20,7 @@ import { Link, useSearchParams } from "react-router-dom";
 
 import { CrossReferences } from "@/components/CrossReferences";
 import { AnnotationsPopover } from "@/components/AnnotationsPopover";
+import { type AboutPlace, BibleAbout } from "@/components/BibleAbout";
 import { BookIntroduction } from "@/components/BookIntroduction";
 import { Geography } from "@/components/Geography";
 import { ChartViewer } from "@/components/ChartViewer";
@@ -55,7 +56,7 @@ import {
 import { ApiError } from "@/lib/api";
 import { saveReadingPosition } from "@/lib/auth";
 import { borrowNotes, noteSources, type ShownNote } from "@/lib/borrowedNotes";
-import { documentSources } from "@/lib/documents";
+import { aboutGroups, documentListOptions, documentSources } from "@/lib/documents";
 import { bookIntroductionsOptions, introductionFor } from "@/lib/introductions";
 import { noteLook, noteSourceOf } from "@/lib/noteLooks";
 import { nextChapter, prevChapter } from "@/lib/navigation";
@@ -189,6 +190,11 @@ export function ReaderView(): JSX.Element {
   // A book's introduction, open over the reader: whose it is, and the button that opened it (focus
   // goes back there when it closes, unless a link in it jumped the reader somewhere).
   const [intro, setIntro] = useState<{ source: string; trigger: HTMLElement } | null>(null);
+  // A Bible's About page (its front matter, reading plan …), open over the reader, and where each
+  // Bible's was left, so reopening it in this visit comes back there. Memory only: nothing about
+  // what's been read is stored.
+  const [about, setAbout] = useState<{ source: string; trigger: HTMLElement } | null>(null);
+  const aboutPlaces = useRef(new Map<string, AboutPlace>());
   // The sermon notes covering the tapped verse, whose popover is open (separate system —
   // canonical, all-translations). One note → single popover; several → a stacked list.
   const [openSermon, setOpenSermon] = useState<{
@@ -258,6 +264,12 @@ export function ReaderView(): JSX.Element {
   const introSources = documentSources(translationsQuery.data ?? [], translation, borrowFrom);
   const introLists = useQueries({
     queries: introSources.map((code) => bookIntroductionsOptions(code)),
+  });
+  // Each of those Bibles' About page (v1.8 slice C2), offered when its whole list of documents
+  // (asked for once a session) holds front matter, a reading plan or notes on the edition — and
+  // while that list loads or if it failed, as for an introduction.
+  const aboutLists = useQueries({
+    queries: introSources.map((code) => documentListOptions(code)),
   });
   const borrowedNotes = useQueries({
     queries: borrowFrom.map((code) => ({
@@ -411,6 +423,7 @@ export function ReaderView(): JSX.Element {
     setOpenSermon(null);
     setOpenAnnotations(null);
     setIntro(null);
+    setAbout(null);
   };
 
   // Open a book's introduction over the reader, closing anything open on it.
@@ -419,7 +432,18 @@ export function ReaderView(): JSX.Element {
     setOpenSermon(null);
     setOpenAnnotations(null);
     setNotesMenu(null);
+    setAbout(null);
     setIntro({ source, trigger });
+  };
+
+  // Open a Bible's About page over the reader, closing anything open on it.
+  const openAbout = (source: string, trigger: HTMLElement) => {
+    setOpenNote(null);
+    setOpenSermon(null);
+    setOpenAnnotations(null);
+    setNotesMenu(null);
+    setIntro(null);
+    setAbout({ source, trigger });
   };
 
   // Bottom-of-chapter nav: go to the chapter, then start reading it from the top.
@@ -874,24 +898,48 @@ export function ReaderView(): JSX.Element {
                   Notes ▾
                 </button>
               )}
+              {/* Each study Bible's own buttons together: the book's introduction, then the
+                  Bible's About page. */}
               {introSources.map((code, i) => {
                 const listed = introLists[i];
-                if (listed?.isSuccess && !introductionFor(listed.data, chapterBook)) return null;
+                const hasIntro = !(listed?.isSuccess && !introductionFor(listed.data, chapterBook));
+                const aboutListed = aboutLists[i];
+                const hasAbout = !(
+                  aboutListed?.isSuccess && aboutGroups(aboutListed.data).length === 0
+                );
                 const own = code === translation;
                 const bookName = selectedBook?.name ?? chapterBook;
+                const button =
+                  "rounded border border-gray-300 dark:border-gray-600 px-2 py-0.5 font-sans text-xs text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700";
                 return (
-                  <button
-                    key={code}
-                    type="button"
-                    className="rounded border border-gray-300 dark:border-gray-600 px-2 py-0.5 font-sans text-xs text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
-                    onClick={(e) => openIntro(code, e.currentTarget)}
-                    aria-haspopup="dialog"
-                    aria-label={
-                      own ? `Introduction to ${bookName}` : `${code}'s introduction to ${bookName}`
-                    }
-                  >
-                    {own ? "Introduction" : `${code} introduction`}
-                  </button>
+                  <Fragment key={code}>
+                    {hasIntro && (
+                      <button
+                        type="button"
+                        className={button}
+                        onClick={(e) => openIntro(code, e.currentTarget)}
+                        aria-haspopup="dialog"
+                        aria-label={
+                          own
+                            ? `Introduction to ${bookName}`
+                            : `${code}'s introduction to ${bookName}`
+                        }
+                      >
+                        {own ? "Introduction" : `${code} introduction`}
+                      </button>
+                    )}
+                    {hasAbout && (
+                      <button
+                        type="button"
+                        className={button}
+                        onClick={(e) => openAbout(code, e.currentTarget)}
+                        aria-haspopup="dialog"
+                        title={`${code}'s front matter, reading plan and notes on the edition`}
+                      >
+                        About {code}
+                      </button>
+                    )}
+                  </Fragment>
                 );
               })}
             </div>
@@ -1275,6 +1323,25 @@ export function ReaderView(): JSX.Element {
           onClose={() => {
             const trigger = intro.trigger;
             setIntro(null);
+            // Without scrolling to it: the reader stays on the line it was at.
+            requestAnimationFrame(() => trigger.focus({ preventScroll: true }));
+          }}
+        />
+      )}
+
+      {about && (
+        <BibleAbout
+          key={about.source}
+          translation={about.source}
+          name={translations.find((t) => t.id === about.source)?.name ?? about.source}
+          backTo={chapterQuery.data?.reference ?? `${selectedBook?.name ?? book} ${chapter}`}
+          initialPlace={aboutPlaces.current.get(about.source)}
+          onPlaceChange={(place) => aboutPlaces.current.set(about.source, place)}
+          // A link jumps the reader there and closes the view, as an introduction's does.
+          onJump={(b, c, v) => navigate(b, c, v)}
+          onClose={() => {
+            const trigger = about.trigger;
+            setAbout(null);
             // Without scrolling to it: the reader stays on the line it was at.
             requestAnimationFrame(() => trigger.focus({ preventScroll: true }));
           }}
