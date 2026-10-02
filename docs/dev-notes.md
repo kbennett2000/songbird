@@ -4,6 +4,102 @@ A running log of per-slice decisions, gotchas, and how each slice was verified. 
 
 ---
 
+## v1.8 slice E — Concord pin → v1.3.0
+
+- **Date:** 2026-10-02
+- **Branch:** `slice/v1.8-concord-v1.3.0`
+- **Spec:** `docs/v1.8/STUDY-BIBLE-SPEC.md` §1, §2 (the slice E row), §4–§7 ("An older Concord"),
+  §8 (the pin rule) and §9 (slice E's acceptance, new); `docs/v1/SPEC.md` §12, translator's notes.
+
+### Why
+
+Concord v1.3.0, its v8 release, is published: tag `v1.3.0` and
+`ghcr.io/kbennett2000/concord:v1.3.0`. Every v1.8 slice was built against Kris's own Concord, with
+the pin left at v1.2.0 and the new fields covered only by songbird's own tests (§8's rule). This
+moves every pin and lets the contract test check what v1.8 reads. The template is "Slice 0 (v1.6)
+— Concord pin → v1.2.0", plus the pin that slice missed.
+
+### What changed
+
+- **`docker-compose.yml`:** the bundled engine `v1.2.0` → **`v1.3.0`**.
+- **`.github/workflows/nightly-concord.yml`:** `v1.1.0` → **`v1.3.0`**. It was never moved to
+  v1.2.0: the v1.6 Slice 0 entry lists exactly three changes and this wasn't one. The comment
+  promising that "Slice 2 unifies this" (it never did) now says the contract test checks it.
+- **`backend/tests/fixtures/concord-openapi.json`:** byte for byte Concord's `docs/openapi.json` at
+  tag `v1.3.0` (sha256 `fc57707a…`, the same from the local checkout and from GitHub). A clean
+  superset of v1.2.0's:
+  - 27 → 30 paths (assets, documents, one document) and 4 → 23 schemas;
+  - `source` added to `/v1/topics`;
+  - nothing removed, and `HealthResponse` unchanged.
+- **`backend/tests/concord_contract_test.py`:**
+  - the version is `1.3.0`;
+  - `_REQUIRED_ENDPOINTS` gains the three new paths, and the "Not yet…" comment goes;
+  - **every field songbird reads:** each of 16 models in `concord/schemas.py` (translations,
+    notes, note search, documents, topics) must find all its fields in Concord's schema of the same
+    name; Concord calls `TopicSourceCount` `TopicSourceTotal`;
+  - the v8 fields spelled out too, so a model edit can't quietly shrink the check;
+  - `/documents` takes `kind` and `book`, and assets serve `image/jpeg` and `image/png`;
+  - **new guard, `test_every_pin_names_the_fixture_version`:** the compose file and the nightly
+    must both name `concord:v<fixture version>`. It would have caught the nightly's drift.
+- **`backend/tests/live_concord_test.py`** (nightly, `-m concord`), with three new checks:
+  - every translation's `note_count` and `document_count` are integers;
+  - topics carry `source`, `?source=` keeps to one index, and an unknown index is a not-found;
+  - a translation's documents parse, and an unknown document or picture is a not-found.
+- **No model change.** Every v8 field keeps its `None` / `[]` default although v1.3.0 marks them
+  required, so v1.2.0 and older still work; their tests are unchanged.
+- **Docs:**
+  - §1's topic order: Concord v1.3.0 orders by name ignoring case. Both the published image and
+    Kris's Concord do, so the Verse Finder and Nave's interleave in one alphabet.
+  - "The pinned v1.2.0" became "v1.2.0 and before" throughout.
+  - SPEC §12's NET caveat named a `v1.1.0` pin and an "unavailable" notice that had gone long
+    since.
+  - The screenshot script's comments say "the stock image".
+  - **The README names no Concord version anywhere,** so it needed nothing.
+
+### Gotchas
+
+- **Concord's OpenAPI doesn't list the assets endpoint's 304,** though Concord sends one on
+  `If-None-Match`. The contract test checks only the 200's media types; `chart_images_test.py`
+  covers the 304.
+- **`/v1/topics` takes at most 100 a page** (a 422 above), worth knowing when surveying.
+- **The new live checks need a v8 Concord.** Against v1.2.0 the counts are missing, so they
+  would fail; the nightly runs the pin.
+
+### The slice before this, on the server
+
+PR #155 (follow-up 6, the letter row) is live on Kris's server: `main` at `c3ec2cb`, and the live
+`index.html` names the image's `assets/index-CZ7W7FE6.js`. It shipped with no migration.
+
+It was walked through on the server's own build: a `--rm` throwaway of the new image against Kris's
+Concord, with a temporary folder, reached through an SSH tunnel. Headless Chromium, 390×844 and
+1280×800, light and dark:
+- **The row:** the same results as the local pass. 22 letters, two rows on a phone (32.5 × 36 px),
+  one on a desktop (25.6 × 36 px), as wide as the header, no sideways scroll.
+- **Every letter:** 21 put their first heading 8 px below the row; Y scrolls the body to its end.
+- **Elsewhere:** the other six documents and Genesis's introduction show no row, and the plan
+  shows Month. On KJV with EMB ticked, and from Settings, the same row, and a reference jumps the
+  reader. No page errors.
+- **Timing:** on a phone with the CPU slowed 4×, a second throwaway of the image it replaced gave
+  the same times within noise. Opening the Verse Finder took 566–614 ms the first time against
+  603–618 before, and 360–409 ms after that against 328–386. These include the SSH tunnel, so they
+  sit above follow-up 5's figures.
+
+Both throwaways, their folders and the old image's tag were removed afterwards.
+
+### How it was verified
+
+- **The gate:** `make check` and `make check-frontend` green (counts in the PR). The contract test
+  has 10 tests (was 4).
+- **Live, against the published image:** `docker run --rm -p 127.0.0.1:18100:8000
+  ghcr.io/kbennett2000/concord:v1.3.0`, then `CONCORD_BASE_URL=http://127.0.0.1:18100 pytest -m
+  concord`: 7 passed (3 before, 4 new). The image has 15 translations whose counts are all 0, Nave's
+  as its only source, an empty documents list, and 404s for an unknown document or picture. The
+  same 7 pass against Kris's Concord, which has EMB.
+- **Nothing on the server was touched** for this slice, and its leftover `songbird-concord-1` was
+  left alone.
+
+---
+
 ## v1.8 follow-up 6 — a row of letters on a long alphabetical document
 
 - **Date:** 2026-10-02

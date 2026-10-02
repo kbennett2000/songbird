@@ -85,6 +85,10 @@ This project follows [Keep a Changelog](https://keepachangelog.com/) and
   every page. That takes four things off the top bar and the reader's bar, which on a phone is a
   whole line of controls. Settings also offers **Match this device**, which follows your phone or
   computer's own light or dark setting; the old switch couldn't get back to it.
+- **The included Scripture engine is now Concord 1.3.0,** the first that can carry a study Bible
+  you own. The one included carries none, so what you see doesn't change; starting songbird the
+  usual way fetches it. If you run your own Concord, songbird still works with an older one, but a
+  study Bible's notes, charts, introductions and About page need 1.3.0 or later.
 
 ### Fixed
 - **A long note opens where there's room to read it.** Tapping a note low on the screen used to

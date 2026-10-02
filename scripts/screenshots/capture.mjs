@@ -290,7 +290,7 @@ async function captureReader(page) {
 // Sermon notes: open the seeded Psalm 23 sermon (a chapter-top passage, so no scroll is needed —
 // the floating popover dismisses on any scroll) and frame the passage column with its popover.
 // We clip to the reading column (the top toolbar carries a translator's-notes notice that only
-// applies when Concord serves NET, which the stock v1.1.0 image does not — out of frame here).
+// applies when Concord serves NET, which the stock image does not — out of frame here).
 async function captureSermon(page) {
   await page.goto(`${BASE}/read?book=PSA&chapter=23`, {
     waitUntil: "networkidle",
@@ -306,11 +306,11 @@ async function captureSermon(page) {
   await page.waitForTimeout(400);
   // Clip to the reading column: from just above verse 1 through the bottom of the popover, and
   // below the toolbar's translator's-notes notice (only meaningful when Concord serves NET, which
-  // the stock v1.1.0 image doesn't) so the sermon popover is the subject.
+  // the stock image doesn't) so the sermon popover is the subject.
   const verseBox = await page.locator("#v-1").boundingBox();
   const lastBox = await page.locator('[id^="v-"]').last().boundingBox();
   const popBox = await page.getByRole("dialog").boundingBox();
-  // The notice is always present in the default stack (the stock v1.1.0 image has no NET) — wait for it so
+  // The notice is always present in the default stack (the stock image has no NET) — wait for it so
   // its box is measured reliably, then start the clip just below it. Tolerate its absence (a future
   // Concord that serves NET) by falling back to just above verse 1.
   const notice = page.getByText("Translator", { exact: false }).first();
