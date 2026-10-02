@@ -7,7 +7,7 @@ API surface (this is where annotation overlay attaches in later slices).
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Header, Response
+from fastapi import APIRouter, Depends, Header, Query, Response
 
 from songbird.api.deps import get_concord_client
 from songbird.concord.client import (
@@ -16,7 +16,7 @@ from songbird.concord.client import (
     ConcordNotFoundError,
     ConcordUnreachableError,
 )
-from songbird.concord.schemas import TranslationsResponse
+from songbird.concord.schemas import Document, DocumentsResponse, TranslationsResponse
 from songbird.core.errors import ErrorCode, raise_http
 
 router = APIRouter(prefix="/api/v1", tags=["concord"])
@@ -101,3 +101,45 @@ async def translation_asset(
     return Response(
         content=asset.content, media_type=asset.media_type, headers=_image_headers(asset)
     )
+
+
+@router.get("/translations/{translation}/documents", response_model=DocumentsResponse)
+async def list_documents(
+    translation: str,
+    kind: Annotated[str | None, Query()] = None,
+    book: Annotated[str | None, Query()] = None,
+    concord: ConcordClient = Depends(get_concord_client),
+) -> DocumentsResponse:
+    """A translation's documents — its book introductions and the like — passed through from
+    Concord at request time (ADR-0012), filtered by `kind` and `book`. songbird stores none of
+    them (invariants 1 and 5). An unknown translation, kind or book, or a Concord that predates
+    documents, is a 404; an unreachable Concord is a 502 (invariant 3)."""
+    if translation in (".", ".."):
+        raise_http(404, ErrorCode.NOT_FOUND, f"No documents in {translation}")
+    try:
+        return await concord.list_documents(translation, kind=kind, book=book)
+    except ConcordNotFoundError as exc:
+        raise_http(404, ErrorCode.NOT_FOUND, str(exc))
+    except ConcordUnreachableError as exc:
+        raise_http(502, ErrorCode.CONCORD_UNREACHABLE, str(exc))
+
+
+@router.get("/translations/{translation}/documents/{slug}", response_model=Document)
+async def get_document(
+    translation: str,
+    slug: str,
+    concord: ConcordClient = Depends(get_concord_client),
+) -> Document:
+    """One document — a book's introduction — passed through from Concord at request time:
+    its Markdown text and the pictures it places, which the browser fetches through the assets
+    route. songbird stores none of it (invariants 1 and 5). `.` and `..` are refused before any
+    call, so neither can become a different Concord path; a slug Concord lacks is a 404, and an
+    unreachable Concord a 502 (invariant 3)."""
+    if translation in (".", "..") or slug in (".", ".."):
+        raise_http(404, ErrorCode.NOT_FOUND, f"No document '{slug}' in {translation}")
+    try:
+        return await concord.get_document(translation, slug)
+    except ConcordNotFoundError as exc:
+        raise_http(404, ErrorCode.NOT_FOUND, str(exc))
+    except ConcordUnreachableError as exc:
+        raise_http(502, ErrorCode.CONCORD_UNREACHABLE, str(exc))

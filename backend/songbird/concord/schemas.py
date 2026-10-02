@@ -16,6 +16,9 @@ class Translation(BaseModel):
     # How many notes Concord has loaded for this translation (Concord v8, ADR-0011). Any
     # translation above 0 is a notes source. None = a Concord that predates the field.
     note_count: int | None = None
+    # How many documents (book introductions, front matter …) Concord has for this translation
+    # (Concord ADR-0012, V8-S5). None = a Concord that predates the field.
+    document_count: int | None = None
 
 
 class TranslationsResponse(BaseModel):
@@ -491,3 +494,50 @@ class NoteSearchResponse(BaseModel):
     # How many notes match in all, across every page (Concord v1.2.0 sends it). Tolerant: without
     # it, the caller treats this page as the last.
     total: int | None = None
+
+
+class DocumentSummary(BaseModel):
+    """One of a translation's documents, as Concord lists it (ADR-0012): a book's introduction,
+    front matter, a reading plan or an about page. `book` is a book introduction's USFM code, and
+    null for the other kinds."""
+
+    slug: str
+    kind: str
+    title: str
+    book: str | None = None
+    ordinal: int
+
+
+class DocumentsResponse(BaseModel):
+    """A translation's documents, filtered by `kind` and `book` (echoed, null when not given).
+    No paging: a translation has tens of documents. None at all is a normal empty 200."""
+
+    translation: str
+    book: str | None = None
+    kind: str | None = None
+    total: int
+    documents: list[DocumentSummary]
+
+
+class DocumentImage(BaseModel):
+    """A picture a document's text places (`![alt](asset:NAME)`), with its pixel size, so a client
+    can lay the figure out before fetching it from the assets endpoint."""
+
+    name: str
+    media_type: str
+    width: int
+    height: int
+
+
+class Document(BaseModel):
+    """One document: its text is Markdown (CommonMark) carrying `ref:` links and `asset:`
+    pictures."""
+
+    translation: str
+    slug: str
+    kind: str
+    title: str
+    book: str | None = None
+    ordinal: int
+    text: str
+    images: list[DocumentImage] = []
