@@ -4,6 +4,96 @@ A running log of per-slice decisions, gotchas, and how each slice was verified. 
 
 ---
 
+## v1.8 follow-up 4 — five reading fixes
+
+- **Date:** 2026-10-02
+- **Branch:** `slice/v1.8-reading-fixes`
+- **Spec:** `docs/v1.8/STUDY-BIBLE-SPEC.md` §3 (a dated line under *The note view*).
+
+### Why
+
+Two earlier looks at EMB's articles, topics and boxes (the "first look" and "topics and
+Perspectives boxes" entries below) found five things wrong with songbird's reading. Kris approved
+fixing all five, with the box's width and the markers' looks left as they are:
+1. A long note opened below its marker whenever 160 px were free there, even with far more room
+   above, so an article tapped low on the screen got a box about 200 px tall.
+2. Two markers side by side read as one number ("12").
+3. A note's title, its `##` and `###` headings and its bold opening words all looked the same.
+4. A long line of poetry wrapped flush left, so it read as two lines of the poem.
+5. After a jump, the address bar kept the old chapter, so a reload went back.
+
+### What landed
+
+- **`Popover`:** below if the whole box fits there, otherwise the side with more room. A short note
+  low on the screen still opens below, exactly as before. The rule is shared by every popover:
+  - a Bible's note
+  - one or several of your notes on a verse
+  - one or several sermon notes
+  - the **Notes ▾** menu
+
+  Each changes only when it is taller than the room below.
+- **`VerseText`:** a marker that directly follows another gets `ml-[0.3em]` (about 4 px). The first
+  of a run, and a marker after words, sit where they always did, and the looks are untouched.
+- **`NoteMarkdown`, headings:** each level has its own look, sized in `em` so it scales with the
+  text around it. The headings stay `<p>` inside the note box.
+  - `#` and `##`: 1.07em semibold with a hairline rule under them.
+  - `###` and below: 0.85em semibold small capitals, muted.
+  - The note's title (`NotePopover`): 16 px bold.
+  - Bold opening words: unchanged.
+- **`NoteMarkdown`, poetry:** a paragraph whose hard breaks make two or more lines of words is
+  poetry. A last line that is only its `ref:` reference, in brackets or not, isn't counted. Each line
+  becomes a block with a hanging indent (`pl-[1.5em] -indent-[1.5em]`).
+  - A topic's one-line prose quotation and its reference isn't poetry, so it keeps its plain break.
+  - Ref buttons inside an indented line aren't shifted: browsers give buttons `text-indent: 0`.
+- **`ReaderView`:** one effect writes `?book=&chapter=` (plus `&verse=` after a jump to a verse) with
+  `replace`, whenever the reader's place differs from the address.
+  - The verse stays after its highlight fades, so a reload goes back to it.
+  - Back still leaves the reader.
+  - Every way of moving goes through `navigate()`, so all of them now update the address: the
+    dropdowns, Prev and Next, the Jump box, cross-references, topics, word study, places, the map
+    and `ref:` links.
+- **No API or database change.**
+
+### Gotchas
+
+- **Nothing tested the popover's placement before.** happy-dom lays nothing out, so `Popover.test.tsx`
+  gives the window's size, the marker's rect and the box's `offsetHeight` (a getter spied on the
+  prototype). The "tall box, 170 px below, 500 above" case fails on the old rule.
+- **Prettier reformats whole files,** and `VerseText.test.tsx`, `NotePopover.test.tsx` and
+  `ReaderView.tsx` weren't Prettier-clean before. Only files that were already clean were run through
+  it.
+- **The reader's test books are Luke, John and Acts,** so a test that presses Next after a jump has to
+  jump within them.
+
+### How it was verified
+
+- **Tests:**
+  - `Popover.test.tsx` (4).
+  - `VerseText.test.tsx`: the gap only between markers.
+  - `NoteMarkdown.test.tsx`: each heading level's look; poetry, poetry in a quote, a timeline entry,
+    a one-line quotation, prose.
+  - `NotePopover.test.tsx`: the title's look.
+  - `ReaderView.test.tsx`: the address after the Jump box, after Next, and after a note's `ref:`
+    link.
+  - The placement test and both address tests fail on the old code.
+- **The gate:** `make check` and `make check-frontend` green (counts in the PR).
+- **In a browser, before the PR:** a local build against Kris's Concord, with a scratch database, in
+  headless Chromium. Numbers only; nothing is quoted here.
+  1. **The box:** EMB, Genesis 35:21's "Someone You Should Know" at 390×844, with the marker 633 px
+     down. It opens above, 619 px tall (the article is 3.1 boxfuls).
+  2. **The gap:** NET, Psalm 23:6's two markers. The gap is 3.8 px.
+  3. **The headings:** EMB, Job 4:1's article, at 1280 and 390, light and dark.
+     - Title: 16 px / 700.
+     - `##`: 15 px / 600 with a 1 px rule.
+     - `###`: 11.9 px / 600 in capitals, grey.
+     - Bold opening words: 14 px / 700.
+  4. **The poetry:** EMB, Genesis 1:18's topic at 390. A wrapped line's second part starts 21 px in.
+  5. **The address:** KJV, Genesis 1, then the Jump box with "John 3:16":
+     `?book=JHN&chapter=3&verse=16`. A reload opens John 3, with verse 16 in view.
+  6. **Overall:** no page errors.
+
+---
+
 ## v1.8 slice B follow-up — the chart viewer's first frame
 
 - **Date:** 2026-10-02

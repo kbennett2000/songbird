@@ -64,7 +64,8 @@ tucked into the margin on the right.
 **Next →** walk you one chapter at a time. You'll find a second pair at the bottom of each chapter,
 so when you finish reading you can go straight on, and the next chapter opens at its first verse.
 In a hurry? The **Jump to…** box understands plain
-references — type something like `John 3` or `Gen 1:1` and press **Go**.
+references — type something like `John 3` or `Gen 1:1` and press **Go**. The address bar follows
+you as you read, so reloading the page or bookmarking it keeps your place.
 
 **Switching translations.** A *translation* is one English wording of the Bible — songbird offers
 several (WEB, KJV, and more). Pick a different one from the **Translation** dropdown and the text
