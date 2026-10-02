@@ -136,6 +136,8 @@ async def study_notes_search(
             snippet=h.snippet,
             label=h.label,
             text_format=h.text_format,
+            title=h.title,
+            image=h.image,
         )
         for h in result.hits
     ]

@@ -7,6 +7,7 @@ clear error rather than falling back.
 """
 
 import logging
+from dataclasses import dataclass
 from typing import Any
 from urllib.parse import quote
 
@@ -110,6 +111,20 @@ class ConcordNotFoundError(Exception):
 
     def __init__(self, message: str) -> None:
         super().__init__(message)
+
+
+@dataclass(frozen=True)
+class ConcordAsset:
+    """One of a translation's images as Concord answered for it (ADR-0012): the bytes and the
+    headers a browser needs to cache them, or — `not_modified` — Concord's 304 for an ETag the
+    browser already holds, with no bytes. Held only while a request passes it on."""
+
+    not_modified: bool
+    content: bytes
+    media_type: str | None
+    etag: str | None
+    cache_control: str | None
+    vary: str | None
 
 
 class ConcordClient:
@@ -562,6 +577,42 @@ class ConcordClient:
         except httpx.HTTPError as exc:
             raise ConcordUnreachableError(self._base_url, exc) from exc
         return NotesResponse.model_validate(response.json())
+
+    async def get_asset(
+        self, translation: str, name: str, *, if_none_match: str | None = None
+    ) -> ConcordAsset:
+        """One of a translation's images (a chart's picture) from Concord's
+        `/v1/translations/{translation}/assets/{name}` (ADR-0012) — songbird stores none. The
+        browser's `If-None-Match` is forwarded, and Concord's 304 comes back as `not_modified`
+        (handled before `raise_for_status`, which raises on any 3xx). A 404 — an unknown
+        translation or a name it lacks, whatever its shape — is a not-found; anything else is
+        unreachability."""
+        headers = {"If-None-Match": if_none_match} if if_none_match else None
+        try:
+            response = await self._client.get(
+                f"/v1/translations/{quote(translation, safe='')}/assets/{quote(name, safe='')}",
+                headers=headers,
+            )
+            if response.status_code != 304:
+                response.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code == 404:
+                raise ConcordNotFoundError(
+                    f"Concord has no image '{name}' (in {translation})"
+                ) from exc
+            raise ConcordUnreachableError(self._base_url, exc) from exc
+        except httpx.HTTPError as exc:
+            raise ConcordUnreachableError(self._base_url, exc) from exc
+        not_modified = response.status_code == 304
+        content_type = response.headers.get("content-type")
+        return ConcordAsset(
+            not_modified=not_modified,
+            content=b"" if not_modified else response.content,
+            media_type=content_type.split(";")[0].strip().lower() if content_type else None,
+            etag=response.headers.get("etag"),
+            cache_control=response.headers.get("cache-control"),
+            vary=response.headers.get("vary"),
+        )
 
     async def get_headings(self, translation: str, book: str, chapter: int) -> HeadingsResponse:
         """Section headings for a whole chapter in one translation, from Concord (songbird
