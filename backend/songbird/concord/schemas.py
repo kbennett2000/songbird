@@ -482,3 +482,6 @@ class NoteSearchHit(BaseModel):
 
 class NoteSearchResponse(BaseModel):
     hits: list[NoteSearchHit]
+    # How many notes match in all, across every page (Concord v1.2.0 sends it). Tolerant: without
+    # it, the caller treats this page as the last.
+    total: int | None = None

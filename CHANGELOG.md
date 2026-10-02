@@ -40,6 +40,11 @@ This project follows [Keep a Changelog](https://keepachangelog.com/) and
   Man's Bible's are rose numbers in a little square. The difference is in the shape as well as the
   colour, so it holds in dark mode and for colour-blind eyes. Settings and the **Notes ▾** menu show
   each Bible's mark beside its name, and an open note names its Bible at the top.
+- **Every study note a search finds, and a choice of whose.** The Search page used to stop at 20 study
+  notes, so the Every Man's Bible's rarely showed up beside NET's far larger set. Now it says how many
+  there are in all (*20 of 242*), and **Load more** brings the next 20. When more than one Bible has
+  notes, a **From:** row lets you search just one Bible's notes, or **All** of them. If your Scripture
+  engine can't be reached, the study notes now say so instead of quietly showing nothing.
 
 ### Changed
 - **A Settings page, and a less crowded top of the screen.** Light or dark, which Bibles' notes to

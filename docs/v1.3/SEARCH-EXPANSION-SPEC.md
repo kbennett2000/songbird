@@ -263,6 +263,9 @@ contract test now pins `/v1/notes/search`; tests/types/lint green.
 
 - Notes-search filters (`type`, `book`, `translation`) — the endpoint supports them; the v1 of
   Feature B is q-only.
+  - *2026-10-02 (v1.8):* the `translation` filter and paging (`limit`/`offset` with the total) have
+    landed, and an outage is now the section's error rather than an empty list. `type` and `book`
+    are still deferred. See `docs/v1/SPEC.md` §12, "Study-notes search".
 - Semantic search *of notes* — awaits a Concord embed-arbitrary-text endpoint (does not exist).
 - Keyword search `book` filter in the UI, semantic `min_score`, cross-ref `min_votes`/paging —
   parameter-level completeness, not part of this work.

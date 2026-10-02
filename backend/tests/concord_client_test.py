@@ -394,6 +394,7 @@ async def test_search_notes_hits_v1_notes_search_and_parses() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         seen["path"] = request.url.path
         seen["q"] = request.url.params.get("q", "")
+        seen["params"] = dict(request.url.params)
         seen["timeout"] = request.extensions.get("timeout")
         # The real Concord /v1/notes/search body: a `hits` array of notes with canonical coords, a
         # `translation`, a `type`, and a `snippet` with the match wrapped in <mark>…</mark>.
@@ -438,6 +439,34 @@ async def test_search_notes_hits_v1_notes_search_and_parses() -> None:
         "sn",
     )
     assert hit.snippet is not None and "<mark>love</mark>" in hit.snippet
+    assert result.total == 1
+    # The first page of every Bible's notes, by default.
+    assert seen["params"] == {"q": "love", "limit": "20", "offset": "0"}
+
+
+async def test_search_notes_sends_the_page_and_the_bible() -> None:
+    seen: dict[str, str] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.update(dict(request.url.params))
+        return httpx.Response(200, json={"query": "love", "total": 0, "hits": []})
+
+    client = ConcordClient("http://concord.test", transport=httpx.MockTransport(handler))
+    result = await client.search_notes("love", translation="EMB", limit=100, offset=200)
+    await client.aclose()
+    assert seen == {"q": "love", "translation": "EMB", "limit": "100", "offset": "200"}
+    assert (result.hits, result.total) == ([], 0)
+
+
+async def test_search_notes_404_is_not_found() -> None:
+    # A Bible Concord doesn't hold (`translation=ZZZ`) is a 404: not-found, never an outage.
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(404, json={"detail": "Not Found"})
+
+    client = ConcordClient("http://concord.test", transport=httpx.MockTransport(handler))
+    with pytest.raises(ConcordNotFoundError):
+        await client.search_notes("love", translation="ZZZ")
+    await client.aclose()
 
 
 async def test_semantic_search_422_is_not_found() -> None:

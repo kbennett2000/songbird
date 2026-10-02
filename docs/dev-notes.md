@@ -4,6 +4,104 @@ A running log of per-slice decisions, gotchas, and how each slice was verified. 
 
 ---
 
+## v1.8 follow-up 3 — study-note search: pages and a per-Bible filter
+
+- **Date:** 2026-10-02
+- **Branch:** `slice/v1.8-study-notes-paging`
+- **Spec:** `docs/v1/SPEC.md` §12, "Study-notes search"; a dated note in
+  `docs/v1.3/SEARCH-EXPANSION-SPEC.md`, "What's deferred".
+
+### Why
+
+The Search page showed at most 20 study-note results, and NET has about eight times as many notes
+as EMB, so EMB's rarely appeared. Kris asked for pages and a filter for which Bible's notes to
+search. Concord's `/v1/notes/search` already took `translation`, `limit` (≤ 100) and `offset` and
+returned `total`, in the pinned v1.2.0 too (checked on the server's bundled `songbird-concord-1`:
+`total` is there, and a Bible it doesn't hold is a 404). Songbird passed only `q` and returned a
+bare list.
+
+### Do the Scripture results have the same cap?
+
+Yes, and nothing changed there. Both modes stop at 20 with no way to see more:
+- **Keyword:** the page always sends `limit=20`, and `/api/v1/keyword-search` has no `offset`.
+  Concord's `/v1/search` could page (it takes `offset` and returns `total`, which songbird's parse
+  model drops).
+- **Meaning:** also 20, and Concord's `/v1/semantic-search` has no `offset` at all, so paging it
+  needs a Concord change first.
+- **Your notes** has no cap.
+
+### What landed
+
+- **API:** `GET /api/v1/study-notes-search?q=&translation=&limit=20&offset=0` returns
+  `StudyNotesPageOut {results, total}`, shaped like `PlacesPageOut`.
+  - `limit` 1–100 and `offset` ≥ 0 are validated (422).
+  - `translation` must look like a Bible code, and is upper-cased.
+  - A Concord without `total` makes this page the last.
+- **Errors:**
+  - A query Concord can't run (FTS5 punctuation) or a Bible it doesn't hold is an empty page.
+  - **An unreachable Concord is now a 502**, like keyword search. It used to be swallowed to `[]`
+    so the section never showed. Now the section has an empty state, and a swallowed outage would
+    read as "nothing matches" (invariant 3).
+- **Page** (`SearchView.tsx`):
+  - `useInfiniteQuery`, 20 a page, "20 of 242" and **Load more**, the Places/Topics pattern.
+  - With two or more notes Bibles, a **From:** row of pill radios (All, then each Bible with its
+    `NoteLookSwatch`). On a 390 px phone the three pills fit on one line.
+  - Each hit's Bible code wears its look chip.
+  - Empty: "No study notes match “q”." / "No EMB notes match “q”.", with the filter still there.
+  - Error: "Couldn’t search the study notes (is Concord reachable?)." in the section only.
+  - A Concord with no notes at all still hides the section, as before.
+- **No screenshot:** study-note results are NET and EMB text.
+- **No database change.**
+
+### Gotchas
+
+- **Going back to a filter shows what was loaded there.** TanStack Query keeps each filter's pages,
+  so All → EMB → All shows the 40 already loaded under All (refetched in place), not just the
+  first 20. Each new query or new filter starts at the first page.
+- **Testing Library's `getByText` matches an element's own text nodes,** so a From pill ("EMB",
+  beside its swatch) and a hit's Bible chip both matched "EMB". The test now looks inside the
+  results list.
+
+### The slice before this, on the server
+
+PR #145 (each Bible's look) was deployed to Kris's server on 2026-10-02: no migration, the live
+`index.html` served the new build, and alembic head stayed `0015`. Checked in headless Chromium
+against a throwaway container built from the server's image, with its own empty database:
+- KJV Malachi 2:16 with EMB and NET ticked: NET's plain violet and EMB's rose squares, at 390 px and
+  1280 px, light and dark; an EMB note's chip; the Notes menu and Settings keys.
+- Ticking NET on and off five times keeps exactly 3 EMB markers (before the fix: 3 → 10).
+- Verse heights match today's violet marker in 4 chapters at both widths, as measured locally.
+- No sideways overflow and no page errors.
+
+### How it was verified
+
+- **Backend** (`notes_search_test.py`, 14 tests):
+  - the page shape and total;
+  - the default request;
+  - `translation`, `limit` and `offset` passed through and upper-cased;
+  - no total meaning the last page;
+  - a blank query makes no call;
+  - a 400 is an empty page and an outage a 502;
+  - six bad parameters each get a 422.
+- **Client** (`concord_client_test.py`): the params sent, `total` parsed, and a 404 as not-found.
+- **Frontend** (`SearchView.test.tsx`):
+  - 20 at a time through 45 to the end;
+  - From EMB asks for EMB from offset 0, and All comes back;
+  - both empty messages;
+  - an outage is the section's error while Scripture renders;
+  - no filter with one notes Bible;
+  - a new query keeps the Bible and starts again.
+- **The gate:** `make check` and `make check-frontend` green (counts in the PR).
+- **In a browser,** a local build against the LAN Concord with a scratch database:
+  - Songbird's totals match Concord's for "grace": 242 for all, 118 for EMB, 124 for NET.
+  - Pages don't overlap, and offset 240 returns the last 2.
+  - At 390 px and 1280 px, light and dark: Load more (20 → 40 of 242), From EMB (20 of 118, every
+    hit EMB), and "No EMB notes match “LXX”." No overflow and no page errors.
+  - Pointed at a Concord that isn't there, the API is a 502 and the section shows its error beside
+    Scripture's.
+
+---
+
 ## v1.8 follow-up 2 — each Bible's notes their own look (and a look at EMB's topics and boxes)
 
 - **Date:** 2026-10-02

@@ -529,15 +529,26 @@ class ConcordClient:
             raise ConcordUnreachableError(self._base_url, exc) from exc
         return HeadingsResponse.model_validate(response.json())
 
-    async def search_notes(self, q: str, limit: int = 20) -> NoteSearchResponse:
-        """Keyword-search Concord's translator's/study notes via `/v1/notes/search` (v1.1.0). v1 is
-        q-only — `type`/`book`/`translation` filters are deferred. Same error mapping and (slow-
-        search) read budget as `keyword_search`; the caller treats this as best-effort and swallows
-        any failure to empty, so the Study-notes section never degrades the rest of the page."""
+    async def search_notes(
+        self,
+        q: str,
+        *,
+        translation: str | None = None,
+        limit: int = 20,
+        offset: int = 0,
+    ) -> NoteSearchResponse:
+        """Keyword-search Concord's translator's/study notes via `/v1/notes/search` (v1.1.0), one
+        page at a time: `limit` (Concord allows 1–100) from `offset`, optionally only one Bible's
+        notes (`translation`). The `type` and `book` filters stay unused. Same error mapping and
+        (slow-search) read budget as `keyword_search`: a 400/404/422 (an FTS5-unrunnable query, a
+        Bible Concord doesn't hold) is not-found, anything else unreachable."""
+        params = {"q": q, "limit": str(limit), "offset": str(offset)}
+        if translation:
+            params["translation"] = translation
         try:
             response = await self._client.get(
                 "/v1/notes/search",
-                params={"q": q, "limit": str(limit)},
+                params=params,
                 timeout=_SEARCH_TIMEOUT,
             )
             response.raise_for_status()

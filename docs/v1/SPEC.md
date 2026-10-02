@@ -395,9 +395,15 @@ keyword search over Concord's translator's/study/text-critical notes via `/v1/no
 (`GET /api/v1/study-notes-search`), each hit tagged with its note type and a verse jump-link.
 _Caveat (same shape as translator's notes above):_ the stock Concord image ships **zero** notes
 (`/v1/notes/search` → `total: 0`), so on the default stack this section never appears — it renders
-**only** when a Concord build supplies notes. Best-effort: any failure is swallowed to an empty
-list, so it never degrades the rest of the page. (This is why it can't be screenshotted against
+**only** when a Concord build supplies notes. (This is why it can't be screenshotted against
 the stock image — see `docs/dev-notes.md`.) Specified in `docs/v1.3/SEARCH-EXPANSION-SPEC.md`.
+*Since v1.8* it is paged and filterable by Bible: the endpoint takes `translation`, `limit` (1–100)
+and `offset` and returns `{results, total}`; the section shows "20 of N" and **Load more**, and,
+with two or more notes Bibles, a **From:** row (All, then each Bible with its look) that searches
+one Bible's notes. A new query keeps the choice and starts from the first page. A query Concord
+can't run, or a Bible it doesn't hold, is an empty page ("No study notes match …", "No EMB notes
+match …"); an unreachable Concord is a 502 and the section's own error, never an empty list
+(invariant 3). The Scripture and *Your notes* sections are separate requests and unaffected.
 
 **Side-by-side compare.** A `/compare` view reads **up to three translations** in parallel
 columns, aligned by canonical verse number (the union of verses across columns; a verse a

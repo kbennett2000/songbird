@@ -22,7 +22,7 @@ import {
   type SermonNote,
   type StrongsDetail,
   type StrongsVerse,
-  type StudyNoteResult,
+  type StudyNotesPage,
   type TopicDetail,
   type TopicsPage,
   type TopicSummary,
@@ -56,7 +56,7 @@ import {
   topicVersesSchema,
   verseWordsSchema,
   sermonNoteSchema,
-  studyNoteResultsSchema,
+  studyNotesPageSchema,
   sermonNotesListSchema,
   tagsListSchema,
   translationsResponseSchema,
@@ -456,10 +456,16 @@ export async function searchAnnotations(q: string): Promise<Annotation[]> {
 
 /**
  * Keyword search over Concord's translator's/study notes — the "Study notes" section, distinct
- * from the user's own "Your notes". Best-effort: the backend swallows any failure to [], so this
- * resolves to an empty list (and the section won't render) rather than throwing.
+ * from the user's own "Your notes". One page (`limit` from `offset`) with the total across pages,
+ * optionally only one Bible's notes. A query Concord can't run is an empty page; an unreachable
+ * Concord throws (a 502), so the section can say so instead of showing "no matches".
  */
-export async function searchStudyNotes(q: string): Promise<StudyNoteResult[]> {
-  const data = await apiRequest<unknown>("GET", `/study-notes-search?q=${encodeURIComponent(q)}`);
-  return studyNoteResultsSchema.parse(data);
+export async function searchStudyNotes(
+  q: string,
+  { translation, offset = 0, limit = 20 }: { translation?: string; offset?: number; limit?: number } = {},
+): Promise<StudyNotesPage> {
+  const params = new URLSearchParams({ q, limit: String(limit), offset: String(offset) });
+  if (translation) params.set("translation", translation);
+  const data = await apiRequest<unknown>("GET", `/study-notes-search?${params.toString()}`);
+  return studyNotesPageSchema.parse(data);
 }

@@ -582,8 +582,13 @@ export const studyNoteResultSchema = z.object({
   label: z.string().nullish(), // Concord v8: the source's own name for the kind — the badge when set
   text_format: z.string().nullish(), // "markdown" → strip the syntax from the snippet
 });
-export const studyNoteResultsSchema = z.array(studyNoteResultSchema);
 export type StudyNoteResult = z.infer<typeof studyNoteResultSchema>;
+// One page of the study-notes search; `total` counts every page, so the page can "Load more".
+export const studyNotesPageSchema = z.object({
+  results: z.array(studyNoteResultSchema),
+  total: z.number(),
+});
+export type StudyNotesPage = z.infer<typeof studyNotesPageSchema>;
 
 // --- Import / Export (issue #41) ---
 

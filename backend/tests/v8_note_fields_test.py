@@ -180,7 +180,7 @@ async def test_study_notes_search_passes_label_and_format(
     )
     async with client_for(make_concord(note_search=NoteSearchResponse(hits=[hit]))) as client:
         resp = await client.get("/api/v1/study-notes-search", params={"q": "study"})
-    row = resp.json()[0]
+    row = resp.json()["results"][0]
     assert (row["label"], row["text_format"]) == ("Study Note", "markdown")
     assert row["snippet"] == "A *made-up* <mark>study</mark> note."  # stripping is the client's
 

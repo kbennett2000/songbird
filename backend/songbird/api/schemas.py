@@ -834,6 +834,14 @@ class StudyNoteResult(BaseModel):
     text_format: str | None  # "markdown" → the client strips Markdown syntax from the snippet
 
 
+class StudyNotesPageOut(BaseModel):
+    """One page of the study-notes search — `total` lets the Search page offer "Load more". Mirrors
+    PlacesPageOut: the client tracks limit/offset itself, so they aren't echoed here."""
+
+    results: list[StudyNoteResult]
+    total: int
+
+
 class ResolvedReference(BaseModel):
     """A raw reference resolved (by Concord) to canonical coordinates. `verse` is set only
     when the reference named a single verse (so the reader can scroll to / highlight it)."""

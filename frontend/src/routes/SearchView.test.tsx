@@ -28,6 +28,11 @@ function note(overrides: Record<string, unknown> = {}) {
   };
 }
 
+/** A study-notes search page as the API sends it: these hits, out of `total` in all. */
+function notesPage<T>(results: T[], total = results.length) {
+  return { results, total };
+}
+
 function renderSearch() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const Probe = () => <div>reader-at {useLocation().search}</div>;
@@ -349,7 +354,7 @@ describe("SearchView", () => {
         ]),
       ),
       http.get("/api/v1/annotations", () => HttpResponse.json([])),
-      http.get("/api/v1/study-notes-search", () => HttpResponse.json([])),
+      http.get("/api/v1/study-notes-search", () => HttpResponse.json(notesPage([]))),
     );
     const user = userEvent.setup();
     renderSearch();
@@ -370,7 +375,7 @@ describe("SearchView", () => {
       http.get("/api/v1/keyword-search", () => HttpResponse.json([])),
       http.get("/api/v1/annotations", () => HttpResponse.json([])),
       http.get("/api/v1/study-notes-search", () =>
-        HttpResponse.json([
+        HttpResponse.json(notesPage([
           {
             book: "JHN",
             chapter: 3,
@@ -380,7 +385,7 @@ describe("SearchView", () => {
             type: "sn",
             snippet: "The word for <mark>love</mark> is agape.",
           },
-        ]),
+        ])),
       ),
     );
     const user = userEvent.setup();
@@ -407,7 +412,7 @@ describe("SearchView", () => {
       http.get("/api/v1/keyword-search", () => HttpResponse.json([])),
       http.get("/api/v1/annotations", () => HttpResponse.json([])),
       http.get("/api/v1/study-notes-search", () =>
-        HttpResponse.json([
+        HttpResponse.json(notesPage([
           {
             book: "GEN",
             chapter: 1,
@@ -417,7 +422,7 @@ describe("SearchView", () => {
             type: "weird",
             snippet: "A <mark>note</mark>.",
           },
-        ]),
+        ])),
       ),
     );
     const user = userEvent.setup();
@@ -432,7 +437,7 @@ describe("SearchView", () => {
     expect(screen.queryByText("weird")).not.toBeInTheDocument();
   });
 
-  it("best-effort: an erroring Study-notes call leaves the section absent and the rest intact", async () => {
+  it("an outage shows the Study notes section's own error, and the rest of the page stays intact", async () => {
     server.use(
       // Study notes search runs in keyword mode; a keyword Scripture hit anchors the page.
       http.get("/api/v1/keyword-search", () =>
@@ -441,8 +446,12 @@ describe("SearchView", () => {
         ]),
       ),
       http.get("/api/v1/annotations", () => HttpResponse.json([])),
-      // The frontend treats this as best-effort; a failure must not surface or break the page.
-      http.get("/api/v1/study-notes-search", () => new HttpResponse(null, { status: 500 })),
+      http.get("/api/v1/study-notes-search", () =>
+        HttpResponse.json(
+          { detail: { code: "CONCORD_UNREACHABLE", message: "Concord is unreachable" } },
+          { status: 502 },
+        ),
+      ),
     );
     const user = userEvent.setup();
     renderSearch();
@@ -451,9 +460,14 @@ describe("SearchView", () => {
     await user.type(screen.getByLabelText("Search query"), "anxiety");
     await user.click(screen.getByRole("button", { name: "Search" }));
 
-    // Scripture still renders; no Study-notes section, no error text from it.
+    // Scripture still renders; the Study notes section says what went wrong, never "no matches"
+    // (invariant 3).
     expect(await screen.findByText("Proverbs 12:25")).toBeInTheDocument();
-    expect(screen.queryByRole("region", { name: "Study notes results" })).not.toBeInTheDocument();
+    const section = await screen.findByRole("region", { name: "Study notes results" });
+    expect(
+      await within(section).findByText("Couldn’t search the study notes (is Concord reachable?)."),
+    ).toBeInTheDocument();
+    expect(within(section).queryByText(/match/)).not.toBeInTheDocument();
   });
 
   it("unchecking Scripture excludes it from the search (scope, #62)", async () => {
@@ -468,7 +482,7 @@ describe("SearchView", () => {
         return HttpResponse.json([]);
       }),
       http.get("/api/v1/annotations", () => HttpResponse.json([note()])),
-      http.get("/api/v1/study-notes-search", () => HttpResponse.json([])),
+      http.get("/api/v1/study-notes-search", () => HttpResponse.json(notesPage([]))),
     );
     const user = userEvent.setup();
     renderSearch();
@@ -497,7 +511,7 @@ describe("SearchView", () => {
         notesCalled = true;
         return HttpResponse.json([note()]);
       }),
-      http.get("/api/v1/study-notes-search", () => HttpResponse.json([])),
+      http.get("/api/v1/study-notes-search", () => HttpResponse.json(notesPage([]))),
     );
     const user = userEvent.setup();
     renderSearch();
@@ -519,9 +533,9 @@ describe("SearchView", () => {
       http.get("/api/v1/annotations", () => HttpResponse.json([])),
       http.get("/api/v1/study-notes-search", () => {
         studyCalled = true;
-        return HttpResponse.json([
+        return HttpResponse.json(notesPage([
           { book: "JHN", chapter: 3, verse: 16, reference: "John 3:16", translation: "NET", type: "sn", snippet: "love" },
-        ]);
+        ]));
       }),
     );
     const user = userEvent.setup();
@@ -594,9 +608,9 @@ describe("SearchView", () => {
       }),
       http.get("/api/v1/study-notes-search", () => {
         studyCalled = true;
-        return HttpResponse.json([
+        return HttpResponse.json(notesPage([
           { book: "JHN", chapter: 3, verse: 16, reference: "John 3:16", translation: "NET", type: "sn", snippet: "x" },
-        ]);
+        ]));
       }),
     );
     const user = userEvent.setup();
@@ -657,12 +671,14 @@ describe("SearchView", () => {
       translationsWithNotes({ EMB: 9, KJV: 0, NET: 12 }),
       http.get("/api/v1/keyword-search", () => HttpResponse.json([])),
       http.get("/api/v1/annotations", () => HttpResponse.json([])),
-      http.get("/api/v1/study-notes-search", () => HttpResponse.json([EMB_HIT])),
+      http.get("/api/v1/study-notes-search", () => HttpResponse.json(notesPage([EMB_HIT]))),
     );
     const section = await searchStudyNotesFor("famine");
     expect(within(section).getByText("Study Note")).toBeInTheDocument();
     expect(within(section).queryByText("Study note")).not.toBeInTheDocument();
-    expect(await within(section).findByText("EMB")).toBeInTheDocument();
+    // The hit names its Bible in that Bible's look, the same as its markers in the reader.
+    const code = await within(within(section).getByRole("list")).findByText("EMB");
+    expect(code).toHaveAttribute("data-note-look", "rose-square");
   });
 
   it("shows a Markdown snippet without its syntax, highlights kept", async () => {
@@ -670,7 +686,7 @@ describe("SearchView", () => {
       translationsWithNotes({ EMB: 9, KJV: 0 }),
       http.get("/api/v1/keyword-search", () => HttpResponse.json([])),
       http.get("/api/v1/annotations", () => HttpResponse.json([])),
-      http.get("/api/v1/study-notes-search", () => HttpResponse.json([EMB_HIT])),
+      http.get("/api/v1/study-notes-search", () => HttpResponse.json(notesPage([EMB_HIT]))),
     );
     const section = await searchStudyNotesFor("famine");
     const mark = within(section).getByText("famine");
@@ -685,11 +701,13 @@ describe("SearchView", () => {
       translationsWithNotes({ EMB: 9, KJV: 0 }),
       http.get("/api/v1/keyword-search", () => HttpResponse.json([])),
       http.get("/api/v1/annotations", () => HttpResponse.json([])),
-      http.get("/api/v1/study-notes-search", () => HttpResponse.json([EMB_HIT])),
+      http.get("/api/v1/study-notes-search", () => HttpResponse.json(notesPage([EMB_HIT]))),
     );
     const section = await searchStudyNotesFor("famine");
     expect(within(section).getByText("Study Note")).toBeInTheDocument();
     expect(within(section).queryByText("EMB")).not.toBeInTheDocument();
+    // Nothing to choose between, so no filter.
+    expect(within(section).queryByRole("radio")).not.toBeInTheDocument();
   });
 
   it("an older Concord's NET hit looks as before: type badge, no Bible named, snippet as sent", async () => {
@@ -698,7 +716,7 @@ describe("SearchView", () => {
       http.get("/api/v1/keyword-search", () => HttpResponse.json([])),
       http.get("/api/v1/annotations", () => HttpResponse.json([])),
       http.get("/api/v1/study-notes-search", () =>
-        HttpResponse.json([
+        HttpResponse.json(notesPage([
           {
             book: "JHN",
             chapter: 3,
@@ -708,7 +726,7 @@ describe("SearchView", () => {
             type: "tn",
             snippet: "A plain *made-up* <mark>note</mark>.",
           },
-        ]),
+        ])),
       ),
     );
     const section = await searchStudyNotesFor("note");
@@ -718,6 +736,129 @@ describe("SearchView", () => {
     expect(within(section).getByText("note").parentElement).toHaveTextContent(
       "A plain *made-up* note.",
     );
+  });
+
+  // --- Paging and the per-Bible filter (v1.8). Made-up text only. ---
+
+  /**
+   * A made-up Concord with `counts` study notes per Bible, all matching any query. Records every
+   * study-notes request's parameters and answers with the page asked for.
+   */
+  function pagedNotes(counts: Record<string, number>) {
+    const requests: Record<string, string>[] = [];
+    server.use(
+      translationsWithNotes({ ...counts, KJV: 0 }),
+      http.get("/api/v1/keyword-search", () => HttpResponse.json([])),
+      http.get("/api/v1/annotations", () => HttpResponse.json([])),
+      http.get("/api/v1/study-notes-search", ({ request }) => {
+        const params = Object.fromEntries(new URL(request.url).searchParams);
+        requests.push(params);
+        const all = Object.entries(counts)
+          .filter(([code]) => !params.translation || code === params.translation)
+          .flatMap(([code, n]) =>
+            Array.from({ length: n }, (_, i) => ({
+              book: "GEN",
+              chapter: 1,
+              verse: i + 1,
+              reference: `Genesis 1:${i + 1}`,
+              translation: code,
+              type: "sn",
+              snippet: `A made-up <mark>${params.q}</mark> note ${code} ${i + 1}.`,
+              label: "Study Note",
+              text_format: null,
+            })),
+          );
+        const offset = Number(params.offset ?? 0);
+        const limit = Number(params.limit ?? 20);
+        return HttpResponse.json(notesPage(all.slice(offset, offset + limit), all.length));
+      }),
+    );
+    return requests;
+  }
+
+  const hitCount = (section: HTMLElement) => within(section).queryAllByRole("listitem").length;
+
+  it("pages through study notes: 20 at a time, with how many in all, until the last", async () => {
+    const requests = pagedNotes({ EMB: 5, NET: 40 });
+    const user = userEvent.setup();
+    const section = await searchStudyNotesFor("famine");
+
+    expect(await within(section).findByText("20 of 45")).toBeInTheDocument();
+    expect(hitCount(section)).toBe(20);
+    expect(requests).toEqual([{ q: "famine", limit: "20", offset: "0" }]);
+
+    await user.click(within(section).getByRole("button", { name: "Load more" }));
+    expect(await within(section).findByText("40 of 45")).toBeInTheDocument();
+    expect(hitCount(section)).toBe(40);
+    expect(requests.at(-1)).toEqual({ q: "famine", limit: "20", offset: "20" });
+
+    await user.click(within(section).getByRole("button", { name: "Load more" }));
+    expect(await within(section).findByText("45 of 45")).toBeInTheDocument();
+    expect(requests.at(-1)?.offset).toBe("40");
+    expect(within(section).queryByRole("button", { name: "Load more" })).not.toBeInTheDocument();
+  });
+
+  it("filters by Bible: picking one searches only its notes, from the first page; All goes back", async () => {
+    const requests = pagedNotes({ EMB: 25, NET: 40 });
+    const user = userEvent.setup();
+    const section = await searchStudyNotesFor("famine");
+    await within(section).findByText("20 of 65");
+    await user.click(within(section).getByRole("button", { name: "Load more" }));
+    await within(section).findByText("40 of 65");
+
+    // One pill per notes Bible, each with its look, after All (the default).
+    const radios = within(section).getAllByRole("radio");
+    expect(radios.map((r) => r.closest("label")!.textContent)).toEqual(["All", "1EMB", "1NET"]);
+    expect(within(section).getByRole("radio", { name: /All/ })).toBeChecked();
+
+    await user.click(within(section).getByRole("radio", { name: /EMB/ }));
+    expect(await within(section).findByText("20 of 25")).toBeInTheDocument();
+    expect(requests.at(-1)).toEqual({ q: "famine", limit: "20", offset: "0", translation: "EMB" });
+    expect(within(section).getAllByText(/note EMB/)).toHaveLength(20);
+    expect(within(section).queryByText(/note NET/)).not.toBeInTheDocument();
+
+    // Back to All: the notes already loaded there come back, and nothing asks for EMB.
+    await user.click(within(section).getByRole("radio", { name: /All/ }));
+    expect(await within(section).findByText("40 of 65")).toBeInTheDocument();
+    expect(requests.at(-1)?.translation).toBeUndefined();
+  });
+
+  it("says so when a page is empty, naming the Bible when filtered, and keeps the filter", async () => {
+    pagedNotes({ EMB: 0, NET: 3 });
+    // Both Bibles have notes; none of EMB's matches this query.
+    server.use(translationsWithNotes({ EMB: 9, KJV: 0, NET: 12 }));
+    const user = userEvent.setup();
+    const section = await searchStudyNotesFor("famine");
+    await within(section).findByText("3 of 3");
+
+    await user.click(within(section).getByRole("radio", { name: /EMB/ }));
+    expect(await within(section).findByText("No EMB notes match “famine”.")).toBeInTheDocument();
+    expect(within(section).getByRole("radio", { name: /NET/ })).toBeInTheDocument();
+    expect(within(section).queryByRole("button", { name: "Load more" })).not.toBeInTheDocument();
+  });
+
+  it("says no study notes match when none do, from any Bible", async () => {
+    pagedNotes({ EMB: 0, NET: 0 });
+    server.use(translationsWithNotes({ EMB: 9, KJV: 0, NET: 12 }));
+    const section = await searchStudyNotesFor("famine");
+    expect(await within(section).findByText("No study notes match “famine”.")).toBeInTheDocument();
+  });
+
+  it("a new query keeps the Bible picked and starts again from the first page", async () => {
+    const requests = pagedNotes({ EMB: 30, NET: 40 });
+    const user = userEvent.setup();
+    const section = await searchStudyNotesFor("famine");
+    await user.click(await within(section).findByRole("radio", { name: /EMB/ }));
+    await within(section).findByText("20 of 30");
+    await user.click(within(section).getByRole("button", { name: "Load more" }));
+    await within(section).findByText("30 of 30");
+
+    await user.clear(screen.getByLabelText("Search query"));
+    await user.type(screen.getByLabelText("Search query"), "harvest");
+    await user.click(screen.getByRole("button", { name: "Search" }));
+    expect(await within(section).findByText("20 of 30")).toBeInTheDocument();
+    expect(requests.at(-1)).toEqual({ q: "harvest", limit: "20", offset: "0", translation: "EMB" });
+    expect(within(section).getByRole("radio", { name: /EMB/ })).toBeChecked();
   });
 
   it("preserves scope selections across the mode toggle (#66)", async () => {
