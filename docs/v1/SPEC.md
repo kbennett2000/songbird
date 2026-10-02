@@ -364,6 +364,17 @@ borrowing and never stored, and an outage shows the notes-unavailable notice. Se
 [ADR 0004](../adr/0004-borrow-net-notes-by-phrase-match.md) and
 [ADR 0005](../adr/0005-borrow-notes-from-any-source.md).
 
+**Each notes Bible's look (v1.8).** Every notes source's markers have a look of their own, a
+colour and a shape, so two Bibles' notes can be told apart without relying on colour: NET's are a
+plain violet number (unchanged), EMB's a rose number in a square outline. NET and EMB are pinned;
+any other source takes the next spare look in Concord's order (a third gets teal in a circle, a
+fourth fuchsia on a tinted fill; past those the spare looks repeat). The look follows the Bible,
+whether it is the one being read or borrowed. It shows on the marker, in the note view (the
+Bible's code in the pinned row, and the kind line in its colour), and as a key beside each Bible in
+the Notes menu and on Settings. The shape is drawn inside the marker, so the marker keeps its size
+and the line its height; borrowed markers also name their Bible in their accessible label. Defined
+in `frontend/src/lib/noteLooks.ts`.
+
 **Keyword Scripture search.** Alongside semantic search, a **keyword/semantic toggle** on the
 Search screen. Keyword search proxies Concord's `/v1/search` (`GET /api/v1/keyword-search`) for
 exact word/phrase matches with highlighted snippets; semantic search finds by meaning. When a

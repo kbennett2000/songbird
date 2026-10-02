@@ -4,6 +4,124 @@ A running log of per-slice decisions, gotchas, and how each slice was verified. 
 
 ---
 
+## v1.8 follow-up 2 — each Bible's notes their own look (and a look at EMB's topics and boxes)
+
+- **Date:** 2026-10-02
+- **Branch:** `slice/v1.8-note-looks`
+- **Spec:** `docs/v1/SPEC.md` §12, "Each notes Bible's look"; a dated note in
+  `docs/v1.8/STUDY-BIBLE-SPEC.md` §3.
+
+### Why
+
+With NET's and EMB's notes both showing, every marker was the same small violet number, so there
+was no telling whose note was whose. Kris asked for each Bible's notes to have their own look,
+working in light and dark and not relying on colour alone, with a key beside each Bible's name.
+
+### A look at EMB's topics and Perspectives boxes (Concord V8-S3b)
+
+Concord gained 50 "What the Bible Says About" topics and 26 "Perspectives" boxes on EMB
+(`type: article`). Before any code changed, five were opened on the server's build (PR #144) in a
+throwaway container, at 1280 px and 390 px, reading EMB and reading KJV with EMB ticked. Nothing is
+quoted here.
+
+**These render as intended:**
+- A topic's references each sit on their own line under their quotation (a hard break before the
+  link), with the "(" kept beside the reference. All 8 in Genesis 1:18's topic.
+- Tapping a reference jumps: within the chapter it highlights the verse, and across books it opens
+  the chapter with the verse highlighted.
+- Poetic lines start one per line, and stanzas are separate paragraphs.
+- A box with no title opens straight onto its passage, with no empty heading row.
+- At Malachi 2:16 the markers keep Concord's order. On EMB the textual note is mid-verse (Concord
+  anchors it at character 111 of 204), and the topic and the "Men, Women, and God"
+  article share the end. On KJV all three gather at the end.
+- No page errors and no sideways scroll.
+
+**Songbird's rendering:**
+1. **A bug (fixed here): markers multiplied.** On KJV with EMB ticked, each tick or untick of NET at
+   Malachi 2:16 left one more copy of EMB's textual-note marker (3 → 6 → 5 → 8 → 7 → 10) until a
+   reload. EMB numbers ordinals per kind of note, so the textual note and the topic are both
+   ordinal 1; borrowed onto KJV both land at the end of the verse, and their markers shared a React
+   key. The key now names the note's type, and any key that still repeats gets a count.
+2. **A topic's title and its subheads look alike:** all are bold lines at body size (the known `##`
+   and `###` problem).
+3. **Long poetic lines wrap in the 288 px box,** and the wrapped part starts flush left, so it reads
+   like an extra line of poetry.
+4. **Adjacent markers run together** (2 Corinthians 9:9 reads as "¹²"). EMB's squares now separate
+   EMB's own; two plain NET markers side by side still run together.
+5. After a reference jump the address bar keeps the old chapter, so a reload goes back. This was
+   already the reader's behaviour.
+
+Items 2–4 are input for the later slice on the reading surface, with the five from the first look.
+
+**Concord's text:**
+- A box's reference is in capitals with no parentheses, where topics write "(Genesis 1:14)".
+- A box's passage, saying and attribution are three plain paragraphs. Nothing marks the last as an
+  attribution, and its capitals (stored as capitals) read loud.
+- 2 Corinthians 9:9's two-line saying is stored as two paragraphs (a blank line between), where the
+  topics use line breaks for poetry. So it renders as two paragraphs.
+- 2 Corinthians 9:9's box carries `passages` ("Covers …") and Exodus 24:3's doesn't.
+
+### What landed
+
+- **`lib/noteLooks.ts`:** each look is a colour and a shape. NET and EMB are pinned; any other
+  notes source takes the next spare look in Concord's order, so a new Bible needs no code.
+
+  | Bible | Light | Dark | Shape | Contrast, light / dark |
+  |---|---|---|---|---|
+  | NET | violet-600 | violet-400 | plain number (unchanged) | 5.1–5.7 / 5.4–6.5 |
+  | EMB | rose-700 | rose-400 | square outline | 5.6–6.3 / 5.5–6.6 |
+  | 3rd source | teal-700 | teal-300 | round outline | 4.9–5.5 / 9.9–12.0 |
+  | 4th source | fuchsia-700 | fuchsia-300 | tinted fill | 5.4 on its fill / 5.9–7.2 |
+
+  Contrast is measured against the page (stone-50 / gray-900), the cream verse highlight
+  (amber-100 / the dark lift) and the popover (white / gray-800). Amber (your notes), emerald
+  (sermons) and blue (verse numbers, links) were ruled out.
+- **Where it shows:** the marker; the note view, where the Bible's code is a chip in the pinned row
+  and the kind line takes the Bible's colour; and a sample marker (`NoteLookSwatch`) beside each
+  Bible in the Notes menu and on Settings. The look follows the Bible: reading EMB, its own notes
+  are rose squares.
+- **Unchanged:** NET's markers, the marker's size and tap target, the article/footnote treatment
+  (still identical), the note box and the headings.
+- **`capture.mjs`:** no change; `settings.png` was retaken and shows the key (codes and names only).
+- **No database change.**
+
+### Gotchas
+
+- **A `border` on a superscript marker made its line 1–2 px taller.** Removing the border and
+  keeping the padding measured identical to a plain marker, so the outline is a `ring` (an inset
+  box-shadow), which takes no room.
+- **The ring first hugged the whole line,** a tall thin box, because a `<button>` is an inline-block
+  with the verse's 32 px line height. `leading-none` fixed the box but shrank the tap target to
+  about 13 px. The shape now sits on a span inside the button, and the button keeps today's
+  classes exactly.
+- **Measured against today's violet marker** on KJV Genesis 1, Malachi 2, Proverbs 10 and
+  2 Corinthians 9 (EMB and NET ticked), at both widths: no verse is taller. In 3 of 248 verse
+  renders the square's 0.4 em of padding moved a line break by a word, which moves where the
+  existing superscript bump falls (5 px); removing the padding alone reproduces exactly those 3.
+- **Testing Library's `getByLabelText` reads `aria-hidden` text,** so the swatch's "1" broke
+  "Show EMB notes". The Notes menu's checkboxes now carry an explicit `aria-label`; the Settings
+  test helper drops `aria-hidden` nodes.
+
+### How it was verified
+
+- **New `lib/noteLooks.test.ts`:** the pinned looks, the 3rd and 4th, stability when a source sorts
+  earlier, the repeat, the fallback, a distinct colour and shape per look, rings not borders, and a
+  dark partner for every light colour.
+- **`VerseText.test.tsx`:** an own and a borrowed marker carry different looks on the same button
+  classes; two same-ordinal notes at one spot stay one marker each through eight re-renders (it
+  showed 10 markers before the fix). **`verseSegments.test.ts`:** distinct keys for that shape and
+  for a full repeat.
+- **`NotePopover.test.tsx`:** the chip for an own note and a borrowed one.
+- **`ReaderView.test.tsx`:** reading KJV (a third source in the fixture) with EMB and NET ticked,
+  the markers are teal, rose and violet, and the opened EMB note's chip is rose; the Notes menu's
+  key. **`SettingsView.test.tsx`:** the key on every row and the new line.
+- **The gate:** `make check` and `make check-frontend` green (counts in the PR).
+- **In a browser:** headless Chromium against a local build pointed at the LAN Concord, with a
+  scratch database, at 390 px and 1280 px, light and dark: Malachi 2:16, an EMB note opened, the
+  Notes menu and Settings. No sideways overflow and no page errors.
+
+---
+
 ## v1.8 follow-up — a Settings page (and a first look at the articles)
 
 - **Date:** 2026-10-02

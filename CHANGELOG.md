@@ -35,6 +35,11 @@ This project follows [Keep a Changelog](https://keepachangelog.com/) and
   reference inside a note takes you straight to that passage, and a long note scrolls. On the
   Search page these notes carry their own labels, and each says which Bible it came from when more
   than one Bible has notes.
+- **Each Bible's notes have their own look.** With NET's and the Every Man's Bible's notes both
+  showing, you can now tell them apart: NET's are plain violet numbers, as before, and the Every
+  Man's Bible's are rose numbers in a little square. The difference is in the shape as well as the
+  colour, so it holds in dark mode and for colour-blind eyes. Settings and the **Notes ▾** menu show
+  each Bible's mark beside its name, and an open note names its Bible at the top.
 
 ### Changed
 - **A Settings page, and a less crowded top of the screen.** Light or dark, which Bibles' notes to
@@ -44,6 +49,9 @@ This project follows [Keep a Changelog](https://keepachangelog.com/) and
   computer's own light or dark setting; the old switch couldn't get back to it.
 
 ### Fixed
+- **Notes markers no longer multiply.** Reading with a study Bible's notes ticked, switching another
+  Bible's notes on and off could leave extra copies of a marker behind, one more each time, until
+  the page was reloaded (seen at Malachi 2:16). Each marker now appears once.
 - **The Status page opens properly from the reader again.** Opening Status after the reader, Compare
   or Search showed "Unexpected Application Error!", and opening the reader after Status did the
   same. These pages now all read the list of translations the same way.

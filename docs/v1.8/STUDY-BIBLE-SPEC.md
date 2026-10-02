@@ -41,6 +41,7 @@ Slices B–E get their detail when their Concord slice lands.
 - The preference becomes a per-user list of source codes. The migration keeps an existing choice: `show_net_notes = true` becomes `["NET"]`.
 - Placement is ADR 0004's rule, per source: a note anchored inside its source verse is placed by phrase match (a unique match of the last 3, 2, then 1 words, else the end of the verse); a note anchored at the start of its source verse stays at the start. A note whose verse the translation lacks is left out.
 - Order at one spot: the translation's own notes first, then borrowed ones, sources in checkbox order.
+  - *2026-10-02, after slice A shipped:* each source's markers now have their own look (a colour and a shape), so with two sources showing their notes can be told apart; a key sits beside each source in the Notes menu and on Settings. See `docs/v1/SPEC.md` §12, "Each notes Bible's look".
 - Fetched live, never stored. An unreachable Concord shows the existing notice (invariant 3).
 
 **The note view** (own and borrowed notes alike).
