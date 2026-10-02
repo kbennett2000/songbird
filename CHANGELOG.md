@@ -18,6 +18,12 @@ This project follows [Keep a Changelog](https://keepachangelog.com/) and
 ## [Unreleased]
 
 ### Added
+- **Topics from more than one index.** Besides *Nave's Topical Bible*, your Scripture engine can now
+  load a study Bible's own index of themes; with the Every Man's Bible that is the *Tyndale Verse
+  Finder*. Each topic now says which index it comes from: on the Topics page, on a topic's own page
+  and in the reader's ※ panel. When there's more than one, a **From:** row on the Topics page shows
+  one index at a time, with how many of its topics match your search. The Verse Finder as printed
+  is also under **About EMB**, as its sixth piece of front matter.
 - **A study Bible's front matter and its reading plan.** The Every Man's Bible prints more than
   notes: a copyright page, an introduction to the Bible and one to its translation, the people who
   made it, a one-year reading plan, and notes on the authors behind its *Personal Gold* features.
@@ -115,6 +121,9 @@ This project follows [Keep a Changelog](https://keepachangelog.com/) and
   began the next, or ")" sat alone. On a phone that happened in almost half the Verse Finder's
   entries. A reference now wraps together with the brackets and the full stop or comma that touch
   it, in notes, introductions and the About page alike.
+- **A "see" topic names the topic it points to.** Some topics only send you to another one. The link
+  used to show the other topic's code ("See vf-56", or a lower-case word for a Nave's topic); it now
+  shows its name. If your Scripture engine doesn't have that topic, the link keeps its code.
 - **Escape keeps stepping back on the About page.** On a computer, pressing Escape in one of a
   Bible's documents takes you back to its list. The third time in a row, the whole page closed
   instead, because the browser stops a page from refusing a close after twice. Escape now steps

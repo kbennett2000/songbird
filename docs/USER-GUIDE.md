@@ -391,7 +391,9 @@ one jump-able, with a *← Topics* link to step back:
 
 ![Drilled into the "Condescension of God" topic, showing the verses gathered under it](screenshots/topics-drill.png)
 
-It's a way to read *across* Scripture by idea, not just straight through.
+It's a way to read *across* Scripture by idea, not just straight through. If your Scripture engine
+has a study Bible's own index of themes as well, each topic says which index it comes from, under its
+name: *Nave's Topical Bible* (the standard one) or, with EMB, the *Tyndale Verse Finder*.
 
 **Original language (ℵ).** The **ℵ** panel opens the verse in the language it was first written —
 Hebrew in the Old Testament, Greek in the New — word by word:
@@ -452,6 +454,15 @@ many there are in all (*20 of 242*), and **Load more** at the bottom brings the 
 one Bible has notes, a **From:** row sits under the heading: tap **EMB** or **NET** to see only that
 Bible's notes, or **All** to see every Bible's again. Your choice stays put when you search for
 something else.
+
+**Every passage on a theme.** Open **Topics** up top for the whole index of themes. Search for one by
+name and tap it to see its verses; tap a verse to open it in the reader. Some topics just point to another
+one, such as a theme listed under a second name: tap **See …** to go there.
+
+When there's more than one index (EMB brings its *Tyndale Verse Finder* beside *Nave's Topical Bible*),
+a **From:** row sits above the list. Tap an index to see only its topics, with how many match your
+search beside its name, or **All** to see them together again. Each topic names its index, here and on
+its own page.
 
 **Find your own notes.** Two ways, depending on what you remember. If you recall a *word* you wrote,
 search for it with **Your notes** ticked in that same checkbox row:
