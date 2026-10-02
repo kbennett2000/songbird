@@ -10,15 +10,17 @@ interface PopoverProps {
 
 /**
  * A self-contained floating popover anchored to an element (no popover dependency — songbird
- * stays lean). Positions below the anchor if there's room, else above, clamped to the viewport,
- * and dismisses on Esc, outside-click, an OUTSIDE scroll, or resize — while letting its own
- * overflow content scroll. Used by the translator-note and sermon-note popovers.
+ * stays lean). Positions below the anchor if it fits, else on the side with more room, clamped to
+ * the viewport, and dismisses on Esc, outside-click, an OUTSIDE scroll, or resize — while letting
+ * its own overflow content scroll. Used by the translator-note and sermon-note popovers.
  */
 export function Popover({ anchor, onClose, ariaLabel, children }: PopoverProps): JSX.Element {
   const popRef = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<{ top: number; left: number; maxHeight: number } | null>(null);
 
-  // Position relative to the anchor: below if there's room, else above; clamped to the viewport.
+  // Position relative to the anchor: below if the whole box fits there, else on the side with more
+  // room (a long note tapped low on the screen opens upwards instead of in a sliver); clamped to the
+  // viewport.
   useLayoutEffect(() => {
     const pop = popRef.current;
     if (!pop) return;
@@ -33,7 +35,7 @@ export function Popover({ anchor, onClose, ariaLabel, children }: PopoverProps):
     );
     const spaceBelow = vh - rect.bottom - gap - margin;
     const spaceAbove = rect.top - gap - margin;
-    if (spaceBelow >= Math.min(pop.offsetHeight, 160) || spaceBelow >= spaceAbove) {
+    if (spaceBelow >= pop.offsetHeight || spaceBelow >= spaceAbove) {
       setPos({ top: rect.bottom + gap, left, maxHeight: spaceBelow });
     } else {
       const maxHeight = spaceAbove;

@@ -151,7 +151,7 @@ export function ReaderView(): JSX.Element {
   const queryClient = useQueryClient();
   const { user } = useAuth();
   // A jump-from-browse arrives as ?book=&chapter=&verse=; seed the initial location from it.
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   // Reopen to where this profile last read (RequireAuth guarantees `user` is loaded by the time
   // the reader mounts). Priority: an explicit deep link (?book=&chapter= from Browse) wins, then
   // the saved position, then the first-time defaults.
@@ -445,6 +445,20 @@ export function ReaderView(): JSX.Element {
     const ref = refInput.trim();
     if (ref) resolveMutation.mutate(ref);
   };
+
+  // Keep the address bar on the passage being read, so a reload, a bookmark or a shared link
+  // reopens it rather than the place the reader was first opened at. A jump's verse stays after its
+  // highlight fades. Replaced, not pushed: Back still leaves the reader, as it always has.
+  useEffect(() => {
+    const sameChapter =
+      searchParams.get("book") === book && searchParams.get("chapter") === String(chapter);
+    const verseShown =
+      highlightVerse === null || searchParams.get("verse") === String(highlightVerse);
+    if (sameChapter && verseShown) return;
+    const next = new URLSearchParams({ book, chapter: String(chapter) });
+    if (highlightVerse !== null) next.set("verse", String(highlightVerse));
+    setSearchParams(next, { replace: true });
+  }, [book, chapter, highlightVerse, searchParams, setSearchParams]);
 
   // Scroll to / briefly highlight a jumped-to verse once the chapter has rendered.
   useEffect(() => {

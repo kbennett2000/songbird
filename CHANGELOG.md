@@ -61,6 +61,21 @@ This project follows [Keep a Changelog](https://keepachangelog.com/) and
   computer's own light or dark setting; the old switch couldn't get back to it.
 
 ### Fixed
+- **A long note opens where there's room to read it.** Tapping a note low on the screen used to
+  squeeze it into a small box underneath, even with most of the screen free above. If a note won't
+  fit below its mark, it now opens on whichever side has more room.
+- **Two marks side by side no longer read as one number.** Where two notes sit at the same spot,
+  their numbers now have a small gap between them, so you see "6 7" rather than "67".
+- **A note's title and headings stand out.** In longer notes, the title, the section headings, the
+  smaller subheadings and the bold opening words all used to look the same. Now the title is the
+  largest, a section heading has a thin line under it, a subheading is in small capitals, and bold
+  opening words stay part of their paragraph.
+- **Poetry that wraps is easier to follow.** When a line of poetry in a note is too long for the box,
+  the part that wraps onto the next line is now indented, so it no longer looks like an extra line
+  of the poem.
+- **Reloading keeps your place.** After you jumped to a passage, the address bar still showed the
+  chapter you started on, so reloading the page took you back there. It now follows you, so a
+  reload or a bookmark opens the passage you're reading.
 - **No more brief failures reaching Concord.** Now and then a request to your Scripture engine
   (Concord) failed even though it was running fine. Usually the page asked again a second later,
   so all you saw was a short pause; once in a while an "is Concord reachable?" message showed

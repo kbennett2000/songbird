@@ -152,6 +152,19 @@ describe("NotePopover", () => {
     expect(screen.getByText("Covers John 3:16-21; John 5:1-9")).toBeInTheDocument();
   });
 
+  it("makes the title stand out: larger and bolder than the note's own headings", () => {
+    renderPopover(
+      note({
+        title: "A made-up title",
+        text: "## A made-up section\n\nWords.",
+        text_format: "markdown",
+      }),
+    );
+    const title = screen.getByRole("heading", { name: "A made-up title" });
+    expect(title).toHaveClass("text-base", "font-bold");
+    expect(screen.getByText("A made-up section")).not.toHaveClass("text-base", "font-bold");
+  });
+
   it("renders a Markdown note as Markdown, with ref: links that jump", async () => {
     const { onJump } = renderPopover(
       note({

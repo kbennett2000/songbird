@@ -78,4 +78,75 @@ describe("NoteMarkdown", () => {
     expect(container.querySelector("h2")).toBeNull();
     expect(screen.getByText("inline").tagName).toBe("CODE");
   });
+
+  it("gives ## and ### each their own look, apart from bold opening words", () => {
+    renderMd(
+      "## A made-up section\n\n### A made-up subsection\n\n**Bold opening words.** Then the rest.",
+    );
+    const section = screen.getByText("A made-up section");
+    const subsection = screen.getByText("A made-up subsection");
+    const bold = screen.getByText("Bold opening words.");
+    expect(section).toHaveAttribute("data-md-heading", "2");
+    expect(subsection).toHaveAttribute("data-md-heading", "3");
+    // ##: a little larger, with a rule under it. ###: small capitals, muted.
+    expect(section).toHaveClass("text-[1.07em]", "border-b");
+    expect(section).not.toHaveClass("uppercase");
+    expect(subsection).toHaveClass("text-[0.85em]", "uppercase", "tracking-wider");
+    expect(subsection).not.toHaveClass("border-b");
+    // Bold opening words stay inline in their paragraph, at the text's own size.
+    expect(bold.tagName).toBe("STRONG");
+    expect(bold.parentElement!.tagName).toBe("P");
+    expect(bold.parentElement).not.toHaveAttribute("data-md-heading");
+  });
+});
+
+describe("NoteMarkdown — poetry", () => {
+  const lines = (container: HTMLElement) =>
+    Array.from(container.querySelectorAll("[data-poetry-line]"));
+
+  it("puts each line of a poem on its own hanging-indented line, its reference too", () => {
+    const { container } = renderMd(
+      "A made-up first line,\\\nand a second, much longer one,\\\na third.\\\n([Made-up 1:2](ref:GEN.1.2))",
+    );
+    const found = lines(container);
+    expect(found.map((l) => l.textContent)).toEqual([
+      "A made-up first line,",
+      "and a second, much longer one,",
+      "a third.",
+      "(Made-up 1:2)",
+    ]);
+    // Flush left, and a wrapped part indented: a hanging indent on every line.
+    for (const l of found) expect(l).toHaveClass("block", "pl-[1.5em]", "-indent-[1.5em]");
+    expect(container.querySelector("br")).toBeNull();
+    expect(screen.getByRole("button", { name: "Made-up 1:2" })).toBeInTheDocument();
+  });
+
+  it("indents poetry inside a quote, and a timeline entry's date and event", () => {
+    const { container } = renderMd(
+      "> A made-up line\\\n> and its answer.\n\n- 1000 B.C.\\\n  **A MADE-UP EVENT**",
+    );
+    const found = lines(container);
+    expect(found).toHaveLength(4);
+    expect(found[0]!.closest("blockquote")).not.toBeNull();
+    expect(found[2]!.closest("li")).toHaveTextContent("1000 B.C.A MADE-UP EVENT");
+  });
+
+  it("leaves a one-line quotation and its reference as they were", () => {
+    const { container } = renderMd(
+      "A made-up quotation that runs on as prose for a while.\\\n([Made-up 3:4](ref:EXO.3.4))",
+    );
+    expect(lines(container)).toHaveLength(0);
+    expect(container.querySelectorAll("br")).toHaveLength(1);
+  });
+
+  it("leaves paragraphs without hard breaks alone", () => {
+    const { container } = renderMd("A made-up paragraph.\nIts second source line.\n\nAnother.");
+    expect(lines(container)).toHaveLength(0);
+    expect(container.querySelectorAll("p")).toHaveLength(2);
+  });
+
+  it("counts a last line with other words beside its link as a line of the poem", () => {
+    const { container } = renderMd("A made-up line\\\nsee [this](ref:GEN.1.2) too");
+    expect(lines(container)).toHaveLength(2);
+  });
 });

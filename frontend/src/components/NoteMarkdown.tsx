@@ -66,6 +66,54 @@ function renderInline(tokens: MarkdownToken[], jump: (target: RefTarget) => void
   return out;
 }
 
+/**
+ * Each Markdown heading level's look: `#` and `##` a little larger with a rule under them, `###`
+ * and below small capitals — distinct from each other, from the note's title and from bold words.
+ * Sizes are in `em`, so they scale with the text around them.
+ */
+function headingClass(level: number): string {
+  return level <= 2
+    ? "mt-1 border-b border-gray-200 dark:border-gray-600 pb-0.5 text-[1.07em] font-semibold leading-snug text-gray-900 dark:text-gray-50"
+    : "text-[0.85em] font-semibold uppercase tracking-wider text-gray-600 dark:text-gray-300";
+}
+
+/** Whether a line is only a `ref:` link, perhaps in brackets: a poem's or quotation's source. */
+function isReferenceLine(line: MarkdownToken[]): boolean {
+  let links = 0;
+  for (let i = 0; i < line.length; ) {
+    const t = line[i]!;
+    if (t.type === "link_open") {
+      if (!refLinkTarget(t.attrGet("href") ?? "")) return false;
+      links++;
+      i = enclosed(line, i).end;
+      continue;
+    }
+    if (t.type !== "text" || !/^[\s().,;]*$/.test(t.content)) return false;
+    i++;
+  }
+  return links === 1;
+}
+
+/**
+ * A paragraph's lines when it's poetry — two or more lines of words split by hard breaks, not
+ * counting a last line that's only its reference — otherwise null. A prose quotation followed by
+ * its reference is one line of words, so it isn't poetry and keeps its plain line break.
+ */
+function poetryLines(tokens: MarkdownToken[]): MarkdownToken[][] | null {
+  const lines: MarkdownToken[][] = [[]];
+  let depth = 0;
+  for (const t of tokens) {
+    if (t.type === "hardbreak" && depth === 0) {
+      lines.push([]);
+      continue;
+    }
+    depth += t.nesting;
+    lines[lines.length - 1]!.push(t);
+  }
+  const wordLines = isReferenceLine(lines[lines.length - 1]!) ? lines.length - 1 : lines.length;
+  return wordLines >= 2 ? lines : null;
+}
+
 function renderBlocks(tokens: MarkdownToken[], jump: (target: RefTarget) => void): ReactNode[] {
   const out: ReactNode[] = [];
   for (let i = 0; i < tokens.length; ) {
@@ -73,7 +121,19 @@ function renderBlocks(tokens: MarkdownToken[], jump: (target: RefTarget) => void
     const key = `b${i}`;
     if (t.nesting === 1) {
       const { inner, end } = enclosed(tokens, i);
-      const children = renderBlocks(inner, jump);
+      const lines =
+        t.type === "paragraph_open" && inner.length === 1 && inner[0]!.type === "inline"
+          ? poetryLines(inner[0]!.children ?? [])
+          : null;
+      // Poetry: each line its own block with a hanging indent, so a long line that wraps reads as
+      // one line carried over, not as two lines of the poem.
+      const children = lines
+        ? lines.map((line, n) => (
+            <span key={`l${n}`} data-poetry-line="" className="block pl-[1.5em] -indent-[1.5em]">
+              {renderInline(line, jump)}
+            </span>
+          ))
+        : renderBlocks(inner, jump);
       if (t.type === "paragraph_open") {
         // A tight list's paragraphs are hidden: their words sit straight in the list item.
         out.push(
@@ -103,8 +163,9 @@ function renderBlocks(tokens: MarkdownToken[], jump: (target: RefTarget) => void
           </blockquote>,
         );
       } else if (t.type === "heading_open") {
+        const level = Number(t.tag.slice(1));
         out.push(
-          <p key={key} className="font-semibold">
+          <p key={key} data-md-heading={level} className={headingClass(level)}>
             {children}
           </p>,
         );
@@ -129,7 +190,7 @@ function renderBlocks(tokens: MarkdownToken[], jump: (target: RefTarget) => void
 
 /**
  * A note's Markdown, rendered read-only: paragraphs, emphasis, lists, block quotes, headings (as
- * bold lines), code and rules. A `ref:` link becomes a button that jumps the reader; no other
+ * lines with a look per level), poetry (hanging-indented lines), code and rules. A `ref:` link becomes a button that jumps the reader; no other
  * link is clickable, and no HTML is ever injected (see `lib/noteMarkdown.ts`).
  */
 export function NoteMarkdown({ text, onJump }: NoteMarkdownProps): JSX.Element {

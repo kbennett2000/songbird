@@ -55,6 +55,7 @@ Slices B–E get their detail when their Concord slice lands. Slice B's is §4.
 - `text_format: "markdown"` renders as Markdown: paragraphs, emphasis, lists, block quotes. A `ref:` link jumps the reader to that passage, the way a cross-reference button does. No other link target becomes a link, and no raw HTML is rendered. Plain-text notes show as they do today.
 - A borrowed note says which translation it came from, and still quotes the source's words when it was placed by phrase match.
 - A long note scrolls inside the popover.
+  - *2026-10-02, after slice A shipped:* the popover opens below its marker when it fits there, and otherwise on the side with more room; it used to open below whenever 160 px were free, which left a long article a sliver. Each heading level has its own look: the title 16 px bold, `#` and `##` slightly larger than the text with a rule under them, `###` and below small capitals; bold opening words stay inline. A paragraph of two or more lines split by hard breaks (not counting a last line that is only its `ref:` reference) is poetry: each line is its own block with a hanging indent, so a wrapped line reads as one line carried over. Two markers at one spot have a gap between them. The popover's width and the markers' looks are unchanged.
 
 **Search.** In the "Study notes" results, the badge shows `label` when present; a hit names its translation when more than one source has notes; snippets of Markdown notes show without Markdown syntax (the `<mark>` highlights stay).
 

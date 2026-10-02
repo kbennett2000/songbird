@@ -88,7 +88,9 @@ export function NotePopover({
         </p>
       )}
       {note.title && (
-        <h3 className="mb-1 font-semibold text-gray-900 dark:text-gray-50">{note.title}</h3>
+        <h3 className="mb-1 text-base font-bold leading-snug text-gray-900 dark:text-gray-50">
+          {note.title}
+        </h3>
       )}
       {passages.length > 0 && (
         <p className="mb-1 text-xs text-gray-500 dark:text-gray-400">

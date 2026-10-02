@@ -101,6 +101,27 @@ describe("VerseText — two notes from one source sharing an ordinal", () => {
   });
 });
 
+describe("VerseText — markers side by side", () => {
+  it("puts a gap before a marker that follows another, and nowhere else", () => {
+    // Two notes at one spot, then one after words: "loved¹ ²" … "world³", never "loved¹²".
+    const notes = [
+      note({ char_offset: 30, ordinal: 1 }),
+      note({ char_offset: 30, ordinal: 2 }),
+      note({ char_offset: 39, ordinal: 3 }),
+    ];
+    render(<VerseText text={VERSE} notes={notes} onOpenNote={vi.fn()} lookOf={lookOf} />);
+    const [first, second, third] = screen.getAllByRole("button");
+    expect(first).toHaveTextContent("1");
+    expect(second).toHaveTextContent("2");
+    expect(first).not.toHaveClass("ml-[0.3em]");
+    expect(second).toHaveClass("ml-[0.3em]");
+    // A marker after words keeps today's place.
+    expect(third).not.toHaveClass("ml-[0.3em]");
+    // The gap is outside the marker: its look (colour, size, shape) is untouched.
+    expect(second).toHaveClass("align-super", "text-[0.7em]", "text-violet-600");
+  });
+});
+
 describe("VerseText — each Bible's look", () => {
   it("gives a note read here and one borrowed from another Bible different looks", () => {
     const own = note({ char_offset: 8, ordinal: 1, label: "Own Note" });

@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, useLocation } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
 
 // Stub the TipTap editor so the flow test doesn't depend on contenteditable/DOM internals.
@@ -162,6 +162,25 @@ function renderReader() {
       </MemoryRouter>
     </QueryClientProvider>,
   );
+}
+
+/** The address bar, as the router holds it. */
+function AddressProbe() {
+  return <output data-testid="address">{useLocation().search}</output>;
+}
+
+/** The reader opened at an address, with the address shown beside it. */
+function renderReaderAt(entry: string) {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  render(
+    <QueryClientProvider client={client}>
+      <MemoryRouter initialEntries={[entry]}>
+        <ReaderView />
+        <AddressProbe />
+      </MemoryRouter>
+    </QueryClientProvider>,
+  );
+  return () => screen.getByTestId("address").textContent;
 }
 
 describe("ReaderView", () => {
@@ -736,6 +755,29 @@ describe("ReaderView", () => {
     await user.type(screen.getByLabelText("Jump to reference"), "Acts 1");
     await user.click(screen.getByRole("button", { name: "Go" }));
     expect(await screen.findByText(/ACT 1:16/)).toBeInTheDocument();
+  });
+
+  it("keeps the address bar on the passage being read, so a reload stays there", async () => {
+    server.use(
+      http.get("/api/v1/resolve", () =>
+        HttpResponse.json({ reference: "Acts 1:8", book: "ACT", chapter: 1, verse: 8 }),
+      ),
+    );
+    const user = userEvent.setup();
+    const address = renderReaderAt("/read?book=JHN&chapter=3");
+    expect(await screen.findByText(/JHN 3:16/)).toBeInTheDocument();
+    expect(address()).toBe("?book=JHN&chapter=3");
+
+    // A jump to a verse: the new chapter and its verse.
+    await user.type(screen.getByLabelText("Jump to reference"), "Acts 1:8");
+    await user.click(screen.getByRole("button", { name: "Go" }));
+    expect(await screen.findByText(/ACT 1:16/)).toBeInTheDocument();
+    await waitFor(() => expect(address()).toBe("?book=ACT&chapter=1&verse=8"));
+
+    // Moving on: the next chapter, with no verse.
+    await user.click(screen.getByRole("button", { name: "Next chapter" }));
+    expect(await screen.findByText(/ACT 2:16/)).toBeInTheDocument();
+    await waitFor(() => expect(address()).toBe("?book=ACT&chapter=2"));
   });
 
   it("shows a not-found message for an unparseable reference", async () => {
@@ -1758,6 +1800,16 @@ describe("ReaderView — notes from any source (Concord v8)", () => {
     // The ref: link jumps the reader to John 4, like a cross-reference button.
     await user.click(screen.getByRole("button", { name: "chapter 4" }));
     expect(await screen.findByText("KJV reading JHN 4")).toBeInTheDocument();
+  });
+
+  it("puts a ref: link's passage in the address bar", async () => {
+    useV8World(["EMB"]);
+    const user = userEvent.setup();
+    const address = renderReaderAt("/read?book=JHN&chapter=3&verse=16");
+    await user.click(await screen.findByRole("button", { name: "Study Note 2 (from EMB)" }));
+    await user.click(await screen.findByRole("button", { name: "chapter 4" }));
+    expect(await screen.findByText("KJV reading JHN 4")).toBeInTheDocument();
+    await waitFor(() => expect(address()).toBe("?book=JHN&chapter=4"));
   });
 
   it("orders notes at one spot: the translation's own, then sources in checkbox order", async () => {
