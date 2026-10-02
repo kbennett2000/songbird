@@ -400,6 +400,12 @@ option simply stays quiet until it has something to find. A study Bible's notes 
 their own kind, like *Study Note*, and when more than one Bible has notes, each result says which
 Bible it came from.
 
+**More study notes, or just one Bible's.** Study notes come 20 at a time. The line above them says how
+many there are in all (*20 of 242*), and **Load more** at the bottom brings the next 20. When more than
+one Bible has notes, a **From:** row sits under the heading: tap **EMB** or **NET** to see only that
+Bible's notes, or **All** to see every Bible's again. Your choice stays put when you search for
+something else.
+
 **Find your own notes.** Two ways, depending on what you remember. If you recall a *word* you wrote,
 search for it with **Your notes** ticked in that same checkbox row:
 
