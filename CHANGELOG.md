@@ -18,6 +18,13 @@ This project follows [Keep a Changelog](https://keepachangelog.com/) and
 ## [Unreleased]
 
 ### Added
+- **Charts you can read.** A study Bible's charts, such as the 44 in the Every Man's Bible, now
+  show their picture when you open them, both while you read that Bible and when you borrow its
+  notes into another translation. A chart's words are part of the picture, so tap it to see it
+  full-screen. Zoom in with a pinch or a double-tap on a phone, or with + and − on a computer, and
+  drag to move around. **Close** brings you back to the note. A chart that turns up on the Search
+  page shows its title and a small picture you can tap the same way. songbird fetches each
+  picture from your Scripture engine as you open it and keeps no copy.
 - **← Prev and Next → buttons at the bottom of each chapter.** When you finish reading a chapter,
   you can go straight to the next one without scrolling back up. It opens at the top of the page.
   This works on both the reader and the Compare page.
