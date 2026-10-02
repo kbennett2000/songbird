@@ -61,8 +61,8 @@ import {
   fetchNotes,
   fetchPlaces,
   fetchTags,
-  fetchTranslations,
   resolveReference,
+  translationsOptions,
   updateAnnotation,
   updateSermonNote,
 } from "@/lib/reader";
@@ -186,7 +186,7 @@ export function ReaderView(): JSX.Element {
   });
 
   const booksQuery = useQuery({ queryKey: ["books"], queryFn: fetchBooks });
-  const translationsQuery = useQuery({ queryKey: ["translations"], queryFn: fetchTranslations });
+  const translationsQuery = useQuery(translationsOptions);
   const tagsQuery = useQuery({ queryKey: ["tags"], queryFn: fetchTags });
   const chapterQuery = useQuery({
     queryKey: ["chapter", translation, book, chapter],

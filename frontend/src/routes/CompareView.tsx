@@ -14,7 +14,7 @@ import {
   VERSE_HIGHLIGHT,
 } from "@/lib/annotationStyles";
 import { nextChapter, prevChapter } from "@/lib/navigation";
-import { fetchBooks, fetchChapter, fetchTranslations } from "@/lib/reader";
+import { fetchBooks, fetchChapter, translationsOptions } from "@/lib/reader";
 import type { ReadAnnotation, ReadChapter } from "@/schemas";
 
 const DEFAULT_TRANSLATION = "KJV";
@@ -51,7 +51,7 @@ export function CompareView(): JSX.Element {
   } | null>(null);
 
   const booksQuery = useQuery({ queryKey: ["books"], queryFn: fetchBooks });
-  const translationsQuery = useQuery({ queryKey: ["translations"], queryFn: fetchTranslations });
+  const translationsQuery = useQuery(translationsOptions);
   const books = useMemo(() => booksQuery.data ?? [], [booksQuery.data]);
   const translations = useMemo(() => translationsQuery.data ?? [], [translationsQuery.data]);
 
