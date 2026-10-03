@@ -4,6 +4,68 @@ A running log of per-slice decisions, gotchas, and how each slice was verified. 
 
 ---
 
+## Concord pin → v1.3.1
+
+- **Date:** 2026-10-02
+- **Branch:** `slice/concord-v1.3.1`
+
+### Why
+
+Concord v1.3.1 is published (tag `v1.3.1`, `ghcr.io/kbennett2000/concord:v1.3.1`). It is a patch:
+it repairs words in the committed English translations that a stray space had split, or that had
+run together, and touches nothing else. Every space it changes is listed in Concord's
+`scripts/broken_words_manifest.csv`. Its release notes say the API is unchanged, and the OpenAPI
+agrees. Done the way slice E was, below.
+
+### What changed
+
+- **The pins:** `docker-compose.yml` (the bundled engine) and
+  `.github/workflows/nightly-concord.yml` (the live test's service container), `v1.3.0` →
+  **`v1.3.1`**.
+- **`backend/tests/fixtures/concord-openapi.json`:** byte for byte Concord's `docs/openapi.json` at
+  tag `v1.3.1` (sha256 `6c86aad4…`, the same from GitHub and from the local checkout). It differs
+  from v1.3.0's in one line, `info.version`.
+- **`backend/tests/concord_contract_test.py`:** expects `1.3.1`, and nothing else moved. Its guard,
+  `test_every_pin_names_the_fixture_version`, confirms the compose file and the nightly both name
+  `concord:v1.3.1`.
+- **Docs:**
+  - SPEC §12's NET caveat and STUDY-BIBLE-SPEC §§1 and 8 name v1.3.1 as the pin.
+  - The slice E rows in STUDY-BIBLE-SPEC and the `[1.8.0]` changelog block stay as history.
+  - "Concord 1.3.0 or later" in the README and the changelog stays: it's the minimum for a study
+    Bible, still true.
+  - The README names no included version.
+- **CHANGELOG `[Unreleased]`:** one Changed entry. It quotes no verse.
+
+### Gotchas
+
+- **Concord's `/healthz` carries no version.** To see which Concord answers, read `info.version`
+  from its `/openapi.json`.
+- **Concord serves verse text `Cache-Control: immutable`, but songbird passes Concord's
+  Cache-Control on only for pictures** (`api/concord.py`), and the SPA keeps no copy (no service
+  worker; `localStorage` holds only the theme). A browser that read songbird against 1.3.0 gets
+  the mended text the next time it loads a chapter; there is nothing to clear.
+
+### The slice before this, on the server
+
+Nothing to deploy since 1.8.0: Kris's server reports `/healthz` version 1.8.0, reading its own
+Concord at `http://host.docker.internal:8000` (reachable, 20 translations). This PR changes pins,
+a test fixture and docs. The server's `docker-compose.lan.yml` is standalone and starts no bundled
+engine, so there is nothing to deploy for it either.
+
+### How it was verified
+
+- **The gate:** `make check` (618 passed, 7 deselected; the contract test's 10 pass) and
+  `make check-frontend` (587 tests in 58 files, build clean).
+- **Live, against the published image:** `docker run --rm -p 127.0.0.1:18100:8000
+  ghcr.io/kbennett2000/concord:v1.3.1`. Its `/openapi.json` says `1.3.1`. Then
+  `CONCORD_BASE_URL=http://127.0.0.1:18100 pytest -m concord`: 7 passed. The image has 15
+  translations, as v1.3.0 did.
+- **The nightly on GitHub,** started by hand on this branch before merging:
+  [run 37090439802](https://github.com/kbennett2000/songbird/actions/runs/37090439802) pulled
+  `concord:v1.3.1` and passed all 7.
+
+---
+
 ## Release prep v1.8.0 — versions, CHANGELOG, README and guide, and a clean-checkout gate
 
 - **Date:** 2026-10-02
