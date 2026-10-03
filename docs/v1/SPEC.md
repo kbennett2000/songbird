@@ -331,7 +331,7 @@ always visible.
 **Translator's notes.** A pass-through to Concord's per-chapter translator's-notes endpoint,
 rendered as inline footnote markers with a popover in the reader. Pure proxy — no songbird data.
 _Caveat (a real finding):_ these footnotes come from **NET**, which the stock Concord image
-(now pinned at `v1.3.0`) doesn't ship, so against the default stack the reader offers no notes.
+(now pinned at `v1.3.1`) doesn't ship, so against the default stack the reader offers no notes.
 The feature is built and correct — it lights up when a Concord build includes NET. (At first the
 reader showed an "unavailable" notice on every chapter there; it no longer does. See dev-notes.)
 
