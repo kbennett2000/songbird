@@ -17,6 +17,10 @@ This project follows [Keep a Changelog](https://keepachangelog.com/) and
 
 ## [Unreleased]
 
+## [1.8.1] — 2026-10-02
+
+Cleaner text from the included Scripture engine, and a sample settings file that works as it is.
+
 ### Changed
 - **The included Scripture engine is now Concord 1.3.1.** Its translations had words broken by a
   stray space, and a few run together. 1.3.1 mends them, so they read cleanly, and search finds
@@ -289,6 +293,7 @@ The big fan-out — four study features at once, plus a proper guide.
   Scripture comes from [Concord](https://github.com/kbennett2000/concord); songbird keeps only your
   notes, on your own machine.
 
+[1.8.1]: https://github.com/kbennett2000/songbird/releases/tag/v1.8.1
 [1.8.0]: https://github.com/kbennett2000/songbird/releases/tag/v1.8.0
 [1.7.0]: https://github.com/kbennett2000/songbird/releases/tag/v1.7.0
 [1.6.0]: https://github.com/kbennett2000/songbird/releases/tag/v1.6.0
