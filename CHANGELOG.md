@@ -17,6 +17,12 @@ This project follows [Keep a Changelog](https://keepachangelog.com/) and
 
 ## [Unreleased]
 
+### Changed
+- **The included Scripture engine is now Concord 1.3.1.** Its translations had words broken by a
+  stray space, and a few run together. 1.3.1 mends them, so they read cleanly, and search finds
+  words it used to miss. Nothing else about it changes. Starting songbird the usual way fetches
+  it. If you run your own Concord, nothing changes for you.
+
 ## [1.8.0] — 2026-10-02
 
 Study Bibles — a study Bible you own, read the way it's printed.

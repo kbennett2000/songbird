@@ -36,7 +36,7 @@ And on the topics endpoints (Concord ADR-0013, V8-S6a): every topic carries `sou
   - *2026-10-02, slice E:* since Concord v1.3.0. Before it the order was binary, which put every all-capitals name (all of Nave's) before every mixed-case one with the same first letter. songbird never re-sorts, so it shows whichever order its Concord sends.
 - Kris's Concord has two: "Nave's Topical Bible" (5,319 topics, names in capitals) and "Tyndale Verse Finder" (183 topics, ids `vf-1` … `vf-183`, names in ordinary case, 8 of them "see" redirects). The Verse Finder's statements and its "see also" pointers between topics with verses of their own don't fit the topics data; they are in `front-matter-6` above.
 
-A Concord that predates v8 (v1.2.0 and before) sends none of these. songbird must behave exactly as it did against one, so every new field is optional. Since slice E songbird is pinned to v1.3.0, Concord's v8 release (§8).
+A Concord that predates v8 (v1.2.0 and before) sends none of these. songbird must behave exactly as it did against one, so every new field is optional. Since slice E songbird is pinned to Concord's v8 release, now v1.3.1 (§8).
 
 ## 2. Slices
 
@@ -200,8 +200,9 @@ Nave's was songbird's only topical index. Concord can now load more than one, ea
 ## 8. Rules that hold for every slice
 
 - songbird stores nothing from Concord: no note text, no images, no documents (invariants 1 and 5). Its database gains only preferences.
-- Since slice E the Concord pin is v1.3.0, Concord's v8 release. The bundled engine (`docker-compose.yml`), the nightly live test and the contract fixture all name it, and the contract test fails if they don't agree. The contract test checks every v8 field songbird reads against v1.3.0's OpenAPI. Every new field stays optional in songbird's models, so a Concord of v1.2.0 or before still works as it did; songbird's own tests cover that.
+- Since slice E the Concord pin is Concord's v8 release, now v1.3.1. The bundled engine (`docker-compose.yml`), the nightly live test and the contract fixture all name it, and the contract test fails if they don't agree. The contract test checks every v8 field songbird reads against v1.3.1's OpenAPI. Every new field stays optional in songbird's models, so a Concord of v1.2.0 or before still works as it did; songbird's own tests cover that.
   - *Until slice E (2 Oct 2026)* the pin was v1.2.0, and the new fields were covered only by songbird's own tests.
+  - *Slice E* pinned v1.3.0. v1.3.1 replaced it on 2 Oct 2026: a patch that mends spaces in the translations Concord ships, with its API unchanged.
 - No new dependency without a reason (CLAUDE.md).
 
 ## 9. Acceptance

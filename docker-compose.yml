@@ -41,7 +41,7 @@ services:
   # doesn't: if you already have your own Concord, starting a second one would just sit
   # there unused — and songbird would read the wrong one.
   concord:
-    image: ghcr.io/kbennett2000/concord:v1.3.0
+    image: ghcr.io/kbennett2000/concord:v1.3.1
     profiles: ["bundled-concord"]
     restart: unless-stopped
     # Concord is only used by songbird, on this private network.

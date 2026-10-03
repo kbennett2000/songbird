@@ -138,7 +138,7 @@ def _params(path: str) -> set[str]:
 def test_fixture_is_the_pinned_concord_version() -> None:
     info = _spec()["info"]
     assert isinstance(info, dict)
-    assert info["version"] == "1.3.0"
+    assert info["version"] == "1.3.1"
 
 
 def test_every_pin_names_the_fixture_version() -> None:
