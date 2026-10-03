@@ -23,6 +23,13 @@ This project follows [Keep a Changelog](https://keepachangelog.com/) and
   words it used to miss. Nothing else about it changes. Starting songbird the usual way fetches
   it. If you run your own Concord, nothing changes for you.
 
+### Fixed
+- **A copy of the sample settings file now works as it is.** `.env.example` used to name an
+  address for Concord. If you copied it to `.env` unchanged and started songbird with the
+  included engine, songbird looked for Concord in the wrong place, and every page said it couldn't
+  be reached. Now the address is left out until you fill it in. songbird then uses the included
+  engine in Docker, or a Concord on the same computer when you run it without Docker.
+
 ## [1.8.0] — 2026-10-02
 
 Study Bibles — a study Bible you own, read the way it's printed.

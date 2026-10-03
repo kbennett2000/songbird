@@ -4,6 +4,110 @@ A running log of per-slice decisions, gotchas, and how each slice was verified. 
 
 ---
 
+## Fix — the sample settings file pointed songbird away from the bundled Concord
+
+- **Date:** 2026-10-02
+- **Branch:** `fix/env-example-bundled-concord`
+
+### Why
+
+`.env.example` says "copy to .env and edit", and carried a live
+`CONCORD_BASE_URL=http://localhost:8000`. `docker-compose.yml` gives songbird
+`${CONCORD_BASE_URL:-http://concord:8000}`, and the fallback applies only when `.env` leaves the
+address unset. So a copy made unchanged and started with `--profile bundled-concord` should send
+songbird to localhost inside its own container, past the engine it had just started. It is the
+same shape as the September incident below ("the deployment overrode Concord's address"), arrived
+at from the other side: there compose ignored `.env`; here `.env` overrode compose's good default.
+Nobody had reproduced it.
+
+### Reproduced
+
+On `main` at `872648a` (bundled engine `concord:v1.3.1`):
+- **Setup:** a fresh clone from GitHub in `/home/kb/songbird-envcheck/sbenv`, `cp .env.example
+  .env` (`cmp`: identical), then `env -u CONCORD_BASE_URL docker compose --profile
+  bundled-concord up -d`.
+- **What happened:**
+  - The bundled Concord started and was healthy, unused.
+  - songbird's entrypoint logged `concord: http://localhost:8000`, then `WARNING Concord not
+    reachable at startup … All connection attempts failed`.
+  - `/healthz`: `reachable: false`.
+  - Headless Chromium, at 1280×800 and 390×844, after registering a throwaway account. The
+    reader on John 3 said "Couldn't load this chapter. Is Concord reachable?". Status said "Not
+    reachable — Concord at http://localhost:8000 is unreachable" and "Failed to load translations
+    (is Concord up?)".
+
+The brief guessed songbird would point at itself. Strictly, it pointed at port 8000 of its own
+container, where nothing listens (songbird is on 8077). The result for the reader is the same.
+
+### What landed
+
+- **`.env.example`:** the Concord block is rewritten, and its line is commented out
+  (`#CONCORD_BASE_URL=http://192.168.1.62:8000`). The comment says what happens when it's left
+  alone:
+  - in Docker with the profile, the bundled engine;
+  - outside Docker, `http://localhost:8000`.
+
+  It also says when and how to set one, and that inside Docker "localhost" means songbird's own
+  container. **This needs no code:** `config.py` already defaults to `http://localhost:8000`, so
+  leaving the address unset gives each path the right one.
+- **Dropped:** the old example `http://host.docker.internal:8000` ("songbird in Docker, Concord on
+  the host"). The repo's compose file has no `extra_hosts` for that name, and Linux Docker doesn't
+  resolve it without one; Kris's server's throwaways pass `--add-host` for it. Mapping the name in
+  compose would be a separate change, and Kris approved dropping the line instead. Untested here.
+- **`backend/tests/config_test.py`,
+  `test_the_sample_settings_file_leaves_concords_address_unset`:**
+  - `.env.example` has no live `CONCORD_BASE_URL` line;
+  - `Settings` read from it, with the variable unset, gives `http://localhost:8000`.
+
+  The old file fails the first check.
+- **README:** unchanged. It never mentions `.env.example`, and has people write a one-line `.env`
+  of their own, which was never affected.
+- **CHANGELOG `[Unreleased]`:** one Fixed entry.
+
+### Gotchas
+
+- **A `.env` line beats compose's `${VAR:-default}`.** The default covers only an unset or empty
+  variable, so a sample file meant to be copied whole must leave a setting out, not fill it with
+  one machine's value.
+- **Run outside Docker, `config.py` reads `REPO_ROOT/.env`, where `REPO_ROOT` is the package's
+  own checkout.** This machine's shared `backend/.venv` has songbird installed from the main
+  checkout. Run from a clone's `backend/`, uvicorn (`--app-dir`, default `.`) and alembic
+  (`prepend_sys_path = .`) import the clone's copy first. Still, check
+  `songbird.config.REPO_ROOT` before trusting a run: from the wrong checkout it would read that
+  checkout's real `.env`.
+
+### The slice before this, on the server
+
+The Concord pin → v1.3.1 (PR #158) changed only pins, a test fixture and docs. Nothing to deploy:
+Kris's server stays on 1.8.0 with its own Concord.
+
+### How it was verified
+
+Both from the same clone, on this branch, with `.env` freshly copied from the example (`cmp`:
+identical, no live `CONCORD_BASE_URL` line):
+- **Bundled:** `env -u CONCORD_BASE_URL docker compose --profile bundled-concord up -d --build`.
+  - The entrypoint logged `concord: http://concord:8000`.
+  - The boot log found `Concord corpus: 15 translations`.
+  - `/healthz` reported reachable, `ok`, 15.
+  - In headless Chromium, at 1280×800 and 390×844, the reader showed KJV John 3's 36 verses with
+    no sideways scroll. Status said `http://concord:8000`, "Connected", "15 available here".
+    No page errors.
+- **Outside Docker:** a throwaway `concord:v1.3.1` on `127.0.0.1:8000` stood in for "a Concord
+  on this machine".
+  - `songbird.config.REPO_ROOT` was the clone, which reads the clone's `.env`.
+  - `alembic upgrade head` ran on the clone's `data/`, then `env -u CONCORD_BASE_URL uvicorn
+    songbird.main:create_app --factory --port 8077`.
+  - `/healthz` reported `http://localhost:8000`, reachable, 15.
+  - Through songbird's API, a throwaway register gave 201, and `GET /api/v1/read/KJV/JHN/3` gave
+    200 with 36 verses.
+- **The gate:** `make check` and `make check-frontend` green (counts in the PR).
+- **Removed afterwards:**
+  - the clone's stack (`down -v`: containers, network, volume) and its built image `sbenv-songbird`;
+  - the throwaway Concord (`--rm`) and uvicorn (by PID);
+  - the clone folder.
+
+---
+
 ## Concord pin → v1.3.1
 
 - **Date:** 2026-10-02
