@@ -7,7 +7,7 @@ all along — was handed the wrong value on every boot and songbird read a Conco
 """
 
 import pytest
-from songbird.config import Settings, get_settings
+from songbird.config import REPO_ROOT, Settings, get_settings
 
 
 def test_concord_base_url_comes_from_the_environment(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -53,3 +53,28 @@ def test_get_settings_reflects_the_configured_address(monkeypatch: pytest.Monkey
         # The cache is process-wide; leaving a test's address in it would leak into the rest
         # of the suite.
         get_settings.cache_clear()
+
+
+def test_the_sample_settings_file_leaves_concords_address_unset(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`.env.example` is meant to be copied to `.env` as it is, so it must name no Concord.
+
+    It used to carry a live `CONCORD_BASE_URL=http://localhost:8000`. Compose's own fallback to
+    the bundled engine (`${CONCORD_BASE_URL:-http://concord:8000}`) only applies when `.env`
+    leaves the address unset, so a copy started with `--profile bundled-concord` sent songbird to
+    localhost inside its own container, and every page said Concord couldn't be reached. Left
+    unset, compose falls back to the bundled engine, and songbird run outside Docker falls back
+    to its own default: this machine.
+    """
+    example = REPO_ROOT / ".env.example"
+    live = [
+        line
+        for line in example.read_text().splitlines()
+        if line.strip().removeprefix("export ").lstrip().startswith("CONCORD_BASE_URL")
+    ]
+    assert live == []
+
+    monkeypatch.delenv("CONCORD_BASE_URL", raising=False)
+    settings = Settings(_env_file=example)  # type: ignore[call-arg]
+    assert settings.concord_base_url == "http://localhost:8000"
