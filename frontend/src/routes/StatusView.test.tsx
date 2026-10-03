@@ -20,7 +20,7 @@ function renderStatus() {
 
 function healthz(concord: Record<string, unknown>) {
   return http.get("/healthz", () =>
-    HttpResponse.json({ status: "ok", version: "1.8.0", concord }),
+    HttpResponse.json({ status: "ok", version: "1.8.1", concord }),
   );
 }
 

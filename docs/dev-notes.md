@@ -4,6 +4,72 @@ A running log of per-slice decisions, gotchas, and how each slice was verified. 
 
 ---
 
+## Release prep v1.8.1 — versions and CHANGELOG
+
+- **Date:** 2026-10-02
+- **Branch:** `slice/release-1.8.1-prep`
+
+### Why
+
+Two changes landed after 1.8.0:
+- the Concord pin moved to v1.3.1 (PR #158);
+- the sample settings file stopped overriding the bundled engine (PR #159).
+
+Kris asked for them to ship as **1.8.1**, done as 1.8.0 was. This PR is Stop 1. The tag, the GitHub
+release and the deploy follow once it merges; Kris's one "yes" covered all of it.
+
+### What changed
+
+- **The version, at the same seven sites as 1.8.0:**
+  - `backend/pyproject.toml`
+  - `backend/songbird/__init__.py`
+  - `frontend/package.json`
+  - `frontend/package-lock.json` lines 3 and 9
+  - the `/healthz` mocks in `frontend/src/test/msw/handlers.ts` and
+    `frontend/src/routes/StatusView.test.tsx`
+
+  Afterwards `git grep 1.8.0` outside CHANGELOG and dev-notes finds only STUDY-BIBLE-SPEC's slice E
+  row, which is history. `git grep 1.8.1` finds those seven and one dependency
+  (`prosemirror-dropcursor ^1.8.1`).
+- **CHANGELOG:**
+  - `[Unreleased]` became `[1.8.1] — 2026-10-02`, with a one-line summary, a fresh empty
+    `[Unreleased]` and a link reference.
+  - Its two entries, Changed (Concord 1.3.1) and Fixed (the sample settings file), are unchanged
+    from their PRs.
+- **README and User's Guide:** nothing. Neither names songbird's version or the included Concord's,
+  and neither mentions `.env.example`.
+
+### The release gate: a clean checkout
+
+Run on this machine, as 1.8.0's was, but this time with `.env` **copied from the example
+unchanged**. That is the case PR #159 fixed, and now the common one.
+1. **Setup:** a fresh clone of this branch in `/home/kb/songbird-release-gate/songbird-gate`, then
+   `cp .env.example .env` (`cmp`: identical).
+2. **Start:** the README's command, `docker compose --profile bundled-concord up`, with no
+   `CONCORD_BASE_URL` in the shell.
+   - `/healthz` reported version **1.8.1**, with the bundled `concord:v1.3.1` (healthy) at
+     `http://concord:8000`: reachable, `ok`, 15 translations.
+3. **Headless Chromium at 1280×800 and 390×844,** with a throwaway account:
+   - The reader on KJV John 3 has its 36 verses, with no sideways scroll.
+   - Settings' **Status** link opens Status, which says `http://concord:8000`, "Connected",
+     "15 available here" and "version 1.8.1".
+   - No page errors.
+4. **The mended text reaches the reader:**
+   - KJV Genesis 6 through songbird's own API has no `t he` split and no `word- word` hyphen gap;
+     Concord's release notes name that chapter.
+   - Only counts were read; no text was kept.
+   - songbird's log has no request for a translation's documents or assets.
+5. **Removed:** `docker compose --profile bundled-concord down -v` in the clone, `docker rmi
+   songbird-gate-songbird`, and the clone folder.
+
+### Verified
+
+- `make check`: 619 passed, 7 deselected. `make check-frontend`: 587 tests in 58 files, build
+  clean.
+- The `[1.8.1]` block was read top to bottom as its audience.
+
+---
+
 ## Fix — the sample settings file pointed songbird away from the bundled Concord
 
 - **Date:** 2026-10-02
